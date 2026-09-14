@@ -87,6 +87,8 @@ export const TOOLS: readonly ToolSpec[] = [
 
   // تنفيذ — بوابة النمط، مهلةٌ وخرجٌ محدود
   { name: "run", effect: "command", usage: "run <أمر> | run --bg <أمر طويل>", summary: "تنفيذ أمرٍ في مجلد المشروع (موافقة في قراءة-فقط)", agentCallable: true, runner: "exec" },
+  // أمرُ المالك 09-15 — script: ملفُّ سكربتٍ بمفسِّره من لاحقته، أماميّاً أو خلفيّاً بمسار run (logs/stop)، وbackup يحفظ الكودَ القديم قبل تعديله.
+  { name: "script", effect: "command", usage: "script <ملف.py|.js|.mjs|.ts|.ps1|.sh> [--bg] [وسائط] | script backup <ملف>", summary: "تشغيلُ ملفّ سكربت بمفسِّره من لاحقته (python/node/bun/powershell/bash) بمسار run نفسِه — «--bg» يشغّله خلفيّاً ويعيد معرّفاً تقرأ خرجَه بـlogs وتوقفه بـstop؛ و«script backup <ملف>» يحفظ نسخةً مؤرَّخة من الكود قبل تعديله (ثمّ write/edit)", agentCallable: true, runner: "exec" },
   // ذ9ج — ذكاءُ الشيفرة من خادم اللغة الحقيقيّ (لا تخمين): الغيابُ يُقال غيرَ متاح.
   { name: "lsp", effect: "command", usage: "lsp diag <ملف> | lsp def <ملف> <سطر>:<عمود> | lsp refs <ملف> <سطر>:<عمود> | lsp symbols <ملف>", summary: "خادمُ اللغة: أخطاءُ الأنواع في ملفّ، تعريفُ رمز، مراجعُه، رموزُ الملفّ — من typescript-language-server المثبَّت في المشروع أو rust-analyzer؛ غيابُه يُقال لا يُخمَّن", agentCallable: true, runner: "framed" },
   // ذ9د — لوحُ الخطّة يضعه النموذجُ بنفسه (كما TodoWrite عند كلود) ويُفحص دوراً (DAG) ويحفظ المثبَت عند إعادة التخطيط.

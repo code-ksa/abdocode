@@ -43,8 +43,8 @@ import { shotRoute, shotFitsModel, tilePlan } from "./vision-fallback"
 import { MAX_IMAGE_BASE64 } from "@abdo/model-gateway"
 import { Shell } from "./shells/shell"
 import { Database } from "bun:sqlite"
-import { readFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from "node:fs"
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
+import { readFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, statSync } from "node:fs"
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { createHash, timingSafeEqual } from "node:crypto"
 import { stackStatus } from "./stack"
 import { install as installEgressGuard } from "@abdo/egress"
@@ -3169,9 +3169,31 @@ const runServeShell = async (): Promise<void> => {
           run.stopped = true; run.kill()
           return okText(`أُوقف ${run.id} وشجرةُ عمليّاته.`)
         }
-        if (rest.length === 0) return invalid("run يحتاج أمراً")
-        const background = /^--bg\s+/u.test(rest)
-        const command = background ? rest.replace(/^--bg\s+/u, "") : rest
+        // أمرُ المالك 09-15 — script: ملفُّ سكربتٍ يُشغَّل بمفسِّره من لاحقته (أماميّاً أو --bg بمسار run نفسِه)، وbackup يحفظ الكودَ القديم قبل تعديله.
+        let effectiveRest = rest
+        if (spec.name === "script") {
+          const parsed = /^(--bg\s+)?(\S+)(.*)$/u.exec(rest.trim())
+          if (parsed === null) return invalid("الصيغة: script <ملف.py|.js|.mjs|.ts|.ps1|.sh> [--bg] [وسائط] | script backup <ملف>")
+          if (parsed[2] === "backup") {
+            const file = parsed[3]!.trim()
+            const abs = resolve(PROJECT_DIR, file)
+            if (file.length === 0 || !abs.startsWith(resolve(PROJECT_DIR))) return invalid("script backup <ملف داخل المشروع>")
+            if (!existsSync(abs)) return invalid(`لا ملفَّ ${file.slice(0, 80)} — لا شيءَ يُحفظ`)
+            const ok = await gate(turnId, "edit", `نسخةٌ احتياطيّة قبل التعديل: ${file}`)
+            if (!ok) return denied("رُفضت النسخةُ الاحتياطيّة — لم تُمنح الموافقة.", "policy_denied")
+            const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "").replace("T", "-")
+            const backupPath = `${abs}.bak-${stamp}`
+            copyFileSync(abs, backupPath)
+            return okText(`حُفظت نسخةٌ من ${file} قبل التعديل: ${basename(backupPath)} (${statSync(backupPath).size} بايت) — عدّل الآن بـwrite/edit، وللرجوع انسخها فوق الأصل.`)
+          }
+          const ext = (parsed[2]!.split(".").pop() ?? "").toLowerCase()
+          const interpreter = ({ py: "python", js: "node", mjs: "node", cjs: "node", ts: "bun", ps1: "powershell -NoProfile -ExecutionPolicy Bypass -File", sh: "bash" } as Record<string, string | undefined>)[ext]
+          if (interpreter === undefined) return invalid(`لاحقةٌ غيرُ معروفة «.${ext.slice(0, 8)}» — المدعوم: py js mjs cjs ts ps1 sh`)
+          effectiveRest = `${parsed[1] ?? ""}${interpreter} ${parsed[2]}${parsed[3] ?? ""}`
+        }
+        if (effectiveRest.length === 0) return invalid("run يحتاج أمراً")
+        const background = /^--bg\s+/u.test(effectiveRest)
+        const command = background ? effectiveRest.replace(/^--bg\s+/u, "") : effectiveRest
         if (background && command.length === 0) return invalid("run --bg يحتاج أمراً")
         // مراجعة 09-14 (#12): أثناء «مشروعٌ جديد معلَّق» لا تنفيذَ مؤثّراً في المشروع المختار — القراءةُ وحدها تمرّ.
         if (newProjectPending !== undefined && !/^(?:ls|dir|cat|type|head|tail|pwd|echo|node -v|npm -v|bun -v|git (?:status|log|diff|branch|remote)|where|which|Get-ChildItem|Get-Content|Get-Location|tree)\b/iu.test(command.trim())) {
@@ -3542,9 +3564,9 @@ const runServeShell = async (): Promise<void> => {
       // مراجعةٌ عدائيّة 09-14: متصفّحُ المستخدم الحقيقيّ ليس ملفَّ Edge المعزول — لا كتابةَ (fill/key) فيه عبر الوكيل أبداً، وسياسةُ المواقع تسبق open، وكلُّ نداءٍ يقف على بوّابة الموافقة مهما كان صنفُه المحلّيّ.
       // تكافؤُ الفحص (09-14): page styles|dom <ref>|css <selector>|assets تُمرَّر إلى <bridge>.inspect بكائن JSON — الإضافةُ تنفّذ القراءةَ نفسَها في تبويب المستخدم.
       const inspect = name === "page" ? /^(styles?|dom|css|assets)\b/u.exec(rest.trim()) : null
-      const target = inspect !== null ? "inspect" : ({ page: "page", open: "open", ui: "open", look: "look", tap: "tap", scroll: "scroll", shot: "shot" } as Record<string, string | undefined>)[name]
+      // أمرُ المالك 09-15: الكتابةُ والمفاتيحُ في تبويب المستخدم عبر الإضافة تمرّ بالبوّابة نفسِها (موافقةٌ لكلّ نداء)؛ حقولُ الاعتماد ترفضها الإضافةُ نفسُها وتسلّمها للمستخدم.
+      const target = inspect !== null ? "inspect" : ({ page: "page", open: "open", ui: "open", look: "look", tap: "tap", fill: "fill", key: "key", scroll: "scroll", shot: "shot" } as Record<string, string | undefined>)[name]
       const callArgs = inspect !== null ? JSON.stringify({ mode: inspect[1]!.startsWith("style") ? "styles" : inspect[1], target: rest.trim().slice(inspect[0].length).trim().slice(0, 120) }) : rest
-      if (name === "fill" || name === "key") return "رُفض: الكتابةُ والمفاتيحُ في متصفّحك الحقيقيّ بيدك أنت لا بيد الوكيل — المتاحُ عبر الإضافة: page/open/look/tap/scroll/shot، أو بدّل إلى المتصفّح الخفيف: browser owned"
       if (target === undefined) return `الأداةُ ${name} غيرُ متاحة عبر إضافة المتصفّح — المتاح: page [styles|dom|css|assets]/open/look/tap/scroll/shot، أو بدّل: browser owned`
       if (target === "open" && !browserSiteAllowed(SETTINGS_FILE, rest.trim())) return "رُفض: الموقعُ خارج سياسة المواقع المحفوظة — أضفه من الإعدادات ▸ الصلاحيّات قبل فتحه في متصفّحك"
       const session = externals.get(bridge.id)

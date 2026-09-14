@@ -54,7 +54,9 @@ describe("browser backend (owner 09-13): one setting, switchable from Settings a
     const block = source.slice(forward, forward + 3400) // 09-14: اتّسع بتمرير page styles/dom/css/assets إلى inspect
     // مراجعة 09-14: متصفّحُ المستخدم الحقيقيّ — موافقةٌ في كلّ نداء (outside-workspace)، لا fill/key، وسياسةُ المواقع قبل open.
     expect(block).toContain('await gate(turnId, "outside-workspace", `إضافةُ المتصفّح (تبويبُك الحقيقيّ) ${target}: ${rest.slice(0, 120)}`, name)')
-    expect(block).toContain('if (name === "fill" || name === "key") return "رُفض: الكتابةُ والمفاتيحُ في متصفّحك الحقيقيّ بيدك أنت')
+    // أمرُ المالك 09-15: fill/key يمرّان عبر الإضافة بالبوّابة نفسِها (لا رفضَ مطلق)؛ حقولُ الاعتماد ترفضها الإضافةُ نفسُها.
+    expect(block).not.toContain('if (name === "fill" || name === "key") return "رُفض')
+    expect(block).toContain('tap: "tap", fill: "fill", key: "key", scroll: "scroll"')
     expect(block).toContain('if (target === "open" && !browserSiteAllowed(SETTINGS_FILE, rest.trim()))')
     expect(block).toContain("غيرُ موصولة — اضغط «وصّل» في الإعدادات ▸ الاتّصالات")
     expect(block).toContain("await session.call(toolName, callArgs)")
