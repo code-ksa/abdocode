@@ -56,6 +56,13 @@ export interface BridgeOptions {
   /** أين تُحفظ اللقطات (الافتراض: `<stateDir>/chrome-shots`). */
   readonly shotsDir?: string
   readonly announce?: (line: string) => void
+  /**
+   * ب8 (أمرُ المالك 09-14: الاقترانُ آليّاً حين تكون الإضافةُ وعبدو كود مثبَّتين): نافذةُ اقترانٍ تُفتح عند الإقلاع
+   * لهذه المدّة (الافتراض دقيقتان؛ 0 = لا تُفتح) وعند الطلب من المحرّك (`POST /pair/open` بالرمز). أثناءها يعطي
+   * `GET /pair` المنفذَ والرمزَ لمن يطلبهما على 127.0.0.1 — الإضافةُ غيرُ المقترنة تسأل كلَّ ثوانٍ فتقترن بلا لصقٍ يدويّ.
+   * خارجَها 423. النافذةُ محدودةٌ زمناً لأنّ أيَّ عمليّةٍ محلّيّة تستطيع السؤال؛ وكلُّ تسليمٍ يُعلَن باسم السائل.
+   */
+  readonly pairingWindowMs?: number
 }
 
 interface Pending { readonly resolve: (value: unknown) => void; readonly reject: (error: Error) => void; readonly timer: ReturnType<typeof setTimeout> }
@@ -74,9 +81,12 @@ export class ChromeBridge {
   readonly #stateDir: string
   readonly #shotsDir: string
   readonly #announce: (line: string) => void
+  readonly #pairingWindowMs: number
+  #pairingUntil = 0
 
   constructor(options: BridgeOptions = {}) {
     this.port = options.port ?? DEFAULT_BRIDGE_PORT
+    this.#pairingWindowMs = options.pairingWindowMs ?? 120_000
     this.#settingsFile = options.settingsFile
     // الافتراضُ مجلّدُ المستخدم لا مجلّدُ العمل: ملفُّ الرمز لا يُكتب في جذر مستودعٍ أبداً (قيس: أثرُ اختبارٍ وصل التراكبَ فأُزيل).
     this.#stateDir = resolve(options.stateDir ?? process.env.ABDO_CODE_STATE_DIR ?? join(homedir(), ".abdo"))
@@ -94,9 +104,16 @@ export class ChromeBridge {
       port: this.port,
       fetch(request, server) {
         const url = new URL(request.url)
-        if (url.pathname === "/health") return Response.json({ ok: true, connected: bridge.#socket !== undefined })
+        if (url.pathname === "/health") return Response.json({ ok: true, connected: bridge.#socket !== undefined, pairing: bridge.pairingOpen })
+        // ب8 — الاقترانُ الآليّ: داخل النافذة يُسلَّم المنفذُ والرمزُ لمن يسأل على 127.0.0.1 ويُعلَن التسليمُ باسم السائل؛ خارجَها 423 بلا تسريب.
+        if (url.pathname === "/pair" && request.method === "GET") {
+          if (!bridge.pairingOpen) return Response.json({ error: "pairing closed" }, { status: 423 })
+          bridge.#announce(`chrome-bridge: pairing token handed to ${(request.headers.get("user-agent") ?? "unknown").slice(0, 120)}`)
+          return Response.json({ port: bridge.#server?.port ?? bridge.port, token: bridge.token })
+        }
         const presented = request.headers.get("x-abdo-bridge-token") ?? url.searchParams.get("token") ?? ""
         if (presented.length === 0 || presented.length !== bridge.token.length || !timingSafeEqualText(presented, bridge.token)) return new Response("forbidden", { status: 403 })
+        if (url.pathname === "/pair/open" && request.method === "POST") { const until = bridge.openPairing(); return Response.json({ ok: true, until }) }
         if (bridge.#socket !== undefined) return new Response("an extension is already connected", { status: 409 })
         if (server.upgrade(request, { data: { ok: true } })) return
         return new Response("upgrade required", { status: 426 })
@@ -108,6 +125,7 @@ export class ChromeBridge {
       },
     })
     const port = this.#server.port ?? this.port
+    if (this.#pairingWindowMs > 0) this.openPairing(this.#pairingWindowMs)
     // الرمزُ يصل المستخدمَ من ملفٍّ على قرصه لا من stderr (المحرّكُ يُهمل stderr خادمِ MCP): النافذةُ المنبثقة للإضافة
     // تطلب لصقَه، ولوحةُ الإعدادات تقرؤه من هنا. الملفُّ في مجلّد الحالة وحده.
     try {
@@ -127,6 +145,9 @@ export class ChromeBridge {
 
   get connected(): boolean { return this.#socket !== undefined }
   get refs(): readonly PageNode[] { return this.#refs }
+  get pairingOpen(): boolean { return Date.now() < this.#pairingUntil }
+  /** يفتح نافذةَ الاقتران (أو يمدّها) ويعيد لحظةَ إغلاقها. */
+  openPairing(ms = 120_000): number { this.#pairingUntil = Date.now() + Math.max(0, ms); this.#announce(`chrome-bridge: pairing window open for ${Math.round(Math.max(0, ms) / 1000)}s`); return this.#pairingUntil }
 
   #onMessage(raw: string): void {
     let message: { id?: unknown; ok?: unknown; result?: unknown; error?: unknown }

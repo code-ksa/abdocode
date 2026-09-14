@@ -36,6 +36,15 @@ The registry is `packages/engine/src/connectors/registry.ts`; remote servers are
 | `abdocode mcp-remote <https-url>` | stdio bridge to any remote MCP server with OAuth |
 | `abdocode mcp-chrome-bridge` | the local end of the Chrome/Edge extension |
 
+## Browser extension: pairing is automatic
+
+The Chrome/Edge extension (`AbdoCode-Extension-Chrome.zip` / `-Edge.zip` on the releases page of `code-ksa/abdocode-addons`) needs the local bridge's port and token. It no longer asks you to paste them:
+
+- The bridge opens a **pairing window** for two minutes when it starts, and again whenever the model runs `browser extension` or `browser pair` (Settings → Connections → Browser extension does the same).
+- While the window is open, an unpaired extension asks `GET http://127.0.0.1:<port>/pair` every few seconds, receives the port and token, stores them, and connects. Outside the window the bridge answers 423 and never reveals the token. Every hand-over is logged with the caller's user agent.
+- `browser extension` also launches Edge or Chrome if no browser is running, waits up to 25 seconds for the extension, and — if nothing connects — tells the user the extension is missing and gives the install link. The extension's popup has a **Find AbdoCode and pair** button for the manual case and shows the install link when no AbdoCode is listening.
+- The token can still be pasted by hand from Settings → Connections → Browser extension.
+
 Inside AbdoCode, the MCP catalogue only offers servers shipped in this binary. To attach a third-party server, add its command yourself in Settings → Connections; the engine will not download or run anything on first click.
 
 ## Search without a key

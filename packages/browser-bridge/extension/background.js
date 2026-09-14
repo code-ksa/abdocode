@@ -268,10 +268,34 @@ const perform = async (action, args) => {
 
 const setBadge = (text) => { try { api.action.setBadgeText({ text }) } catch {} }
 
+// ب8 — الاقترانُ الآليّ: بلا رمزٍ محفوظ تسأل الإضافةُ الجسرَ المحلّيّ `GET /pair` كلَّ ثوانٍ؛ حين تكون نافذةُ الاقتران
+// مفتوحةً في عبدو كود (عند إقلاعه أو بأمر «browser extension») يُسلَّم الرمزُ فيُحفظ ويتّصل المقبس — بلا لصقٍ يدويّ.
+// الردُّ يسمّي السببَ حين لا يقترن: مغلق (423) أو لا عبدو كود على المنفذ (تعذّر الوصول).
+let pairTimer = null
+const tryPair = async () => {
+  const { port, token } = await settings()
+  if (token) return { paired: true, port }
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/pair`, { cache: "no-store" })
+    if (response.status === 200) {
+      const body = await response.json()
+      if (body && typeof body.token === "string" && body.token.length >= 24) { await api.storage.local.set({ port: Number(body.port) || port, token: body.token }); return { paired: true, fresh: true, port: Number(body.port) || port } }
+      return { paired: false, reason: "bad-reply", port }
+    }
+    return { paired: false, reason: response.status === 423 ? "closed" : "http-" + response.status, port }
+  } catch { return { paired: false, reason: "unreachable", port } }
+}
+const pairLoop = async () => {
+  clearTimeout(pairTimer)
+  const result = await tryPair()
+  if (!result.paired) pairTimer = setTimeout(pairLoop, 5000)
+}
+
 const connect = async () => {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return
   const { port, token } = await settings()
-  if (!token) { setBadge("?"); return }
+  if (!token) { setBadge("?"); pairLoop(); return }
+  clearTimeout(pairTimer)
   socket = new WebSocket(`ws://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`)
   socket.onopen = () => setBadge("on")
   socket.onclose = () => { setBadge(""); socket = null; clearTimeout(retryTimer); retryTimer = setTimeout(connect, 3000) }
@@ -291,6 +315,7 @@ api.storage.onChanged.addListener(() => { if (socket) socket.close(); else conne
 api.runtime.onMessage.addListener((message, _sender, reply) => {
   if (message && message.kind === "status") { reply({ connected: !!socket && socket.readyState === WebSocket.OPEN, trusted: TRUSTED_INPUT }); return true }
   if (message && message.kind === "reconnect") { if (socket) socket.close(); connect(); reply({ ok: true }); return true }
+  if (message && message.kind === "pair") { tryPair().then((result) => { if (result.paired) connect(); reply(result) }); return true }
   return false
 })
 connect()

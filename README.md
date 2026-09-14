@@ -28,7 +28,7 @@ The idea is simple: **the model proposes, the kernel decides.** Every effect on 
 - Works with small, medium and large models alike. Guards adapt to the model: a wiping write is refused, a repeated bad edit escalates, fabricated command output is caught, and the model is told when it is near its turn budget.
 - Sees: browser screenshots and images saved in your project (renders, designs) reach the vision model.
 - Reviews itself: "review my changes" runs three independent lenses (correctness, safety, tests) over the turn's diff before you trust it.
-- Browses: a built-in agent browser (Edge over CDP), a Chrome/Edge extension to work in your own tabs, and page tools that read, find, tap, fill and dismiss overlays such as cookie banners or language prompts.
+- Browses: a built-in agent browser (Edge over CDP), a Chrome/Edge extension to work in your own tabs (it pairs itself with the app, no token to paste), and page tools that read, find, tap, fill and dismiss overlays such as cookie banners or language prompts.
 - Connects: Google (Gmail, Calendar, Drive) built in, and remote MCP connectors with OAuth for Slack, Linear, Notion, Asana, Atlassian, Figma, Intercom, Granola, Gamma and GitHub.
 - Schedules: routines run turns on a timetable (UTC, paused until you enable them). Remote control from your phone on the local network with a six-digit code.
 - Keeps secrets in the Windows vault (DPAPI) on your machine. No cloud account is required.

@@ -88,6 +88,7 @@ import { ledgerFor, quotaVerdict, type ModelPrice, type ModelUsage, type Subscri
 import { meterSummary, readMeter, recordMeterEntry } from "./usage-meter"
 import { ownerGoneLine, parseOwnerPid, watchOwner } from "./owner-watch"
 import { dismissReceipt, parseRenderedTree, pickDismissTarget } from "./overlay-dismiss"
+import { ensureExtensionPaired, launchBrowserWindows, runningBrowsersWindows } from "./extension-pairing"
 import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
 import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, parseGateMode, type GateDecision } from "./front-gate"
 import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"
@@ -3472,10 +3473,13 @@ const runServeShell = async (): Promise<void> => {
       const paired = bridge !== undefined && externals.get(bridge.id)?.tools().some((t) => t.name === `${bridge.id}.page`) === true
       const label = (b: string) => b === "owned" ? "المتصفّحُ الخفيف المملوك (Edge عبر CDP)" : b === "extension" ? `إضافةُ المتصفّح الحقيقيّ (كروم/إيدج/فايرفوكس)${bridge === undefined ? " — غيرُ محفوظة" : paired ? " — موصولة" : " — غيرُ موصولة: اضغط «وصّل» في الإعدادات ▸ الاتّصالات"}` : "موقوف"
       if (verb === "" || verb === "status") return `متصفّحُ الوكيل الآن: ${label(current)}${surface !== undefined ? " · سطحٌ موصول" : ""}. بدّل بـ: browser owned | browser extension | browser off`
-      if (verb !== "owned" && verb !== "extension" && verb !== "off") return "الصيغة: browser [status | owned | extension | off]"
+      // ب8 — الاقترانُ الآليّ: «browser pair» يفتح نافذةَ الاقتران ويُقلع المتصفّح إن لزم وينتظر الإضافة؛ و«browser extension» يفعل ذلك بعد التبديل.
+      if (verb === "pair") return (await ensureExtensionPaired({ stateDir: STATE_ROOT, runningBrowsers: runningBrowsersWindows, launchBrowser: launchBrowserWindows })).text
+      if (verb !== "owned" && verb !== "extension" && verb !== "off") return "الصيغة: browser [status | owned | extension | pair | off]"
       if (verb !== "owned" && surface !== undefined) { try { surface.close() } catch { /* الفصلُ مساعِد */ } surface = undefined; surfaceRefs = []; surfaceGeneration += 1 }
       const next = saveSettings({ browserBackend: verb })
       emit({ kind: "settings", settings: next, ...pluginFrameFields(next) })
+      if (verb === "extension") { const pairing = await ensureExtensionPaired({ stateDir: STATE_ROOT, runningBrowsers: runningBrowsersWindows, launchBrowser: launchBrowserWindows }); return `صار متصفّحُ الوكيل: ${label(verb)}.\n${pairing.text}` }
       return `صار متصفّحُ الوكيل: ${label(verb)}.`
     }
     if (loadSettings().computerUseEnabled === false && !(name === "surface" && rest === "off")) {
