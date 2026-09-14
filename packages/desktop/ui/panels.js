@@ -13,7 +13,7 @@ var __export = (target, all) => {
     });
 };
 
-// packages/engine/src/shells/panels.ts
+// ../engine/src/shells/panels.ts
 var exports_panels = {};
 __export(exports_panels, {
   unseenIds: () => unseenIds,

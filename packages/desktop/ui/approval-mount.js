@@ -13,7 +13,7 @@ var __export = (target, all) => {
     });
 };
 
-// packages/engine/src/shells/approval-mount.ts
+// ../engine/src/shells/approval-mount.ts
 var exports_approval_mount = {};
 __export(exports_approval_mount, {
   seat: () => seat,
@@ -22,7 +22,7 @@ __export(exports_approval_mount, {
   Approval: () => exports_approval
 });
 
-// packages/engine/src/shells/approval.ts
+// ../engine/src/shells/approval.ts
 var exports_approval = {};
 __export(exports_approval, {
   pendingTurn: () => pendingTurn,
@@ -33,7 +33,7 @@ __export(exports_approval, {
   Approval: () => exports_approval
 });
 
-// packages/engine/src/approval-ledger.ts
+// ../engine/src/approval-ledger.ts
 var APPROVAL_DECIDED_PREFIX = "\uD83D\uDD10 قرار الموافقة: ";
 var DECISION_TEXT = Object.freeze({
   approved: "سُمح",
@@ -51,7 +51,7 @@ var decisionOfLine = (payload) => {
   return;
 };
 
-// packages/engine/src/shells/approval.ts
+// ../engine/src/shells/approval.ts
 var DIFF_CAP = 8;
 var IDLE = Object.freeze({ kind: "idle" });
 var empty = () => Object.freeze({ state: IDLE, diffs: Object.freeze([]) });
@@ -115,7 +115,7 @@ var choose = (store, choice) => {
 };
 var escape = (store) => store.state.kind === "asked" ? choose(store, "deny") : same(store);
 
-// packages/engine/src/shells/approval-mount.ts
+// ../engine/src/shells/approval-mount.ts
 var SEAT_ID = "approvalTakeover:seat";
 var make = (document, tag, className) => {
   const node = document.createElement(tag);

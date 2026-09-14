@@ -78,7 +78,7 @@ describe("auto-compact (owner 09-13): older turns fold into a verified summary, 
 
 describe("observed 2026-09-13 on 4.0.2: browser commands are volatile (never «duplicate»), and the managed dev port follows the project stack", () => {
   test("the loop gets a volatile predicate covering the surface/desktop words, and parseServerCommand receives the project dir", () => {
-    expect(source).toContain('volatile: (command) => /^(?:page|shot|find|look|scroll|network|console)\\b/u.test(command),')
+    expect(source).toContain('volatile: (command) => /^(?:page|shot|find|look|scroll|network|console|dismiss|desk)\\b/u.test(command),')
     expect(source).toContain("const serverCommand = parseServerCommand(cmd, PROJECT_DIR)")
     expect(source).not.toContain("const serverCommand = parseServerCommand(cmd)\r\n".replace(/\r\n/gu, source.includes("\r\n") ? "\r\n" : "\n"))
   })

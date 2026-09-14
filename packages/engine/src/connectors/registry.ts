@@ -42,6 +42,9 @@ export const CONNECTORS: readonly ConnectorSpec[] = Object.freeze([
   Object.freeze({ id: "atlassian", label: "Atlassian (Jira · Confluence)", labelAr: "Atlassian (Jira · Confluence)", kind: "remote" as const, resource: "https://mcp.atlassian.com/v1/mcp", scope: "read:jira-work write:jira-work read:confluence-content.all offline_access", tools: ["jira", "confluence"], category: "project-tracker" }),
   Object.freeze({ id: "figma", label: "Figma", labelAr: "Figma", kind: "remote" as const, resource: "https://mcp.figma.com/mcp", scope: "default", tools: ["files", "nodes", "images"], category: "design" }),
   Object.freeze({ id: "intercom", label: "Intercom", labelAr: "Intercom", kind: "remote" as const, resource: "https://mcp.intercom.com/mcp", scope: "default", tools: ["conversations", "contacts"], category: "user-feedback" }),
+  // مقيس 2026-09-14: كلاهما يردّ 401 مع resource_metadata، وPRM يعلن خادمَ التفويض والنطاقات — الشكلُ نفسُه كـNotion.
+  Object.freeze({ id: "granola", label: "Granola (meeting notes)", labelAr: "Granola (ملاحظات الاجتماعات)", kind: "remote" as const, resource: "https://mcp.granola.ai/mcp", scope: "mcp", tools: ["meetings", "notes", "search"], category: "knowledge-base" }),
+  Object.freeze({ id: "gamma", label: "Gamma (presentations · docs)", labelAr: "Gamma (عروض · مستندات)", kind: "remote" as const, resource: "https://mcp.gamma.app/mcp", scope: "generate gamma:read", tools: ["generate", "gammas"], category: "design" }),
   Object.freeze({ id: "github", label: "GitHub", labelAr: "GitHub", kind: "remote" as const, resource: "https://api.githubcopilot.com/mcp/", scope: "repo read:org", tools: ["repos", "issues", "pull_requests", "search"], category: "code" }),
 ])
 

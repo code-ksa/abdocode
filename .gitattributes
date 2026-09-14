@@ -3,3 +3,5 @@
 # النطاقُ مقصودٌ ضيّقاً: مثبّتاتُ النواة وحدها، كي لا تُقلب ملفّاتُ جبهةٍ أخرى.
 packages/kernel/**/fixtures/** -text
 *.bin -text
+docs/ export-ignore
+work/ export-ignore

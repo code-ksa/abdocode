@@ -1,4 +1,4 @@
-// packages/engine/src/shells/slots.ts
+// ../engine/src/shells/slots.ts
 var ANCHORS = Object.freeze([
   "composer.bar",
   "transcript.node",
@@ -49,7 +49,7 @@ var slot = (state, anchor) => Object.freeze(state.entries.filter((entry) => entr
 var has = (state, id) => state.entries.some((entry) => entry.id === asText(id));
 var mountedIds = (state, feature) => Object.freeze(state.entries.filter((entry) => feature === undefined || entry.feature === feature).map((entry) => entry.id));
 
-// packages/engine/src/shells/slot-host.ts
+// ../engine/src/shells/slot-host.ts
 var message = (error) => error instanceof Error ? error.message : String(error);
 
 class SlotHost {

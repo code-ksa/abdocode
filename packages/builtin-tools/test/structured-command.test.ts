@@ -37,7 +37,7 @@ const HOSTILE = [
   "pipe|char",
   "new\nline",
   "tab\there",
-  "C:\\Users\\abdelrahman\\a b",
+  "C:\\Users\\someone\\a b",
   "trailing\\",
   "%PATH%",
   "!DELAYED!",

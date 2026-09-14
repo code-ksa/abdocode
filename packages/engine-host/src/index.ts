@@ -153,6 +153,8 @@ export {
   isReadDigest,
   isExecDigest,
   isTrailDigest,
+  isWriteDigest,
+  writeDigest,
   verdictLineOf,
   MAX_TEXT_AGENT_ROUNDS,
   SUMMARY_WITH_COMMAND,

@@ -5,7 +5,7 @@
  * assumed. `ProfileList` reports FIVE profiles here, and only two of them look
  * like the shape everyone pictures:
  *
- *     C:\Users\abdelrahman
+ *     C:\Users\someone
  *     C:\Users\CodexSandboxOffline              <- a second real account
  *     C:\Windows\system32\config\systemprofile  <- NOT under C:\Users
  *     C:\Windows\ServiceProfiles\LocalService   <- NOT under C:\Users

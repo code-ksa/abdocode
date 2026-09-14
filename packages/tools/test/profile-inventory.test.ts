@@ -12,7 +12,7 @@ import { describe, expect, test } from "bun:test"
 import { buildProfileInventory, isInsideAnyProfile, PROFILE_INVENTORY_VERSION } from "../src/profile-inventory"
 import { planWindowsExecutionScope, type PathAccessibility } from "../src/windows-scope"
 
-const USER = String.raw`C:\Users\abdelrahman`
+const USER = String.raw`C:\Users\someone`
 const WINDOWS = String.raw`C:\Windows`
 const PROGRAM_FILES = String.raw`C:\Program Files`
 

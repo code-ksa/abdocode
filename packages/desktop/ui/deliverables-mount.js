@@ -13,7 +13,7 @@ var __export = (target, all) => {
     });
 };
 
-// packages/engine/src/shells/deliverables-mount.ts
+// ../engine/src/shells/deliverables-mount.ts
 var exports_deliverables_mount = {};
 __export(exports_deliverables_mount, {
   row: () => row,
@@ -22,7 +22,7 @@ __export(exports_deliverables_mount, {
   Deliverables: () => exports_deliverables
 });
 
-// packages/engine/src/shells/deliverables.ts
+// ../engine/src/shells/deliverables.ts
 var exports_deliverables = {};
 __export(exports_deliverables, {
   render: () => render,
@@ -102,7 +102,7 @@ var render = (state) => state.rows.map((row) => ({
   badge: row.kind === "server" ? row.live === true ? "حيّ" : "أُوقف" : row.op === "skipped" ? "بلا تغيير" : ""
 }));
 
-// packages/engine/src/shells/deliverables-mount.ts
+// ../engine/src/shells/deliverables-mount.ts
 var ROW_ID = "deliverables:row";
 var make = (document, tag, className) => {
   const node = document.createElement(tag);

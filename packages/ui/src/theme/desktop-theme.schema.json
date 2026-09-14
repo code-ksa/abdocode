@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/alkhadraa02/abdo-code-al-akhbari/blob/main/packages/ui/src/theme/desktop-theme.schema.json",
+  "$id": "https://github.com/code-ksa/abdocode/blob/main/packages/ui/src/theme/desktop-theme.schema.json",
   "title": "Abdo Code Desktop Theme",
   "description": "A theme definition for the Abdo Code desktop application",
   "type": "object",

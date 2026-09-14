@@ -258,6 +258,7 @@ describe("delegation — المدخل والتقرير", () => {
           stopReason: "complete" as const,
           readCompactions: 0,
           execCompactions: 0,
+          writeCompactions: 0,
           trailChars: 0,
         }
       },

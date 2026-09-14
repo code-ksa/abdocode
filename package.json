@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/code-ksa/abdocode.git"
   },
-  "author": "عبدالرحمن أبو إسماعيل (Abdelrahman Abu Ismail) — TechnologyKSA <technoksaweb@gmail.com>",
+  "author": "TechnologyKSA (تكنولوجيا السعودية) <technoksaweb@gmail.com>",
   "license": "UNLICENSED",
   "type": "module",
   "workspaces": {

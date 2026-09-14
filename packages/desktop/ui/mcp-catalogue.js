@@ -13,7 +13,7 @@ var __export = (target, all) => {
     });
 };
 
-// packages/engine/src/shells/mcp-catalogue.ts
+// ../engine/src/shells/mcp-catalogue.ts
 var exports_mcp_catalogue = {};
 __export(exports_mcp_catalogue, {
   uniqueId: () => uniqueId,

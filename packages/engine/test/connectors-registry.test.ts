@@ -20,6 +20,11 @@ describe("سجلُّ الموصّلات", () => {
     expect(connectorById("google")?.kind).toBe("google")
     expect(connectorById("slack")?.callbackPort).toBe(9371)
     expect(connectorById("nope")).toBeUndefined()
+    // 09-14: Granola وGamma بعيدان بتسجيلٍ ديناميكيّ (بلا عميلِ مالك) — النطاقُ من PRM المقيس حيّاً
+    expect(connectorById("granola")?.resource).toBe("https://mcp.granola.ai/mcp")
+    expect(connectorById("gamma")?.scope).toBe("generate gamma:read")
+    expect(connectorById("granola")?.ownerClient).toBeUndefined(); expect(connectorById("gamma")?.ownerClient).toBeUndefined()
+    expect(CONNECTORS.map((c) => c.id)).toEqual(["google", "slack", "linear", "notion", "asana", "atlassian", "figma", "intercom", "granola", "gamma", "github"])
   })
 
   test("المقابضُ والمنحُ تعبر حرّاسَ الخزنة والبيئة؛ والسرُّ يُمنح للخدمات ذات السرّ وحدها", () => {

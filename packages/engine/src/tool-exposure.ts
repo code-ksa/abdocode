@@ -5,7 +5,7 @@
  * ينفّذ أيَّ أداةٍ مسجَّلة سُمّيت باسمها، فلا تُحجب قدرةٌ، إنّما تُوفَّر التوكنات على ما لا يلزم.
  */
 export const TOOL_FAMILIES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  browser: ["ui", "page", "open", "tap", "fill", "shot", "scroll", "hover", "key", "find", "network", "console", "look", "surface", "browser"],
+  browser: ["ui", "page", "open", "tap", "fill", "shot", "scroll", "hover", "key", "find", "dismiss", "network", "console", "look", "surface", "browser"],
   desktop: ["desk"],
   delegation: ["team", "delegate", "handoff", "agents"],
 })
@@ -13,7 +13,7 @@ const FAMILY_OF = new Map<string, string>()
 for (const [family, names] of Object.entries(TOOL_FAMILIES)) for (const name of names) FAMILY_OF.set(name, family)
 
 const BROWSER_WORDS = /متصفّ?ح|browser|صفحة|page\b|موقع|site\b|website|url|https?:|localhost|تصميم|design|لقطة|screenshot|شاشة|افتح|\bopen\b|واجهة|ui\b|frontend|landing|hero|نافذة الموقع|تحقّ?ق بصرياً|visual/iu
-const DESKTOP_WORDS = /سطح المكتب|desktop|computer use|نافذة|window\b|تطبيق سطح|\bapp\b.*(?:افتح|open)|اضغط على|click on the app|desk\b/iu
+const DESKTOP_WORDS = /سطح المكتب|desktop|computer use|نافذة|window\b|تطبيق سطح|\bapp\b.*(?:افتح|open)|اضغط على|click on the app|desk\b|الماوس|ماوس|الكيبورد|كيبورد|لوحة المفاتيح|\bmouse\b|\bkeyboard\b|فوتوشوب|photoshop|illustrator|premiere|برنامج سطح المكتب|املأ|ملء|عبّئ|تعبئة|نموذج|form\b|fill in|اكتب في|type into|المفكرة|notepad|excel|إكسل|word\b|وورد|تطبيق|application/iu
 const DELEGATION_WORDS = /فريق|team\b|وكلاء|وكيل|agent|فوّ?ض|delegate|بالتوازي|parallel|handoff|سلّم المهمّة/iu
 
 export function familyOf(toolName: string): string | undefined { return FAMILY_OF.get(toolName) }

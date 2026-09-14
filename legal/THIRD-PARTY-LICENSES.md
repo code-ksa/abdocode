@@ -22,8 +22,8 @@ destination), `engine/src/rail-policy.ts` (a design comparison in a comment).
 **That is an indexed check, not a full provenance audit.** The notice below is kept
 deliberately, as the conservative choice: keeping a notice that may not apply costs
 nothing, while dropping one that does apply is not recoverable. **A full provenance
-audit is required before any public source release** - it is a blocking item in
-`docs/operations/ABDOCODE-TWO-LINES-MIND-PROGRAM-20260906.md` (agent-admin).
+audit is required before any public source release** - it is tracked in the
+maintainer's internal release checklist.
 
 ---
 

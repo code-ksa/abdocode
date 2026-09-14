@@ -13,7 +13,7 @@ var __export = (target, all) => {
     });
 };
 
-// packages/engine/src/shells/terminal-panel.ts
+// ../engine/src/shells/terminal-panel.ts
 var exports_terminal_panel = {};
 __export(exports_terminal_panel, {
   terminalPanel: () => terminalPanel,
@@ -21,7 +21,7 @@ __export(exports_terminal_panel, {
   TERMINAL_PANEL_ID: () => TERMINAL_PANEL_ID
 });
 
-// packages/engine/src/shells/panel-frame.ts
+// ../engine/src/shells/panel-frame.ts
 var make = (document, tag, className) => {
   const node = document.createElement(tag);
   if (className !== undefined)
@@ -68,7 +68,7 @@ var panelFrame = (deps, host, bind) => {
   return { root, body };
 };
 
-// packages/engine/src/shells/terminal-panel.ts
+// ../engine/src/shells/terminal-panel.ts
 var TERMINAL_PANEL_ID = "panel:terminal";
 var make2 = (document, tag, className) => {
   const node = document.createElement(tag);

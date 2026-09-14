@@ -13,7 +13,7 @@ var __export = (target, all) => {
     });
 };
 
-// packages/engine/src/shells/tasks-panel.ts
+// ../engine/src/shells/tasks-panel.ts
 var exports_tasks_panel = {};
 __export(exports_tasks_panel, {
   tasksPanel: () => tasksPanel,
@@ -22,7 +22,7 @@ __export(exports_tasks_panel, {
   TASKS_PANEL_ID: () => TASKS_PANEL_ID
 });
 
-// packages/engine/src/shells/panel-frame.ts
+// ../engine/src/shells/panel-frame.ts
 var make = (document, tag, className) => {
   const node = document.createElement(tag);
   if (className !== undefined)
@@ -69,7 +69,7 @@ var panelFrame = (deps, host, bind) => {
   return { root, body };
 };
 
-// packages/engine/src/shells/tasks-panel.ts
+// ../engine/src/shells/tasks-panel.ts
 var TASKS_PANEL_ID = "panel:tasks";
 var make2 = (document, tag, className) => {
   const node = document.createElement(tag);

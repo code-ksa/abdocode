@@ -13,7 +13,7 @@ var __export = (target, all) => {
     });
 };
 
-// packages/engine/src/shells/shell.ts
+// ../engine/src/shells/shell.ts
 var exports_shell = {};
 __export(exports_shell, {
   truncate: () => truncate,

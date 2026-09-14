@@ -58,8 +58,9 @@ describe("م9ح — review lane wiring", () => {
     expect(block).toContain("{ ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REVIEW_SYSTEM }, [], turnSelection)")
     expect(block).toContain("const outcome = judgeReview(findings)")
     expect(block).toContain("return { answer: renderReviewReport(outcome, diff), completed: true }")
-    // الكلفةُ تُقال قبل الإنفاق، والحكمُ يُبثّ حدثاً
+    // الكلفةُ تُقال قبل الإنفاق؛ والحكمُ يحمله التقريرُ وحده (مقيس حيّاً 09-14: كان يظهر مرّتين حدثاً ثمّ صدرَ التقرير)
     expect(block.indexOf("ثلاثةُ نداءات")).toBeLessThan(block.indexOf("await ask("))
-    expect(block).toContain("await emitEvent(turn.id, outcome.line)")
+    expect(block).not.toContain("await emitEvent(turn.id, outcome.line)")
+    expect(block).toContain("return { answer: renderReviewReport(outcome, diff), completed: true }")
   })
 })

@@ -1379,7 +1379,7 @@ describe("prefix-preserving trail compaction (exec class)", () => {
       { index: 8, command: "write c.ts <<<\nx", kind: "exec" as const, verdictLine: "✓ ok · ✍ c.ts — كتابة ذرّية" },
     ]
     const once = compactTrail(trail, entries, { read: 1, exec: 1 })
-    expect(once.compacted).toEqual({ read: 1, exec: 1 })
+    expect(once.compacted).toEqual({ read: 1, exec: 1, write: 0 })
     expect(trail[2]!.content).toBe("AAAA")
     expect(trail[4]!.content).toStartWith("$ npm test")
     expect(once.trail[2]).toMatchObject({ role: "tool", toolCallId: "c1", name: "abdo_read" })
@@ -1390,16 +1390,16 @@ describe("prefix-preserving trail compaction (exec class)", () => {
     expect(once.trail[6]!.content).toBe("BBBB")
     expect(once.trail[8]!.content).toBe("✍ c.ts — كتابة ذرّية")
     const twice = compactTrail(once.trail, entries, { read: 1, exec: 1 })
-    expect(twice.compacted).toEqual({ read: 0, exec: 0 })
+    expect(twice.compacted).toEqual({ read: 0, exec: 0, write: 0 })
     expect(twice.trail).toEqual(once.trail)
     // Dropping the windows compacts the remaining full-size entries but never rewrites a digest of either class.
     const all = compactTrail(once.trail, entries, { read: 0, exec: 0 })
-    expect(all.compacted).toEqual({ read: 1, exec: 1 })
+    expect(all.compacted).toEqual({ read: 1, exec: 1, write: 0 })
     expect(all.trail[4]!.content).toBe(once.trail[4]!.content)
     expect(all.trail[2]!.content).toBe(once.trail[2]!.content)
     expect(all.trail[8]!.content.match(EXEC_DIGEST)![1]).toBe("write c.ts <<<")
     // Infinity disables a class; the wrapper keeps { trail, compacted: number } and ignores exec entries.
-    expect(compactTrail(trail, entries, { read: 0, exec: Infinity }).compacted).toEqual({ read: 2, exec: 0 })
+    expect(compactTrail(trail, entries, { read: 0, exec: Infinity }).compacted).toEqual({ read: 2, exec: 0, write: 0 })
     const legacy = compactReadTrail(trail, [{ index: 2, command: "read a.ts" }, { index: 6, command: "read b.ts" }], 1)
     expect(legacy.compacted).toBe(1)
     expect(legacy.trail[4]!.content).toBe(trail[4]!.content)

@@ -1,4 +1,4 @@
-// packages/providers/src/catalog.ts
+// ../providers/src/catalog.ts
 var PROVIDER_DEFINITIONS = [
   { id: "deepseek", version: "1", source: "builtin", label: "DeepSeek", local: false, wire: "openai-compatible", harness: "abdo-native", baseUrl: "https://api.deepseek.com", workerUrl: "https://api.deepseek.com/chat/completions", vaultKey: "abdocode-deepseek", models: ["deepseek-v4-flash", "deepseek-v4-pro"] },
   { id: "ollama", version: "1", source: "builtin", label: "أولاما (محليّ)", local: true, wire: "native-ollama", harness: "qwen-style", baseUrl: "http://127.0.0.1:11434", models: ["qwen2b-gpu:latest", "qwen9b-gpu-32k:latest", "empero-qwen3.8-9b-gpu:latest"] },

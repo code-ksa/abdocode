@@ -1,4 +1,4 @@
-// node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.mjs
+// ../../node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.mjs
 var zs = Object.defineProperty;
 var Rl = Object.getOwnPropertyDescriptor;
 var Ll = (s, t) => {
@@ -9699,7 +9699,7 @@ var Dl = class extends D {
   }
 };
 
-// node_modules/.bun/@xterm+addon-fit@0.11.0/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
+// ../../node_modules/.bun/@xterm+addon-fit@0.11.0/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
 var h = 2;
 var _ = 1;
 var o = class {
@@ -9725,7 +9725,7 @@ var o = class {
   }
 };
 
-// packages/desktop/src/native-terminal.js
+// src/native-terminal.js
 function mountNativeTerminal(host, bridge, attach) {
   const L2 = (en2, ar2) => document.documentElement.lang === "ar" ? ar2 : en2;
   const root = document.createElement("div");

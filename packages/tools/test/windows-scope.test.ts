@@ -15,11 +15,11 @@
 import { describe, expect, test } from "bun:test"
 import { ancestorsOf, forbiddenGrantRoots, planWindowsExecutionScope, type PathAccessibility } from "../src/windows-scope"
 
-const USER = String.raw`C:\Users\abdelrahman`
+const USER = String.raw`C:\Users\someone`
 const WINDOWS = String.raw`C:\Windows`
 const PROGRAM_FILES = String.raw`C:\Program Files`
 const SAFE = String.raw`C:\AbdoExec`
-const REDIRECTED = String.raw`D:\OneDriveProfiles\abdelrahman`
+const REDIRECTED = String.raw`D:\OneDriveProfiles\someone`
 
 /**
  * Windows as MEASURED, not as imagined: the drive root and the Users container

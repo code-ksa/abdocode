@@ -49,8 +49,8 @@ async function run(firstReply: string): Promise<{ events: string[]; prompts: str
 }
 
 test.skipIf(process.platform !== "win32")("a reply narrating ls output without a receipt is named to the operator and corrected in the next call; the turn still completes", async () => {
-  const r = await run("سأتحقّق أوّلاً:\nنفّذ: list .\ndrwxr-xr-x 5 abdelrahman staff 4096 Oct 15 10:00 .\n-rw-r--r-- 1 abdelrahman staff 33 Oct 15 10:00 package.json")
-  expect(r.events.some((t) => t.startsWith("⚠ النموذجُ سرد خرجَ أمرٍ لم تُنفّذه أداة") && t.includes("drwxr-xr-x 5 abdelrahman staff"))).toBe(true)
+  const r = await run("سأتحقّق أوّلاً:\nنفّذ: list .\ndrwxr-xr-x 5 someone staff 4096 Oct 15 10:00 .\n-rw-r--r-- 1 someone staff 33 Oct 15 10:00 package.json")
+  expect(r.events.some((t) => t.startsWith("⚠ النموذجُ سرد خرجَ أمرٍ لم تُنفّذه أداة") && t.includes("drwxr-xr-x 5 someone staff"))).toBe(true)
   expect(r.prompts.length).toBeGreaterThanOrEqual(2)
   expect(r.prompts[1]!.startsWith("[تصحيحٌ من النظام]")).toBe(true)
   expect(r.prompts[1]).toContain("لا تكتب خرجاً بنفسك")

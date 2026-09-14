@@ -13,7 +13,7 @@ var __export = (target, all) => {
     });
 };
 
-// packages/engine/src/shells/trajectory-mount.ts
+// ../engine/src/shells/trajectory-mount.ts
 var exports_trajectory_mount = {};
 __export(exports_trajectory_mount, {
   view: () => view,
@@ -24,7 +24,7 @@ __export(exports_trajectory_mount, {
   TAB_ID: () => TAB_ID
 });
 
-// packages/engine/src/shells/trajectory.ts
+// ../engine/src/shells/trajectory.ts
 var exports_trajectory = {};
 __export(exports_trajectory, {
   turns: () => turns,
@@ -203,7 +203,7 @@ var rows = (store, turnId) => {
 };
 var turns = (store) => store.order.slice().reverse();
 
-// packages/engine/src/shells/trajectory-mount.ts
+// ../engine/src/shells/trajectory-mount.ts
 var TAB_ID = "trajectory:tab";
 var VIEW_ID = "trajectory:view";
 var make = (document, tag, className) => {

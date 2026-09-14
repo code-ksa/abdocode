@@ -60,5 +60,5 @@ try {
   }
 } catch (error) { verdict.error = String(error) }
 finally { child.kill(); await child.exited; await reading; verdict.stderrTail = (await errors).slice(-800); rmSync(base, { recursive: true, force: true }) }
-writeFileSync("C:/Users/abdelrahman/Documents/Codex/2026-09-04/new-chat/work/real-model-eval.json", JSON.stringify(verdict, null, 2))
+writeFileSync(process.env.ABDO_EVAL_OUT ?? join(tmpdir(), "abdocode-real-model-eval.json"), JSON.stringify(verdict, null, 2))
 console.log(JSON.stringify(verdict, null, 2))

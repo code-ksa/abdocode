@@ -1,4 +1,4 @@
-/* node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/css/xterm.css */
+/* ../../node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/css/xterm.css */
 .xterm {
   cursor: text;
   position: relative;
@@ -251,7 +251,7 @@
   box-shadow: var(--vscode-scrollbar-shadow, #000) 6px 0 6px -6px inset;
 }
 
-/* packages/desktop/src/native-terminal.css */
+/* src/native-terminal.css */
 .native-terminal {
   display: flex;
   background: var(--bg, #fff);

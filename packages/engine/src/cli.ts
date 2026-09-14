@@ -86,6 +86,8 @@ import { RustReachEffects } from "./provider-effects"
 import { chargeableUsage, cloudBudgetVerdict, cloudUsageSnapshot, readLedgerSummary, recordCloudUsage, renderLedgerLine } from "./token-budget"
 import { ledgerFor, quotaVerdict, type ModelPrice, type ModelUsage, type SubscriberPlan } from "./commerce-ledger"
 import { meterSummary, readMeter, recordMeterEntry } from "./usage-meter"
+import { ownerGoneLine, parseOwnerPid, watchOwner } from "./owner-watch"
+import { dismissReceipt, parseRenderedTree, pickDismissTarget } from "./overlay-dismiss"
 import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
 import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, parseGateMode, type GateDecision } from "./front-gate"
 import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"
@@ -697,6 +699,14 @@ const EPOCH_TRAIL_CHARS = (() => {
 // keepRecent 2 = آخر بناءٍ فاشل يبقى كاملاً؛ overChars 30k ≈ إيصالا run كاملان
 // (14k) يشيخان لكل تمريرة → ≤ ~5 كسور بادئة في حقبة 32 دوراً لو كان كل دور run.
 const TRAIL_COMPACTION = { keepRecent: 2, overChars: 30_000, trailChars: EPOCH_TRAIL_CHARS } as const
+/**
+ * م11 — ضغطُ حمولةِ الكتابة (رسائلُ المساعد التي حملت `write <ملف> <<<` كاملاً) خلف مفتاح
+ * plugins.trailCompaction نفسِه (عائلةٌ واحدة: الأثرُ داخل الحقبة). المقيس 2026-09-14 على
+ * super-120b: دورٌ استهلك ٣٧٣ ألفاً من ٤٠٠ ألف توكن في ٣٦ نداءً — كتاباتٌ كاملة متكرّرة
+ * لملفٍّ ٧ك بقيت كلُّها في الأثر لأنّ الضغطَ يهضم النتائجَ لا نداءاتِ النموذج. أحدثُ كتابةٍ
+ * تبقى كاملة (النموذجُ يرى ما كتبه للتوّ)؛ ما أقدمُ يُختصر حين يعبر وحده 20k حرف.
+ */
+const WRITE_COMPACTION = { keepRecent: 1, overChars: 20_000 } as const
 
 const readThroughKernelV = async (file: string, range?: Readonly<{ from: number; to?: number }>): Promise<DispatchResultV> => {
   const target = resolveProjectPath(file)
@@ -3173,7 +3183,7 @@ const runServeShell = async (): Promise<void> => {
       case "desktop": {
         // ب6 — كومبيوتر-يوس على النظام: مفتاحٌ مستقلّ مطفأٌ افتراضاً؛ الأفعالُ المُدخِلة (نقر/كتابة/مفاتيح/تمرير/تركيز) تمرّ ببوّابة الموافقة
         // بصنف outside-workspace؛ القراءةُ (لقطة/نوافذ) بلا بوّابة لكنّها لا تغادر الجهاز إلا إلى نموذج الرؤية الذي ضبطه المستخدم.
-        if (loadSettings().desktopControlEnabled !== true) return denied("رُفض التحكّم بسطح المكتب: «تحكّم سطح المكتب» مطفأٌ — فعّله من الإعدادات ← التشغيل والأمان (كلُّ فعلٍ يبقى بموافقتك)، أو استعمل متصفّح الوكيل (open/page/tap/fill).", "policy_denied")
+        if (loadSettings().desktopControlEnabled !== true) return denied("رُفض التحكّم بسطح المكتب: «تحكّم سطح المكتب» مطفأٌ — فعّله من الإعدادات ← التشغيل والأمان (كلُّ فعلٍ يبقى بموافقتك)، أو استعمل متصفّح الوكيل (open/page/tap/fill). | Desktop control is switched off in this app: Settings → Runtime & safety → «Desktop control». Only the user can enable it — ask them, then retry; no other tool reaches the desktop.", "policy_denied")
         const { parseDesktopCommand, runDesktop } = await import("./desktop-control")
         const action = parseDesktopCommand(rest)
         if ("error" in action) return invalid(action.error)
@@ -3183,12 +3193,14 @@ const runServeShell = async (): Promise<void> => {
         if (action.kind === "shot" && action.scope !== "screen" && desktopBound === undefined) {
           return invalid("لا نافذةَ مربوطة: «desk focus <جزءٌ من العنوان>» ثمّ أعد اللقطة — أو اطلب صراحةً «desk shot screen» لتصوير الشاشة كلِّها (تحتاج موافقتك، وتخرج إلى نموذج الرؤية إن ضُبط).")
         }
-        if (action.kind !== "windows" && (action.kind !== "shot" || action.scope === "screen")) {
+        if (action.kind !== "windows" && action.kind !== "ui" && (action.kind !== "shot" || action.scope === "screen")) {
           const ok = await gate(turnId, "outside-workspace", action.kind === "shot" ? "لقطةٌ لكامل الشاشة (تُرسل إلى نموذج الرؤية إن ضُبط)" : `سطح المكتب: desk ${rest.slice(0, 160)}`, spec.name)
           if (!ok) return denied("رُفض فعلُ سطح المكتب — لم تُمنح الموافقة.", "policy_denied")
         }
-        const result = await runDesktop(action, { shotsDir: join(STATE_ROOT, "desktop-shots"), ...(desktopBound === undefined ? {} : { bound: desktopBound }) })
-        if (result.bound !== undefined) desktopBound = result.bound
+        const result = await runDesktop(action, { shotsDir: join(STATE_ROOT, "desktop-shots"), ...(desktopBound === undefined ? {} : { bound: desktopBound }), ...(desktopUi === undefined ? {} : { ui: desktopUi }), ...(desktopKnownHwnds === undefined ? {} : { knownHwnds: desktopKnownHwnds }) })
+        if (result.windows !== undefined) desktopKnownHwnds = result.windows.map((w) => w.hwnd)
+        if (result.bound !== undefined) { if (result.bound.hwnd !== desktopBound?.hwnd) desktopUi = undefined; desktopBound = result.bound }
+        if (action.kind === "ui" && result.elements !== undefined) desktopUi = { depth: action.depth, elements: result.elements }
         if (result.ok && result.shot !== undefined) {
           try {
             const data = readFileSync(result.shot.path).toString("base64")
@@ -3258,7 +3270,9 @@ const runServeShell = async (): Promise<void> => {
           } catch (cause) {
             // «تعذّرت» بلا «فشل» — كانت تُحكم نجاحاً بالتشمّم.
             const message = String(cause instanceof Error ? cause.message : cause)
-            return { output: `فُتح البحث في المتصفّح، وتعذّرت النتائج المنظّمة: ${message}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: message.slice(0, 160) } }
+            // م12 — الإيصالُ يسمّي الطريقَ البديل خطوةً خطوة (مقيس 09-14: النموذجُ توقّف وكتب «من المعرفة العامّة» بدل أن يقرأ النتائجَ المفتوحة).
+            const fallback = `\nالبديلُ بلا مفتاح: نفّذ: open ${url} ثمّ نفّذ: dismiss (يغلق نافذةَ اللغة/الكوكيز إن ظهرت) ثمّ نفّذ: page لقراءة النتائج وروابطها. ولتفعيل النتائج المنظّمة: مفتاحُ Programmable Search (key + cx) في الخزنة «abdocode-google» من الإعدادات ▸ المفاتيح.`
+            return { output: `فُتح البحث في المتصفّح، وتعذّرت النتائج المنظّمة: ${message}${fallback}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: message.slice(0, 160) } }
           }
         }
         return unknownTool(`أداة شبكة غير معروفة: ${spec.name}`)
@@ -3282,7 +3296,7 @@ const runServeShell = async (): Promise<void> => {
           const liveSurface = surface
           const out = await runSurfaceTool(spec.name, rest, turnId)
           // الأتمتةُ المرئيّة تفهم خطأها بعينها: رفضُ العقد أو مرجعٌ ضائع أو تعذّرٌ ⇦ لقطةٌ للحالة تُلحق بالنداء التالي إن كان النموذجُ يرى.
-          if (liveSurface !== undefined && /^(?:العقد رفض|مرجعٌ غير معروف|تعذّر|رُفض)/u.test(out) && ["tap", "fill", "key", "look", "find", "scroll"].includes(spec.name) && shotRoute(loadSettings()).reaches) {
+          if (liveSurface !== undefined && /^(?:العقد رفض|مرجعٌ غير معروف|تعذّر|رُفض)/u.test(out) && ["tap", "fill", "key", "look", "find", "scroll", "dismiss"].includes(spec.name) && shotRoute(loadSettings()).reaches) {
             try { const data = await liveSurface.captureScreenshot({ format: "jpeg", quality: 50 }); if (shotFitsModel(data) && pendingShots.length < 4) { pendingShots.push({ data, url: surfaceUrl, mime: "image/jpeg" }); return plain(out + "\n(أُرفقت لقطةٌ لحالة الصفحة عند الخطأ — انظرها قبل المحاولة التالية)") } } catch { /* اللقطةُ مساعِدةٌ لا شرط */ }
           }
           return plain(out)
@@ -3431,6 +3445,10 @@ const runServeShell = async (): Promise<void> => {
   // ب6 — النافذةُ التي ركّزها الوكيل بـdesk focus: **مقبضُها** هو الحدّ (يُتحقَّق منه داخل سكربت الفعل قبل أوّل حرف)،
   // ومستطيلُها يُعاد قياسُه هناك أيضاً. بلا ربطٍ لا إدخالَ أصلاً — لا حقنَ في «أيّ نافذةٍ في المقدّمة».
   let desktopBound: import("./desktop-control").DesktopBound | undefined
+  // م6ب — آخرُ شجرة «desk ui» لهذه النافذة: مراجعُ set/press تُطابَق عليها، وتسقط مع تغيّر النافذة المربوطة.
+  let desktopUi: import("./desktop-control").UiContext | undefined
+  // م6و — النوافذُ التي عدّها آخرُ windows/open: ما يظهر بعدها يُسمّى «جديدة» (قائمةُ اختيار برنامج، حوار).
+  let desktopKnownHwnds: readonly number[] | undefined
   /** لقطةُ الصفحة إلى لوحة القشرة (إطارُ browser-shot الذي كانت الواجهةُ تستمع له بلا باثّ) — للعرض لا للاستدلال. */
   const paneShot = async (): Promise<string> => {
     if (surface === undefined) return ""
@@ -3462,6 +3480,17 @@ const runServeShell = async (): Promise<void> => {
     }
     if (loadSettings().computerUseEnabled === false && !(name === "surface" && rest === "off")) {
       return "رُفض استخدام المتصفح: Computer use معطّل في الإعدادات"
+    }
+    // م12 — dismiss (مقيس 09-14: نافذةُ «Looking for results in English?» أوقفت النموذجَ بعد فشل البحث المنظّم):
+    // تقرأ الصفحةَ بالمسار نفسِه (مملوك أو إضافة)، تختار الإغلاقَ الأسلمَ بالمعنى، وتنقره عبر tap الموثوق — لا نقرَ أعمى.
+    if (name === "dismiss") {
+      const rendered = await runSurfaceTool("page", "", turnId)
+      if (/^(?:لا سطحَ|رُفض|✕)/u.test(rendered)) return rendered
+      const choice = pickDismissTarget(parseRenderedTree(rendered))
+      if (choice === undefined) return `لا طبقةَ عائمة تُغلَق — الصفحةُ كما هي (${rendered.split("\n", 1)[0]!.slice(0, 80)}). واصل بـpage أو find.`
+      const tapped = await runSurfaceTool("tap", choice.ref, turnId)
+      if (/^(?:العقد رفض|مرجعٌ غير معروف|لم أنقر|رُفض|✕)/u.test(tapped)) return `تعذّر إغلاقُ «${choice.name}»: ${tapped}`
+      return `${dismissReceipt(choice)}\n${tapped}`
     }
     const backend = loadSettings().browserBackend ?? "owned"
     if (backend === "off" && !(name === "surface" && rest.trim() === "off") && !(name === "browser")) return "رُفض التصفّح: متصفّحُ الوكيل موقوفٌ من الإعدادات (سطح المكتب ▸ متصفّح الوكيل) — أو اكتب: browser owned / browser extension"
@@ -3753,7 +3782,12 @@ const runServeShell = async (): Promise<void> => {
     }
 
     const [ref, ...tail] = rest.split(/\s+/)
-    const node = surfaceRefs.find((n) => n.ref === ref)
+    // م12 (مقيس 09-14 بفكستشر dismiss): البحثُ كان في المستوى الأعلى وحده فكان كلُّ عنصرٍ داخل حوارٍ «مرجعاً غير معروف» — يُبحث في العمق.
+    const findRef = (nodes: readonly import("./mind/surface").PageNode[]): import("./mind/surface").PageNode | undefined => {
+      for (const n of nodes) { if (n.ref === ref) return n; const inner = n.children === undefined ? undefined : findRef(n.children); if (inner !== undefined) return inner }
+      return undefined
+    }
+    const node = findRef(surfaceRefs)
     if (node === undefined) return `مرجعٌ غير معروف «${ref}» — اقرأ الصفحة بـpage أوّلاً`
 
     /**
@@ -4140,6 +4174,21 @@ const runServeShell = async (): Promise<void> => {
       process.exit(0)
     }, idleExitMs)
   }
+  // يتيمُ 10236 (مقيس 2026-09-14): سطحُ المكتب قُتل قسراً فبقي المحرّك حيّاً قابضاً على قفل الحالة والتطبيقُ الجديد
+  // رفض «دليل الحالة مملوك لهارنس حيّ». المالكُ يُراقَب بالـpid لا بنهاية stdin (المجرى قد يرثه طفلٌ آخر فلا يصل EOF).
+  // الخروجُ مسمّى: إجهاضُ الدور الجاري بمهلةٍ قصيرة، إيقافُ خوادم الدور، إغلاقُ الدفاتر، ثمّ exit(0).
+  const ownerPid = parseOwnerPid(process.env.ABDO_DESKTOP_OWNER_PID)
+  if (ownerPid !== undefined) watchOwner(ownerPid, () => {
+    void (async () => {
+      running?.controller.abort()
+      if (activeTurn !== undefined) await Promise.race([activeTurn.catch(() => undefined), Bun.sleep(3_000)])
+      const orphans = turnServers.stopAll()
+      if (orphans !== undefined) emit({ kind: "bye", why: orphans })
+      emit({ kind: "bye", why: ownerGoneLine(ownerPid) })
+      try { durableMemory.close(); serveJournal.close() } catch { /* الدفاتر مساعِدة — الخروجُ يمضي */ }
+      process.exit(0)
+    })()
+  })
   if (shellAuthenticated) { emitReady(); armIdleExit() }
   for await (const incoming of mergeFrames(shellInputFrames(), remoteQueue)) {
     disarmIdleExit()
@@ -5139,7 +5188,7 @@ const runServeShell = async (): Promise<void> => {
             return parseReviewFindings(lens.key, typeof reply === "string" ? reply : String(reply))
           }))).flat()
           const outcome = judgeReview(findings)
-          await emitEvent(turn.id, outcome.line)
+          // مقيس حيّاً 09-14: سطرُ الحكم كان يظهر مرّتين (حدثاً ثمّ في صدر التقرير) — التقريرُ يحمله وحده.
           return { answer: renderReviewReport(outcome, diff), completed: true }
         }
       }
@@ -5725,7 +5774,7 @@ const runServeShell = async (): Promise<void> => {
           // يوافقهما بدل أن يحرق جولةً على «ليست أداةً مسجلة» لاسمٍ عُرض للتوّ.
           isCallable: (toolName) => Tools.agentCallable(toolName) || externalTool(toolName) !== undefined,
           // أوامرُ المتصفّح وسطح المكتب متقلّبة: تكرارُها بعد تنقّلٍ قراءةٌ جديدة لا «duplicate» (مقيس 09-13: حقبٌ فارغة بسببه).
-          volatile: (command) => /^(?:page|shot|find|look|scroll|network|console)\b/u.test(command),
+          volatile: (command) => /^(?:page|shot|find|look|scroll|network|console|dismiss|desk)\b/u.test(command), // م6د (مقيس 09-14 على المثبَّت): «desk ui» بعد «لا نافذةَ مربوطة» ثمّ focus ناجح حُسب تكراراً فتوقّف الدور — سطحُ المكتب متقلّبٌ كالصفحة
           priorCommands: allCommands,
           priorReceipts: allReceipts,
           requireTool: forcedFailed || sprintPlanPending,
@@ -5740,6 +5789,8 @@ const runServeShell = async (): Promise<void> => {
           // لكل نداء (TRAIL_COMPACTION). مفتاح مستقل plugins.trailCompaction
           // (الافتراض مفعَّل)؛ إطفاؤه = غياب الخيار = لا أثر تنفيذي يُلمس.
           ...(plugins.read("trailCompaction", "epoch", epoch) ? { trailCompaction: TRAIL_COMPACTION } : {}),
+          // م11 — حمولاتُ الكتابة خلف المفتاح نفسه (WRITE_COMPACTION)؛ إطفاؤه = غيابُ الخيار = أثرٌ مطابق بايتاً.
+          ...(plugins.read("trailCompaction", "epoch", epoch) ? { writeCompaction: WRITE_COMPACTION } : {}),
           // IDEA 2: سطر النيّة يُرفع قبل التحليل، والنيّة تصل الخطّافين وسيطاً أخيراً.
           // المعطَّل = غياب الخيار = نصّ المتابعة والمخطّطات وعدد وسائط الخطّافين كما هي بايتاً.
           ...(intentOn ? { intentField: true } : {}),
@@ -5838,7 +5889,7 @@ const runServeShell = async (): Promise<void> => {
           } catch { /* الذاكرة مساعِدة لا حاكمة — لا تُسقِط الدور */ }
           await emitEvent(turn.id, summaryEventLine(epoch, summaryVerdict))
         }
-        await emitEvent(turn.id, `✓ نقطة حفظ الحقبة ${epoch}: أدوات=${loop.commands.length} · السبب=${loop.stopReason} · ضغط القراءة=${loop.readCompactions} · ضغط التنفيذ=${loop.execCompactions} · أثر الحقبة=${loop.trailChars}`)
+        await emitEvent(turn.id, `✓ نقطة حفظ الحقبة ${epoch}: أدوات=${loop.commands.length} · السبب=${loop.stopReason} · ضغط القراءة=${loop.readCompactions} · ضغط التنفيذ=${loop.execCompactions} · أثر الحقبة=${loop.trailChars} · ضغط الكتابة=${loop.writeCompactions}`)
         // §8 — سطر أحكام الأدوات حدثٌ مستقلّ بعد نقطة الحفظ (لا يُبثّ وهو معطَّل).
         if (ledger !== undefined) await emitEvent(turn.id, ledger.line(epoch))
         // §IDEA 2 — سطر النيّات بجوار سطر الأحكام: للمضيف وحده، لا يدخل نصّاً يراه النموذج.

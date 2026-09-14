@@ -1,45 +1,56 @@
-# عبدو كود — دليل التطوير
+# Development
 
-## الحالة الحالية
+## Requirements
 
-- 52 حزمة معرفة في مساحة العمل ومفحوصة ببوابة تركيب آلية.
-- الحزم الجديدة مرتبطة بمحرك التكامل وتعمل بسياسة فشل مغلق.
-- نواة Rust الحالية تغطي العقود، النواة الأساسية، السجل، الصلاحيات ووقت التشغيل.
-- أدوار السياسة والأدوات والأدلة ما زالت في طبقة TypeScript/التكامل، وتحويلها إلى وحدات Rust مستقلة مدرج في خطة التطوير.
-- واجهة الويب الموروثة محجوبة عن الإصدار العام إلى أن تنتهي مراجعة محتواها وأصلها بالكامل.
+- Bun 1.3 or newer
+- Rust stable
+- On Windows: Visual Studio Build Tools (C++), WebView2 runtime (ships with Windows 11), and for the installer NSIS through the Tauri CLI
 
-## البناء والتحقق
-
-المتطلّبات: Bun 1.3+، Rust (stable)، وعلى ويندوز Visual Studio Build Tools وWebView2.
+## Everyday commands
 
 ```powershell
 bun install --frozen-lockfile
-bun run structure
-bun run typecheck
-bun test scripts/composition-gate.test.ts scripts/provenance-surface-gate.test.ts
+bun run structure      # composition manifest and structure gates
+bun run typecheck      # TypeScript (turbo) + cargo check
 ```
 
-بوّابة المحرّك الكاملة (~2300 اختبار، دقائق):
+Engine tests (about 2,300 tests, a few minutes; live tests spawn the real engine over framed stdio against fake providers and a fake CDP browser):
 
 ```powershell
 $env:ABDO_TEST_NATIVE_BINARY_DIR = "<repo>\packages\desktop\src-tauri\payload\bin"
-bun test packages/engine/test packages/engine-host/test packages/memory/test packages/providers/test packages/tools/test packages/transport-contracts/test packages/browser/test packages/model-gateway/test packages/harness/test
+bun test packages/engine/test packages/engine-host/test packages/memory/test packages/providers/test packages/tools/test packages/transport-contracts/test packages/browser/test
 ```
 
-بناء المثبّت (يجمّع المحرّك إلى `packages/desktop/src-tauri/payload/` ثمّ Tauri NSIS):
+Rust:
 
 ```powershell
-bun packages/desktop/scripts/prepare.ts
-cd packages/desktop/src-tauri
+cargo test --manifest-path packages/kernel/Cargo.toml
+cargo test --manifest-path packages/kernel/bins/abdo-tool-worker/Cargo.toml
+```
+
+## Building the installer
+
+`prepare.ts` compiles the engine into `packages/desktop/src-tauri/payload/abdocode.exe` and bundles the UI; the Tauri CLI then produces the NSIS installer under `packages/desktop/src-tauri/target/release/bundle/nsis/`.
+
+```powershell
+cd packages/desktop
+bun run prepare
 bunx @tauri-apps/cli build
 ```
 
-خطة السبرنتات وحالة الربط موثقتان في `docs/ABDOCODE-RUST-SPRINT-PROGRAM.md`، وخريطة تقارب الحزم في `architecture/PACKAGE-CONVERGENCE-52.md`.
+The version lives in three files that must agree: `packages/desktop/package.json`, `packages/desktop/src-tauri/Cargo.toml`, `packages/desktop/src-tauri/tauri.conf.json`.
 
-## النَّسَب — أفكارٌ مأخوذة، لا كودٌ مستعار
+## Testing philosophy
 
-كلُّ ما في هذا المستودع مكتوبٌ هنا. بعضُ الأفكار قُرئت في مشاريعَ مفتوحةٍ ثمّ أُعيدت كتابتُها بطريقتنا وبمفاتيحَ يملكها المشغّل (بلا fork ولا اعتمادٍ ولا مقتطف): من **Pi** (badlogic/pi-mono) فكرةُ إظهار الأدوات بحسب النيّة، وطابورُ كتابة الملفّ الواحد، وتثبيتُ الجلسة عند المزوّد؛ من **Kilo** (Kilo-Org/kilocode) نقاطُ الرجوع لكلّ دور، وحارةُ المراجعة، وسوقُ الإضافات؛ من **Hermes Agent** و**OpenClaw** نزعُ الاعتمادات من بيئة الأبناء، والمساراتُ المحميّة على كلّ أسطح الكتابة، وحجرُ النصّ الوارد، والرفضُ الفوريّ حين لا مُوافِق. الجردُ الكامل بحالة كلّ فكرة (مأخوذة/مرفوضة/مملوكة أصلاً) في `docs/IDEAS-INVENTORY-HERMES-OPENCLAW-20260903.md` و`docs/IDEAS-INVENTORY-MINDSHUB-DSH-20260901.md`؛ وما وُعد به بلا كود يُقال إنّه بلا كود.
+- Every guard has a positive twin: a test that proves the guarded path is actually exercised, so a green negative test cannot mean "nothing happened".
+- Live tests judge from disk and from the ledger, not from a function's return value.
+- Source pins: some tests assert exact source lines in `cli.ts` to keep wiring order honest (for example, a guard that must run before a diff preview). When a pin fails after a deliberate change, update the pin with the reason.
+- Line endings are mixed on purpose (`core.autocrlf=true`). Measure a file's endings before editing it; a wrong ending on one line produces a whole-file diff.
 
-## حدود الأمان
+## Layout
 
-لا تُحمّل هذه النسخة إعدادات أو أسرارًا أو قوائم مشاريع داخلية. الأسرار تُمرر صراحة عبر متغيرات `ABDO_SECRET_*` أو عبر مزود محلي يحدده المشغل في `ABDO_VAULT_SCRIPT`. لا يوجد اتصال تلقائي بمستودعات أو خوادم خارجية إلا ما يختاره المشغّل صراحةً (مزوّد النموذج، وثيقة الإصدار على مستودع التوزيع).
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the package map and the engine loop, and [AGENT-PROTOCOL.md](AGENT-PROTOCOL.md) for the stdio protocol.
+
+## Provenance
+
+Everything in this repository was written here. Some ideas were read in open projects and rewritten in our own way, in our own words, and credited in `legal/THIRD-PARTY-LICENSES.md`. No upstream code, prompts or dependencies were copied in.

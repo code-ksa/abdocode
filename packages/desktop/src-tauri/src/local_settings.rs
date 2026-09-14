@@ -210,7 +210,7 @@ mod tests {
         .validate()
         .is_err());
         assert!(LocalProfile {
-            display_name: "عبد الرحمن".into()
+            display_name: "تكنولوجيا السعودية".into()
         }
         .validate()
         .is_ok());
