@@ -86,7 +86,7 @@ import { RustReachEffects } from "./provider-effects"
 import { chargeableUsage, cloudBudgetVerdict, cloudUsageSnapshot, readLedgerSummary, recordCloudUsage, renderLedgerLine } from "./token-budget"
 import { ledgerFor, quotaVerdict, type ModelPrice, type ModelUsage, type SubscriberPlan } from "./commerce-ledger"
 import { meterSummary, readMeter, recordMeterEntry } from "./usage-meter"
-import { DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
+import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
 import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, parseGateMode, type GateDecision } from "./front-gate"
 import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"
 import { SqliteFactStore, validFor, type FactKind } from "@abdo/memory"
@@ -1772,7 +1772,8 @@ const ask = async (
   const { url, headers, body } = request
   if(Buffer.byteLength(body)>1_048_576)throw Error('The conversation and attachments exceed the request size limit. Start a new conversation or use smaller files.')
   const legalToolNames = new Map(request.toolBindings.map((binding) => [binding.exposedName, binding.legalName]))
-  const normalizeToolNames = (text: string): string => text.replace(
+  // م11 — «ذ» المكسورة (U+FFFD) في علامة الأمر تُشفى قبل تطبيع الأسماء (مقيس 09-14 على NIM).
+  const normalizeToolNames = (text: string): string => text.replace(/^(\s*)نفّ?\uFFFD\s*:/gmu, "$1نفّذ:").replace(
     /^(\s*نفّ?ذ\s*:\s*)(\S+)/gmu,
     (_line, prefix: string, exposedName: string) => `${prefix}${legalToolNames.get(exposedName) ?? exposedName}`,
   )
@@ -5285,6 +5286,8 @@ const runServeShell = async (): Promise<void> => {
       const allReceipts: ToolReceipt[] = []
       // م11 — تصحيحُ الخرج المختلَق يُحقن في النداء التالي وحده ثمّ يُستهلك.
       let fabricationNotice = ""
+      // م11 — تنبيهُ الميزانية يُقال مرّةً واحدة في الدور عند ٧٥٪ من السقف.
+      let budgetWarned = false
       // S1 — وعي الدور: تاريخ الحقب يُقصّ فتسقط القراءات من السياق ويعيد
       // النموذج قراءة الملفات نفسها كل حقبة. الخلاصة تُحفظ هنا من الإيصالات
       // وتُحقن في كل تعليمة حقبة، والخريطة الباردة تسبق أول فعل.
@@ -5695,7 +5698,12 @@ const runServeShell = async (): Promise<void> => {
             const callSel: ModelSelection = visionSel !== undefined ? Object.freeze({ ...visionSel, vision: true as const }) : route?.reaches ? Object.freeze({ ...selectedModel, vision: true as const }) : selectedModel
             if (route?.reaches) emit({ kind: "model-route", turnId: turn.id, lane: callSel.lane, ref: callSel.ref, vision: true })
             const callHooks: AskHooks = shot === undefined || !route?.reaches ? hooks : { ...hooks, attachments: { descriptions: [...(hooks.attachments?.descriptions ?? [])], text: hooks.attachments?.text ?? "", images: [...(hooks.attachments?.images ?? []), ...batch.map((b) => ({ mime: b.mime, data: b.data }))] } }
-            const askPrompt = fabricationNotice.length > 0 ? `${fabricationNotice}\n\n${prompt}` : prompt
+            // م11 — تنبيهُ الميزانية عند ٧٥٪ من سقف الدور (مقيس 09-14: دورٌ استهلك ٣٧٣ ألفاً من ٤٠٠ في ٣٦ نداءً ومات قبل README).
+            const budgetSnap = turnMeter?.snapshot()
+            const budgetNotice = budgetSnap !== undefined && typeof budgetSnap.cap === "number" && budgetSnap.cap > 0 && !budgetWarned && budgetSnap.spent >= budgetSnap.cap * BUDGET_NOTICE_RATIO ? budgetNoticeLine(budgetSnap.spent, budgetSnap.cap) : ""
+            if (budgetNotice.length > 0) { budgetWarned = true; await emitEvent(turn.id, `⏱ ${budgetNotice}`) }
+            const notices = [budgetNotice, fabricationNotice].filter((n) => n.length > 0)
+            const askPrompt = notices.length > 0 ? `${notices.join("\n")}\n\n${prompt}` : prompt
             fabricationNotice = ""
             const text = await ask(askPrompt, callHooks, history, callSel, (native) => { reply = native })
             // م11 — خرجٌ مختلَق (مقيس على omni: ls -la مسرود بلا أداة): يُسمّى للمشغّل ويُصحَّح في النداء التالي، ولا يُرفض الردّ.

@@ -148,7 +148,8 @@ describe("turn budget wiring in the live cli path", () => {
     expect(source).toContain("...(turnMeter === undefined ? {} : { turnMeter }),")
     expect(source.match(/new TurnSpendMeter\(/gu)).toHaveLength(1)
     expect(source).toContain("readonly turnMeter?: TurnSpendMeter")
-    expect(source).toMatch(/import \{ DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap \} from "\.\/turn-budget"/u)
+    // م11 (09-14): تنبيهُ الميزانية أضاف BUDGET_NOTICE_RATIO وbudgetNoticeLine إلى الاستيراد نفسِه
+    expect(source).toMatch(/import \{ BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap \} from "\.\/turn-budget"/u)
   })
 
   test("the global cloud cap is consulted first; the turn meter second, with the same estimate, and never raises it", () => {

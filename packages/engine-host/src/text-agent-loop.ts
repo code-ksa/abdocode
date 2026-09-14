@@ -335,6 +335,9 @@ const fencedJsonWrite = (text: string): string | undefined => {
  * قبل المطابقة؛ (٢) نداءٌ واحدٌ على سطره تسبقه جملُ سردٍ قصيرة يُقبل — أمّا سردٌ يحمل ادّعاءَ ملفٍّ أو كتلةَ
  * شيفرة فيبقى مرفوضاً كما كان (التوأم في الاختبار).
  */
+/** حرفُ «ذ» يصل أحياناً U+FFFD من المزوّد (مقيس 09-14) — علامةٌ مكسورة في صدر السطر تُشفى إلى «نفّذ:»؛ لا يُمسّ غيرُ صدر السطر. */
+export const healCallMarker = (text: string): string => text.replace(/^([ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})?\s*)نفّ?\uFFFD\s*:/gmu, "$1نفّذ:")
+
 const unwrapMarkdownCall = (text: string): string =>
   text
     .replace(/^[ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})\s*(نفّ?ذ\s*:[^\n]*?)\s*(?:\*\*|__|`{1,3})[ \t]*$/gmu, "$1")
@@ -354,7 +357,7 @@ const parseCommand = (text: string, verifiedEffect = false): CommandParse => {
   // Arabic diacritics are optional orthography, not an execution boundary.
   // Normalize only an exact line-leading imperative plus colon; all ordinary
   // multi-call, payload and registered-tool checks still run afterwards.
-  const stripped = unwrapMarkdownCall(stripMeasure(text)).replace(/^نفّ?ذ\s*:\s*/gmu, "نفّذ: ")
+  const stripped = unwrapMarkdownCall(stripMeasure(healCallMarker(text))).replace(/^نفّ?ذ\s*:\s*/gmu, "نفّذ: ")
   if (stripped.startsWith("رُفض إخراج النموذج:")) return Object.freeze({ kind: "invalid", why: stripped })
   const fencedCommand = stripped.match(/^```(?:text)?\s*\r?\n(نفّذ:[\s\S]*?)\r?\n```$/iu)?.[1]
   // Some Qwen completions use a textual XML tool envelope even on the

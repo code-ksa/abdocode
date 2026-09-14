@@ -149,6 +149,11 @@ export class TurnSpendMeter {
   }
 }
 
+/** سطرُ التنبيه الذي يُحقن في مدخل النموذج عند بلوغ ٧٥٪ من سقف الدور — يسمّي الأرقامَ ويطلب الاختصار لا التوقّف. */
+export const BUDGET_NOTICE_RATIO = 0.75
+export const budgetNoticeLine = (spent: number, cap: number): string =>
+  `[تنبيه الميزانية] استُهلك ${Math.round((spent / cap) * 100)}٪ من سقف الدور (${spent}/${cap} توكيناً فعّالاً). اختصر: لا تُعِد قراءةَ ملفٍّ قرأته ولا كتابةَ ما لم يتغيّر، ونفّذ ما بقي بأقلّ نداءات، ثمّ اختم بالإيصالات.`
+
 export interface CloseToDoneEvidence {
   /** آخر نقطة حفظ معلَّقة على فحص قبول حتمي (typecheck/build/audit/test) يُنفّذه المضيف. */
   readonly probePending: boolean
