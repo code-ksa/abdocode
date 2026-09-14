@@ -5837,7 +5837,7 @@ const runServeShell = async (): Promise<void> => {
           // يوافقهما بدل أن يحرق جولةً على «ليست أداةً مسجلة» لاسمٍ عُرض للتوّ.
           isCallable: (toolName) => Tools.agentCallable(toolName) || externalTool(toolName) !== undefined,
           // أوامرُ المتصفّح وسطح المكتب متقلّبة: تكرارُها بعد تنقّلٍ قراءةٌ جديدة لا «duplicate» (مقيس 09-13: حقبٌ فارغة بسببه).
-          volatile: (command) => /^(?:page|shot|find|look|scroll|network|console|dismiss|desk)\b/u.test(command), // م6د (مقيس 09-14 على المثبَّت): «desk ui» بعد «لا نافذةَ مربوطة» ثمّ focus ناجح حُسب تكراراً فتوقّف الدور — سطحُ المكتب متقلّبٌ كالصفحة
+          volatile: (command) => /^(?:(?:[a-z0-9_-]+\.)?(?:page|shot|find|look|scroll|network|console)|dismiss|desk)\b/u.test(command), // م6د (مقيس 09-14 على المثبَّت): «desk ui» بعد «لا نافذةَ مربوطة» ثمّ focus ناجح حُسب تكراراً فتوقّف الدور — سطحُ المكتب متقلّبٌ كالصفحة
           priorCommands: allCommands,
           priorReceipts: allReceipts,
           requireTool: forcedFailed || sprintPlanPending,
