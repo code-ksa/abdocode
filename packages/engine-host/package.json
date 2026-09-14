@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/engine-host",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "Owned composition root for the durable session runtime and policy-enforced tool runner.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/contracts": "workspace:*",
+    "@abdo/persistence-sqlite": "workspace:*",
+    "@abdo/session-runtime": "workspace:*",
+    "@abdo/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "productivity",
+  "name": "Productivity (Abdo Code)",
+  "version": "1.3.1",
+  "description": "Manage tasks, plan your day, and build up memory of important context about your work. Syncs with your calendar, email, and chat to keep everything organized and on track.",
+  "skills": [
+    "skills/memory-management",
+    "skills/start",
+    "skills/task-management",
+    "skills/update"
+  ],
+  "mcpServers": []
+}

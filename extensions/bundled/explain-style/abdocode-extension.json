@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "explain-style",
+  "name": "Explanatory output style (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Adds educational insights about implementation choices and codebase patterns (mimics the deprecated Explanatory output style)",
+  "skills": [
+    "skills/explanatory-style"
+  ],
+  "mcpServers": []
+}

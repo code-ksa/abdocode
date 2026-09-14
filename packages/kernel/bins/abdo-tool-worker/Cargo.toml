@@ -1,0 +1,17 @@
+[package]
+name = "abdo-tool-worker"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Bounded tool admission worker for the Abdo Code Rust runtime"
+
+[dependencies]
+abdo-contracts = { path = "../../crates/abdo-contracts" }
+abdo-runtime = { path = "../../crates/abdo-runtime" }
+abdo-tools = { path = "../../crates/abdo-tools" }
+
+[[bin]]
+name = "abdo-tool-worker"
+path = "src/main.rs"
+test = false
+bench = false

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "abdo-code-setup",
+  "name": "Abdo Code setup (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Analyze codebases and recommend tailored Abdo Code automations such as hooks, skills, MCP servers, and subagents.",
+  "skills": [
+    "skills/claude-automation-recommender"
+  ],
+  "mcpServers": []
+}

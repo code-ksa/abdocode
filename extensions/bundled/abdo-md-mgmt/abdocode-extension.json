@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "abdo-md-mgmt",
+  "name": "ABDO.md management (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Tools to maintain and improve ABDO.md files - audit quality, capture session learnings, and keep project memory current.",
+  "skills": [
+    "skills/claude-md-improver",
+    "skills/cmd-revise-claude-md"
+  ],
+  "mcpServers": []
+}

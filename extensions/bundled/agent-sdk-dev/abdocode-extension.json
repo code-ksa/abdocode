@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "agent-sdk-dev",
+  "name": "Agent SDK dev (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Abdo Code Agent SDK Development Plugin",
+  "skills": [
+    "skills/cmd-new-sdk-app",
+    "skills/agent-agent-sdk-verifier-py",
+    "skills/agent-agent-sdk-verifier-ts"
+  ],
+  "mcpServers": []
+}

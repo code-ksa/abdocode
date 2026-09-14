@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/context",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "AbdoCode context system with keyed sources, epoch snapshots, byte and token budgets, and explicit depth modes.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/contracts": "workspace:*",
+    "@abdo/event-store": "workspace:*",
+    "@abdo/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

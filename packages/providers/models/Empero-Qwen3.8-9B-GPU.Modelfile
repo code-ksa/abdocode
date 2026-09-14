@@ -1,0 +1,15 @@
+# Product-owned local execution profile for the Apache-2.0 Empero model.
+# The source model must be pulled explicitly before this alias is created.
+FROM hf.co/empero-ai/Qwen3.8-9B-Distill-GGUF:Q4_K_M
+
+TEMPLATE {{ .Prompt }}
+RENDERER qwen3.5
+PARSER qwen3.5
+
+# Fail the release check unless Ollama reports 100% GPU after loading.
+PARAMETER num_gpu 99
+PARAMETER num_ctx 65536
+PARAMETER num_predict 16384
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER top_k 20

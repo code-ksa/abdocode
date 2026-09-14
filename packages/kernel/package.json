@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/kernel",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "Pinned Rust contracts, single-writer SQLite journal, and the engine-side control and approval clients",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts.ts",
+    "./control": "./src/control.ts",
+    "./approval": "./src/approval.ts",
+    "./catalog": "./src/catalog.ts",
+    "./host": "./src/host.ts"
+  },
+  "scripts": {
+    "contracts:check": "bun scripts/contracts.ts --check",
+    "contracts:write": "bun scripts/contracts.ts --write",
+    "guard": "bun scripts/guard.ts",
+    "journal:test": "bun scripts/s105-journal-test.ts",
+    "rust:test": "bun scripts/rust-test.ts",
+    "test": "bun scripts/kernel-test.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

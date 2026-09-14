@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "rust-lsp",
+  "name": "Rust analyzer LSP (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Rust analyzer LSP for Abdo Code",
+  "skills": [
+    "skills/rust-analyzer-setup"
+  ],
+  "mcpServers": []
+}

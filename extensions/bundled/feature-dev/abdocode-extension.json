@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "feature-dev",
+  "name": "Feature dev (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Comprehensive feature development workflow with specialized agents for codebase exploration, architecture design, and quality review",
+  "skills": [
+    "skills/cmd-feature-dev",
+    "skills/agent-code-architect",
+    "skills/agent-code-explorer",
+    "skills/agent-code-reviewer"
+  ],
+  "mcpServers": []
+}

@@ -1,0 +1,431 @@
+/* node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/css/xterm.css */
+.xterm {
+  cursor: text;
+  position: relative;
+  user-select: none;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+}
+
+.xterm.focus, .xterm:focus {
+  outline: none;
+}
+
+.xterm .xterm-helpers {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+}
+
+.xterm .xterm-helper-textarea {
+  position: absolute;
+  opacity: 0;
+  z-index: -5;
+  white-space: nowrap;
+  overflow: hidden;
+  resize: none;
+  border: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  top: 0;
+  left: -9999em;
+}
+
+.xterm .composition-view {
+  color: #fff;
+  display: none;
+  position: absolute;
+  white-space: nowrap;
+  z-index: 1;
+  background: #000;
+}
+
+.xterm .composition-view.active {
+  display: block;
+}
+
+.xterm .xterm-viewport {
+  overflow-y: scroll;
+  cursor: default;
+  position: absolute;
+  background-color: #000;
+  inset: 0;
+}
+
+.xterm .xterm-screen {
+  position: relative;
+}
+
+.xterm .xterm-screen canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.xterm-char-measure-element {
+  display: inline-block;
+  visibility: hidden;
+  position: absolute;
+  line-height: normal;
+  top: 0;
+  left: -9999em;
+}
+
+.xterm.enable-mouse-events {
+  cursor: default;
+}
+
+.xterm.xterm-cursor-pointer, .xterm .xterm-cursor-pointer {
+  cursor: pointer;
+}
+
+.xterm.column-select.focus {
+  cursor: crosshair;
+}
+
+.xterm .xterm-accessibility:not(.debug), .xterm .xterm-message {
+  position: absolute;
+  z-index: 10;
+  color: #0000;
+  pointer-events: none;
+  inset: 0;
+}
+
+.xterm .xterm-accessibility-tree:not(.debug) *::selection {
+  color: #0000;
+}
+
+.xterm .xterm-accessibility-tree {
+  user-select: text;
+  white-space: pre;
+  font-family: monospace;
+}
+
+.xterm .xterm-accessibility-tree > div {
+  transform-origin: left;
+  width: -moz-fit-content;
+  width: fit-content;
+}
+
+.xterm .live-region {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  left: -9999px;
+}
+
+.xterm-dim {
+  opacity: 1 !important;
+}
+
+.xterm-underline-1 {
+  text-decoration: underline;
+}
+
+.xterm-underline-2 {
+  text-decoration: double underline;
+}
+
+.xterm-underline-3 {
+  text-decoration: wavy underline;
+}
+
+.xterm-underline-4 {
+  text-decoration: dotted underline;
+}
+
+.xterm-underline-5 {
+  text-decoration: dashed underline;
+}
+
+.xterm-overline {
+  text-decoration: overline;
+}
+
+.xterm-overline.xterm-underline-1 {
+  text-decoration: overline underline;
+}
+
+.xterm-overline.xterm-underline-2 {
+  text-decoration: overline double underline;
+}
+
+.xterm-overline.xterm-underline-3 {
+  text-decoration: overline wavy underline;
+}
+
+.xterm-overline.xterm-underline-4 {
+  text-decoration: overline dotted underline;
+}
+
+.xterm-overline.xterm-underline-5 {
+  text-decoration: overline dashed underline;
+}
+
+.xterm-strikethrough {
+  text-decoration: line-through;
+}
+
+.xterm-screen .xterm-decoration-container .xterm-decoration {
+  z-index: 6;
+  position: absolute;
+}
+
+.xterm-screen .xterm-decoration-container .xterm-decoration.xterm-decoration-top-layer {
+  z-index: 7;
+}
+
+.xterm-decoration-overview-ruler {
+  z-index: 8;
+  position: absolute;
+  pointer-events: none;
+  top: 0;
+  right: 0;
+}
+
+.xterm-decoration-top {
+  z-index: 2;
+  position: relative;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar {
+  cursor: default;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar > .scra {
+  cursor: pointer;
+  font-size: 11px !important;
+}
+
+.xterm .xterm-scrollable-element > .visible {
+  opacity: 1;
+  z-index: 11;
+  background: none;
+  transition: opacity .1s linear;
+}
+
+.xterm .xterm-scrollable-element > .invisible {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.xterm .xterm-scrollable-element > .invisible.fade {
+  transition: opacity .8s linear;
+}
+
+.xterm .xterm-scrollable-element > .shadow {
+  position: absolute;
+  display: none;
+}
+
+.xterm .xterm-scrollable-element > .shadow.top {
+  display: block;
+  box-shadow: var(--vscode-scrollbar-shadow, #000) 0 6px 6px -6px inset;
+  width: 100%;
+  height: 3px;
+  top: 0;
+  left: 3px;
+}
+
+.xterm .xterm-scrollable-element > .shadow.left {
+  display: block;
+  box-shadow: var(--vscode-scrollbar-shadow, #000) 6px 0 6px -6px inset;
+  width: 3px;
+  height: 100%;
+  top: 3px;
+  left: 0;
+}
+
+.xterm .xterm-scrollable-element > .shadow.top-left-corner {
+  display: block;
+  width: 3px;
+  height: 3px;
+  top: 0;
+  left: 0;
+}
+
+.xterm .xterm-scrollable-element > .shadow.top.left {
+  box-shadow: var(--vscode-scrollbar-shadow, #000) 6px 0 6px -6px inset;
+}
+
+/* packages/desktop/src/native-terminal.css */
+.native-terminal {
+  display: flex;
+  background: var(--bg, #fff);
+  color: var(--text, #242424);
+  overflow: hidden;
+  font-family: var(--font, Segoe UI, sans-serif);
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.nt-screen, .nt-screen .xterm-viewport {
+  background: var(--nt-background, #fff) !important;
+}
+
+.nt-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line, #ececec);
+  overflow-x: auto;
+  flex-shrink: 0;
+  align-items:  center;
+  gap: 3px;
+  min-height: 33px;
+  padding: 2px 6px;
+}
+
+.nt-tabitems {
+  display: flex;
+  align-items:  center;
+  gap: 3px;
+}
+
+.nt-tab-wrap {
+  display: flex;
+  white-space: nowrap;
+  align-items:  center;
+}
+
+.nt-tabs button {
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 7px;
+  font-size: 12px;
+}
+
+.nt-tabs button:hover, .nt-tabs button.active {
+  background: var(--hover, #f0f0ee);
+}
+
+.nt-tabs button.active {
+  color: var(--text, #202020);
+}
+
+.nt-tab-wrap > button:last-child {
+  color: #999;
+  padding: 3px;
+}
+
+.nt-new {
+  line-height: 20px;
+  font-size: 20px !important;
+}
+
+.nt-actions {
+  display: flex;
+  margin-left: auto;
+}
+
+.nt-actions button {
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.nt-area {
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.nt-screen {
+  position: absolute;
+  overflow: hidden;
+  background: #fff;
+  min-width: 0;
+  min-height: 0;
+  padding: 9px 8px;
+  inset: 0;
+}
+
+.nt-screen .xterm {
+  height: 100%;
+}
+
+.nt-screen .xterm-viewport {
+  scrollbar-width: thin;
+}
+
+.nt-status {
+  color: var(--muted, #8b8b86);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-top: 1px solid var(--line, #f1f1ef);
+  flex-shrink: 0;
+  padding: 1px 9px;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.nt-status.error {
+  color: #c33;
+}
+
+.nt-tools {
+  position: absolute;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 9px;
+  inset: 0;
+}
+
+.nt-tools[hidden], .nt-screen[hidden] {
+  display: none !important;
+}
+
+.nt-receipts {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.nt-agent-command {
+  display: flex;
+  gap: 5px;
+}
+
+.nt-agent-command input {
+  border: 1px solid var(--line, #ddd);
+  font: inherit;
+  border-radius: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 7px;
+  font-size: 12px;
+}
+
+.nt-agent-command button {
+  border: 1px solid var(--line, #ddd);
+  background: var(--bg, #fff);
+  color: inherit;
+  border-radius: 6px;
+}
+
+.nd-content [data-slot="panel:terminal"], .nd-content [data-slot="panel:terminal"] > .panel, .nd-content [data-slot="panel:terminal"] .panel-body {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.native-terminal {
+  flex: 1;
+}
+
+.panel-body > .native-terminal {
+  min-height: 160px;
+}

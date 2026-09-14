@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AbdoCode",
+  "version": "4.0.22",
+  "identifier": "io.abdocode.desktop",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "AbdoCode",
+        "width": 1500,
+        "height": 900,
+        "minWidth": 640,
+        "minHeight": 420,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "payload/**/*"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/nsis/header.bmp",
+        "sidebarImage": "icons/nsis/sidebar.bmp"
+      }
+    },
+    "publisher": "TechnologyKSA — عبدالرحمن أبو إسماعيل",
+    "copyright": "© 2026 عبدالرحمن أبو إسماعيل — TechnologyKSA. All rights reserved.",
+    "shortDescription": "AbdoCode — local coding agent",
+    "longDescription": "عبدو كود — وكيل برمجة يعمل على جهازك بنواة Rust صغيرة، من تكنولوجيا السعودية وصانع مبرمج.",
+    "homepage": "https://github.com/code-ksa/abdocode"
+  }
+}

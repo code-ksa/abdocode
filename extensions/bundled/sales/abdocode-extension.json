@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "sales",
+  "name": "Sales (Abdo Code)",
+  "version": "1.3.0",
+  "description": "Prospect, craft outreach, and build deal strategy faster. Prep for calls, manage your pipeline, and write personalized messaging that moves deals forward.",
+  "skills": [
+    "skills/account-research",
+    "skills/call-prep",
+    "skills/call-summary",
+    "skills/competitive-intelligence",
+    "skills/create-an-asset",
+    "skills/daily-briefing",
+    "skills/draft-outreach",
+    "skills/forecast",
+    "skills/pipeline-review"
+  ],
+  "mcpServers": []
+}

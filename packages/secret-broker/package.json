@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/secret-broker",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "MS2 Phase 1 — host-only Secret Broker contract with opaque references, scoped leases, registered injection bindings, revocation and reference-only audit.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/benchmark",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "Abdo V1<->V2 comparative benchmark harness — real isolation (git worktree per trial), full per-run instrumentation, OBJECTIVE verification (typecheck/tests/expected+forbidden diff), order-swap, three reports, an explicit success gate, and a failure list with repro. Not a stub: it drives real runtimes; live numbers need a provider key + a wired V1 adapter.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "finalize:confirmatory": "bun scripts/finalize-confirmatory.ts",
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/session-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

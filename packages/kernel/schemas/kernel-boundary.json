@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "canonicalSource": "crates/abdo-contracts/src/schema.rs",
+  "wireImplementation": "crates/abdo-contracts/src/wire.rs",
+  "generatedTypeScript": "src/generated/contracts.ts",
+  "codegenBinary": "abdo-contracts-codegen"
+}

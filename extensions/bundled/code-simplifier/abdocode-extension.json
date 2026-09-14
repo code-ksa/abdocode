@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "code-simplifier",
+  "name": "Code simplifier (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Agent that simplifies and refines code for clarity, consistency, and maintainability while preserving functionality",
+  "skills": [
+    "skills/agent-code-simplifier"
+  ],
+  "mcpServers": []
+}

@@ -1,0 +1,20 @@
+node_modules/
+target/
+dist/
+out/
+.next/
+*.tsbuildinfo
+.turbo/
+packages/desktop/src-tauri/payload/
+
+# state databases written by `bun src/cli.ts` when ABDO_CODE_STATE_DIR is unset
+packages/engine/src/*.sqlite
+packages/engine/src/*.sqlite-*
+
+# receipt tap (plugins.receiptFixtures): full run receipts, redacted at write,
+# local only. STATE_ROOT defaults to packages/engine/src, so the tap lands here
+# whenever ABDO_CODE_STATE_DIR is unset — it must never reach a commit.
+packages/engine/src/receipt-tap/
+receipt-tap/
+# مخلّفات bun build --compile المؤقّتة (تظهر أثناء prepare وتختفي)
+*.bun-build

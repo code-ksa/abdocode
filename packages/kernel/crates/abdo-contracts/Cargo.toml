@@ -1,0 +1,15 @@
+[package]
+name = "abdo-contracts"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Dependency-free wire contracts for the Abdo Code trusted kernel boundary"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "abdo-contracts-codegen"
+path = "src/bin/abdo-contracts-codegen.rs"
+
+[dependencies]

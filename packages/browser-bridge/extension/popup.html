@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Abdo Code Bridge</title>
+<style>
+  body { font: 14px system-ui, sans-serif; width: 300px; margin: 0; padding: 14px; color: #1a1a1a; background: #fafafa; }
+  h1 { font-size: 15px; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+  h1 img { width: 20px; height: 20px; }
+  label { display: block; margin: 8px 0 4px; }
+  input { width: 100%; box-sizing: border-box; padding: 6px 8px; font: inherit; direction: ltr; }
+  button { margin-top: 10px; padding: 6px 12px; font: inherit; }
+  #status { margin-top: 10px; font-size: 13px; }
+  small { display: block; color: #555; margin-top: 8px; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <h1><img src="icons/icon32.png" alt="">Abdo Code Bridge</h1>
+  <label for="port">منفذ الجسر المحلّي</label>
+  <input id="port" type="number" min="1024" max="65535" value="9367">
+  <label for="token">الرمز (من الإعدادات ← الموصّلات ← إضافة المتصفّح)</label>
+  <input id="token" type="text" autocomplete="off" spellcheck="false">
+  <button id="save">حفظ واتصال</button>
+  <div id="status">…</div>
+  <small>لا يرسل شيئاً إلا إلى عبدو كود على هذا الجهاز (127.0.0.1). لا يقرأ كلمات المرور ولا يكتبها — تكتبها أنت بيدك.</small>
+  <small id="mode"></small>
+  <script src="popup.js"></script>
+</body>
+</html>

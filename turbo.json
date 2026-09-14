@@ -1,0 +1,21 @@
+{
+  "$schema": "https://v2-8-13.turborepo.dev/schema.json",
+  "globalEnv": ["CI", "ABDO_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "ABDO_DISABLE_SHARE"],
+  "tasks": {
+    "typecheck": {},
+    "build": {
+      "dependsOn": [],
+      "outputs": ["dist/**"]
+    },
+    "@abdo/desktop#build": {
+      "dependsOn": ["@abdo/engine#build"],
+      "outputs": ["src-tauri/target/release/bundle/**", "src-tauri/payload/**"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "passThroughEnv": ["*"]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "suite": "platform",
+  "targets": [
+    "crates/abdo-journal/tests/journal.rs",
+    "crates/abdo-runtime/tests/surface_gate.rs",
+    "crates/abdo-runtime/tests/bridge_gate.rs"
+  ]
+}
