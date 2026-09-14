@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "Abdo Code",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "__MSG_appDesc__",
   "default_locale": "ar",
   "icons": {

@@ -85,6 +85,8 @@ export const argumentsFor = (raw: string, schema: unknown): ArgumentsVerdict => 
     } catch { /* يسقط إلى الرفض المسمّى أدناه */ }
     return { ok: false, why: "المعطيات تبدأ بـ{ ولا تُحلَّل كائنَ JSON" }
   }
+  // مقيس 09-15 (إضافةُ المتصفّح): `page` بلا وسائط رُفض «الأداةُ تحتاج كائنَ JSON بمفاتيح: بلا مفاتيح معلَنة» — نصٌّ فارغ لأداةٍ بلا مفاتيحَ إلزاميّة = `{}`.
+  if (text.trim().length === 0 && required.length === 0) return { ok: true, value: {} }
   // نصٌّ حرّ: يُقبل لخانةٍ نصّيّةٍ **واحدةٍ لا لبسَ فيها** فقط.
   const single = required.length === 1 ? required[0]
     : required.length === 0 && all.length === 1 ? all[0]

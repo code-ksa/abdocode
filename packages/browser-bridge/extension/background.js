@@ -313,8 +313,10 @@ const connect = async () => {
   clearTimeout(pairTimer)
   const token = await refreshToken(port, stored.token)
   socket = new WebSocket(`ws://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`)
-  socket.onopen = () => setBadge("on")
-  socket.onclose = () => { setBadge(""); socket = null; clearTimeout(retryTimer); retryTimer = setTimeout(connect, 3000) }
+  // ب8د — النبضُ كلَّ ٢٠ ث: يُبقي عاملَ الخدمة حيّاً (كروم ≥116 يمدّد عمرَه مع نشاط المقبس) ويجعل «متّصل» في الجسر قياساً لا حالةً.
+  let pingTimer = null
+  socket.onopen = () => { setBadge("on"); clearInterval(pingTimer); pingTimer = setInterval(() => { try { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: "ping", at: Date.now() })) } catch {} }, 20000) }
+  socket.onclose = () => { setBadge(""); clearInterval(pingTimer); socket = null; clearTimeout(retryTimer); retryTimer = setTimeout(connect, 3000) }
   socket.onerror = () => {}
   socket.onmessage = async (event) => {
     let message

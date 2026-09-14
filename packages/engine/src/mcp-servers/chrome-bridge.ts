@@ -63,6 +63,8 @@ export interface BridgeOptions {
    * خارجَها 423. النافذةُ محدودةٌ زمناً لأنّ أيَّ عمليّةٍ محلّيّة تستطيع السؤال؛ وكلُّ تسليمٍ يُعلَن باسم السائل.
    */
   readonly pairingWindowMs?: number
+  /** بلا نبضٍ من الإضافة خلال هذه المدّة يُعدّ المقبسُ ميتاً ويُغلق (الافتراض ٤٥ ث؛ الإضافةُ تنبض كلَّ ٢٠ ث). */
+  readonly staleMs?: number
 }
 
 interface Pending { readonly resolve: (value: unknown) => void; readonly reject: (error: Error) => void; readonly timer: ReturnType<typeof setTimeout> }
@@ -83,10 +85,15 @@ export class ChromeBridge {
   readonly #announce: (line: string) => void
   readonly #pairingWindowMs: number
   #pairingUntil = 0
+  // ب8د (مقيس 09-15 على جهاز المالك): المقبسُ «مفتوحٌ» والإضافةُ ميتة (عاملُ الخدمة MV3 أُوقف) ⇦ `open` انتظر ٢٠ ث بلا ردّ و«connected» كذب.
+  // النبضُ كلَّ ٢٠ ث من الإضافة يُبقي عاملَها حيّاً (كروم ≥116) ويجعل «متّصل» قياساً: بلا نبضٍ خلال staleMs المقبسُ ميتٌ ويُغلق.
+  readonly #staleMs: number
+  #lastSeen = 0
 
   constructor(options: BridgeOptions = {}) {
     this.port = options.port ?? DEFAULT_BRIDGE_PORT
     this.#pairingWindowMs = options.pairingWindowMs ?? 120_000
+    this.#staleMs = options.staleMs ?? 45_000
     this.#settingsFile = options.settingsFile
     // الافتراضُ مجلّدُ المستخدم لا مجلّدُ العمل: ملفُّ الرمز لا يُكتب في جذر مستودعٍ أبداً (قيس: أثرُ اختبارٍ وصل التراكبَ فأُزيل).
     this.#stateDir = resolve(options.stateDir ?? process.env.ABDO_CODE_STATE_DIR ?? join(homedir(), ".abdo"))
@@ -119,7 +126,7 @@ export class ChromeBridge {
         return new Response("upgrade required", { status: 426 })
       },
       websocket: {
-        open(socket) { bridge.#socket = socket; bridge.#announce("chrome-bridge: extension connected") },
+        open(socket) { bridge.#socket = socket; bridge.#lastSeen = Date.now(); bridge.#announce("chrome-bridge: extension connected") },
         message(_socket, raw) { bridge.#onMessage(String(raw)) },
         close() { bridge.#socket = undefined; bridge.#failAll(new Error("extension disconnected")); bridge.#announce("chrome-bridge: extension disconnected") },
       },
@@ -143,15 +150,26 @@ export class ChromeBridge {
     this.#server = undefined
   }
 
-  get connected(): boolean { return this.#socket !== undefined }
+  /** «متّصل» قياسٌ لا حالة: مقبسٌ مفتوح **ونبضٌ حديث**؛ المقبسُ الذي صمت أطولَ من staleMs يُغلق ويُعدّ غيرَ متّصل. */
+  get connected(): boolean {
+    if (this.#socket === undefined) return false
+    if (Date.now() - this.#lastSeen <= this.#staleMs) return true
+    this.#announce(`chrome-bridge: extension silent for ${Math.round((Date.now() - this.#lastSeen) / 1000)}s — socket dropped`)
+    try { this.#socket.close() } catch { /* ميتٌ أصلاً */ }
+    this.#socket = undefined
+    this.#failAll(new Error("extension stale"))
+    return false
+  }
   get refs(): readonly PageNode[] { return this.#refs }
   get pairingOpen(): boolean { return Date.now() < this.#pairingUntil }
   /** يفتح نافذةَ الاقتران (أو يمدّها) ويعيد لحظةَ إغلاقها. */
   openPairing(ms = 120_000): number { this.#pairingUntil = Date.now() + Math.max(0, ms); this.#announce(`chrome-bridge: pairing window open for ${Math.round(Math.max(0, ms) / 1000)}s`); return this.#pairingUntil }
 
   #onMessage(raw: string): void {
-    let message: { id?: unknown; ok?: unknown; result?: unknown; error?: unknown }
+    let message: { id?: unknown; ok?: unknown; result?: unknown; error?: unknown; kind?: unknown }
     try { message = JSON.parse(raw) } catch { return }
+    this.#lastSeen = Date.now()
+    if (message.kind === "ping") { try { this.#socket?.send(JSON.stringify({ kind: "pong", at: this.#lastSeen })) } catch { /* المقبسُ يُغلق */ } return }
     if (typeof message.id !== "number") return
     const pending = this.#pending.get(message.id)
     if (pending === undefined) return
@@ -167,8 +185,9 @@ export class ChromeBridge {
 
   /** نداءٌ خامّ إلى الإضافة — بلا حراسة؛ الحراسةُ في `run`. */
   send(action: string, args: Record<string, unknown>, timeoutMs = CALL_TIMEOUT_MS): Promise<unknown> {
-    const socket = this.#socket
-    if (socket === undefined) return Promise.reject(new Error("لا إضافةَ موصولة — افتح كروم وفعّل إضافة عبدو كود وألصق الرمز"))
+    // الاتّصالُ يُقاس لحظةَ الإرسال (النبض): مقبسٌ صامتٌ يُغلق هنا فيسمّى الخطأُ بدل انتظارٍ ٢٠ ث بلا ردّ.
+    const socket = this.connected ? this.#socket : undefined
+    if (socket === undefined) return Promise.reject(new Error("لا إضافةَ موصولة (أو صمتت أطولَ من المهلة) — افتح المتصفّح وسينبض عاملُ الإضافة ويعود، أو نفّذ: bridge pair"))
     const id = ++this.#seq
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { if (this.#pending.delete(id)) reject(new Error(`الإضافة لم تُجب ${action} خلال ${timeoutMs}ms`)) }, timeoutMs)
