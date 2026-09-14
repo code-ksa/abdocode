@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "math-olympiad",
+  "name": "Math olympiad (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Solve competition math (IMO, Putnam, USAMO) with adversarial verification that catches what self-verification misses. Fresh-context verifiers attack proofs with specific failure patterns. Calibrated abstention over bluffing.",
+  "skills": [
+    "skills/math-olympiad"
+  ],
+  "mcpServers": []
+}

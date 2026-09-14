@@ -1,0 +1,67 @@
+{
+  "name": "@abdo/engine",
+  "private": true,
+  "version": "4.0.0",
+  "type": "module",
+  "license": "UNLICENSED",
+  "bin": {
+    "abdocode": "./src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/cli.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test",
+    "build": "bun build --compile ./src/cli.ts --outfile ./dist/abdocode.exe",
+    "independence": "bun ../../scripts/independence-gate.mjs",
+    "smoke": "bun ./src/cli.ts status"
+  },
+  "dependencies": {
+    "@abdo/agent-server": "workspace:*",
+    "@abdo/browser": "workspace:*",
+    "@abdo/browser-router": "workspace:*",
+    "@abdo/builtin-tools": "workspace:*",
+    "@abdo/client-sdk": "workspace:*",
+    "@abdo/compaction": "workspace:*",
+    "@abdo/computer-router": "workspace:*",
+    "@abdo/context": "workspace:*",
+    "@abdo/controlplane": "workspace:*",
+    "@abdo/egress": "workspace:*",
+    "@abdo/engine-host": "workspace:*",
+    "@abdo/evidence": "workspace:*",
+    "@abdo/harness": "workspace:*",
+    "@abdo/grants": "workspace:*",
+    "@abdo/healing": "workspace:*",
+    "@abdo/http-recorder": "workspace:*",
+    "@abdo/kernel": "workspace:*",
+    "@abdo/kernel-tools": "workspace:*",
+    "@abdo/lsp": "workspace:*",
+    "@abdo/memory": "workspace:*",
+    "@abdo/model-gateway": "workspace:*",
+    "@abdo/persistence-sqlite": "workspace:*",
+    "@abdo/plugin-runtime": "workspace:*",
+    "@abdo/project-index": "workspace:*",
+    "@abdo/prompting": "workspace:*",
+    "@abdo/providers": "workspace:*",
+    "@abdo/semantic": "workspace:*",
+    "@abdo/public-config": "workspace:*",
+    "@abdo/recovery": "workspace:*",
+    "@abdo/reliability": "workspace:*",
+    "@abdo/schema": "workspace:*",
+    "@abdo/session-runtime": "workspace:*",
+    "@abdo/secret-broker": "workspace:*",
+    "@abdo/skill-factory": "workspace:*",
+    "@abdo/tool-worker": "workspace:*",
+    "@abdo/tools": "workspace:*",
+    "@abdo/transport-codegen": "workspace:*",
+    "@abdo/transport-contracts": "workspace:*",
+    "@abdo/verification": "workspace:*",
+    "@abdo/windows-isolation-helper": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

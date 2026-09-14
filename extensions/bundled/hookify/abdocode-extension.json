@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "hookify",
+  "name": "Hookify (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Easily create hooks to prevent unwanted behaviors by analyzing conversation patterns",
+  "skills": [
+    "skills/writing-hookify-rules",
+    "skills/cmd-configure",
+    "skills/cmd-help",
+    "skills/cmd-hookify",
+    "skills/cmd-list",
+    "skills/agent-conversation-analyzer"
+  ],
+  "mcpServers": []
+}

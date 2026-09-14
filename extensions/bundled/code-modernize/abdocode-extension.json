@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "code-modernize",
+  "name": "Code modernization (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Modernize legacy codebases (COBOL, legacy Java/C++/.NET, monolith web apps) with a structured preflight / assess / map / extract-rules / brief / (reimagine | transform | uplift) / harden / status workflow. Cross-stack rewrites, greenfield reimagining, and same-stack version uplifts (e.g. .NET Framework → .NET 8); an interactive topology viewer; specialist agents; and optional dynamic-workflow orchestration with adversarial verification.",
+  "skills": [
+    "skills/cmd-modernize-assess",
+    "skills/cmd-modernize-brief",
+    "skills/cmd-modernize-extract-rules",
+    "skills/cmd-modernize-harden",
+    "skills/cmd-modernize-map",
+    "skills/cmd-modernize-preflight",
+    "skills/cmd-modernize-reimagine",
+    "skills/cmd-modernize-status",
+    "skills/cmd-modernize-transform",
+    "skills/cmd-modernize-uplift",
+    "skills/agent-architecture-critic",
+    "skills/agent-business-rules-extractor",
+    "skills/agent-legacy-analyst",
+    "skills/agent-scaffolder",
+    "skills/agent-security-auditor",
+    "skills/agent-test-engineer",
+    "skills/agent-uplift-migrator",
+    "skills/agent-version-delta-analyst"
+  ],
+  "mcpServers": []
+}

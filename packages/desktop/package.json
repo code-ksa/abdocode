@@ -1,0 +1,21 @@
+{
+  "name": "@abdo/desktop",
+  "private": true,
+  "version": "4.0.32",
+  "type": "module",
+  "license": "UNLICENSED",
+  "scripts": {
+    "typecheck": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "prepare": "bun ./scripts/prepare.ts",
+    "build": "bun ./scripts/build.ts"
+  },
+  "dependencies": {
+    "@abdo/engine": "workspace:*",
+    "@abdo/kernel": "workspace:*",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  }
+}

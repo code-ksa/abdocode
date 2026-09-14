@@ -1,0 +1,20 @@
+{
+  "name": "@abdo/web",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "version": "2.0.0",
+  "scripts": {
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 127.0.0.1",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 127.0.0.1",
+    "typecheck": "ASTRO_TELEMETRY_DISABLED=1 astro check"
+  },
+  "dependencies": {
+    "astro": "5.7.13"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.6",
+    "typescript": "catalog:"
+  }
+}

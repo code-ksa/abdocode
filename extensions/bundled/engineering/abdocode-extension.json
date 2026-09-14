@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "engineering",
+  "name": "Engineering (Abdo Code)",
+  "version": "1.2.0",
+  "description": "Streamline engineering workflows — standups, code review, architecture decisions, incident response, and technical documentation. Works with your existing tools or standalone.",
+  "skills": [
+    "skills/architecture",
+    "skills/code-review",
+    "skills/debug",
+    "skills/deploy-checklist",
+    "skills/documentation",
+    "skills/incident-response",
+    "skills/standup",
+    "skills/system-design",
+    "skills/tech-debt",
+    "skills/testing-strategy"
+  ],
+  "mcpServers": []
+}

@@ -1,0 +1,421 @@
+{
+  "label": "rerun",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "recovery": {
+    "v2_recovery": "5/5",
+    "v2_duplicate_side_effects": 0,
+    "v1_recovery": "unsupported (abdo has no equivalent programmatic crash/resume)",
+    "detail": [
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "before_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": false,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "before_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": false,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      }
+    ]
+  },
+  "summary": {
+    "v1": {
+      "runs": 12,
+      "successes": 12,
+      "successRate": 1,
+      "objectiveCorrectnessRate": 1,
+      "normalCompletionRate": 1,
+      "medianCompletionMs": 32578.5,
+      "medianInputTokens": 6440,
+      "medianOutputTokens": 599,
+      "humanInterventionRate": 0,
+      "recoveryRate": 0,
+      "duplicateSideEffects": 0,
+      "stuckRuns": 0,
+      "rollbacks": 0,
+      "rollbacksFromNonMutatingFailure": 0,
+      "verificationUnavailable": 0
+    },
+    "v2": {
+      "runs": 12,
+      "successes": 11,
+      "successRate": 0.9166666666666666,
+      "objectiveCorrectnessRate": 0.9166666666666666,
+      "normalCompletionRate": 0.9166666666666666,
+      "medianCompletionMs": 11572,
+      "medianInputTokens": 8334,
+      "medianOutputTokens": 712,
+      "humanInterventionRate": 0,
+      "recoveryRate": 0,
+      "duplicateSideEffects": 0,
+      "stuckRuns": 0,
+      "rollbacks": 0,
+      "rollbacksFromNonMutatingFailure": 0,
+      "verificationUnavailable": 3
+    }
+  },
+  "byCategory": [
+    {
+      "category": "multi_file_edit",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 16532,
+      "v2MedianMs": 11572
+    },
+    {
+      "category": "typescript_fix",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 22213,
+      "v2MedianMs": 5542.5
+    },
+    {
+      "category": "long_multi_tool",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 0.6666666666666666,
+      "v1MedianMs": 66037,
+      "v2MedianMs": 103361.5
+    }
+  ],
+  "gate": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "v2_zero_duplicate_side_effects",
+        "status": "pass",
+        "detail": "0 duplicates"
+      },
+      {
+        "name": "v2_zero_stuck_runs",
+        "status": "pass",
+        "detail": "0 stuck"
+      },
+      {
+        "name": "v2_zero_rollback_from_nonmutating_failure",
+        "status": "pass",
+        "detail": "0 illegal rollbacks (0 total rollbacks, 3 verification-unavailable runs)"
+      },
+      {
+        "name": "v2_recovery_ge_95pct",
+        "status": "blocked",
+        "detail": "no recovery tasks ran"
+      },
+      {
+        "name": "v2_success_ge_v1",
+        "status": "fail",
+        "detail": "v2 92% vs v1 100%"
+      },
+      {
+        "name": "v2_human_intervention_le_v1",
+        "status": "pass",
+        "detail": "v2 0.00 vs v1 0.00"
+      },
+      {
+        "name": "v2_token_cost_within_15pct",
+        "status": "fail",
+        "detail": "29% vs v1"
+      },
+      {
+        "name": "v2_time_within_15pct",
+        "status": "pass",
+        "detail": "-64% vs v1"
+      }
+    ]
+  },
+  "failures": [
+    {
+      "taskId": "long-0",
+      "runtime": "v2",
+      "failureClass": "provider_or_tool_error",
+      "checks": [
+        {
+          "name": "test",
+          "passed": true
+        },
+        {
+          "name": "expect:src/counter0.ts",
+          "passed": true
+        },
+        {
+          "name": "expect:src/counter0.test.ts",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cost": {
+    "FULL_SUITE_READY": false,
+    "LIVE_TRIALS": 200,
+    "ESTIMATED_INPUT_TOKENS": 1477400,
+    "ESTIMATED_OUTPUT_TOKENS": 131100,
+    "CANARY_GATE": "REVIEW",
+    "perTaskMedians": {
+      "v1": {
+        "input": 6440,
+        "output": 599,
+        "ms": 32578.5
+      },
+      "v2": {
+        "input": 8334,
+        "output": 712,
+        "ms": 11572
+      }
+    },
+    "estimatedWallClockMinutes": 74,
+    "note": "Approval required before spending API credits on the full 200-trial run."
+  },
+  "trials": [
+    {
+      "taskId": "multi-11",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 8042,
+      "ms": 9977
+    },
+    {
+      "taskId": "multi-11",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6422,
+      "ms": 37871
+    },
+    {
+      "taskId": "tsfix-0",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5986,
+      "ms": 12727
+    },
+    {
+      "taskId": "tsfix-0",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 9562,
+      "ms": 31721
+    },
+    {
+      "taskId": "tsfix-9",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 25261,
+      "ms": 35709
+    },
+    {
+      "taskId": "tsfix-9",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6531,
+      "ms": 33458
+    },
+    {
+      "taskId": "long-0",
+      "category": "long_multi_tool",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6458,
+      "ms": 41812
+    },
+    {
+      "taskId": "long-0",
+      "category": "long_multi_tool",
+      "runtime": "v2",
+      "objectiveCorrect": false,
+      "completedNormally": false,
+      "inputTokens": 21740,
+      "ms": 62282
+    },
+    {
+      "taskId": "multi-11",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 14952,
+      "ms": 18500
+    },
+    {
+      "taskId": "multi-11",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6399,
+      "ms": 16532
+    },
+    {
+      "taskId": "tsfix-0",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6523,
+      "ms": 31699
+    },
+    {
+      "taskId": "tsfix-0",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3754,
+      "ms": 5151
+    },
+    {
+      "taskId": "tsfix-9",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3754,
+      "ms": 5934
+    },
+    {
+      "taskId": "tsfix-9",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6151,
+      "ms": 11840
+    },
+    {
+      "taskId": "long-0",
+      "category": "long_multi_tool",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 8335,
+      "ms": 66037
+    },
+    {
+      "taskId": "long-0",
+      "category": "long_multi_tool",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 10407,
+      "ms": 33488
+    },
+    {
+      "taskId": "multi-11",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 8334,
+      "ms": 11572
+    },
+    {
+      "taskId": "multi-11",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6377,
+      "ms": 15433
+    },
+    {
+      "taskId": "tsfix-0",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6832,
+      "ms": 41163
+    },
+    {
+      "taskId": "tsfix-0",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3754,
+      "ms": 5064
+    },
+    {
+      "taskId": "tsfix-9",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3754,
+      "ms": 5098
+    },
+    {
+      "taskId": "tsfix-9",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6106,
+      "ms": 12161
+    },
+    {
+      "taskId": "long-0",
+      "category": "long_multi_tool",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 7870,
+      "ms": 72868
+    },
+    {
+      "taskId": "long-0",
+      "category": "long_multi_tool",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 219892,
+      "ms": 173235
+    }
+  ]
+}

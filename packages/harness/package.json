@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/harness",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "Owned model-harness adapter over generated Rust contracts and locally authored prompt profiles.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/kernel": "workspace:*",
+    "@abdo/model-gateway": "workspace:*",
+    "@abdo/prompting": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

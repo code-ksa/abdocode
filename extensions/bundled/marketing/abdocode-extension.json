@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "marketing",
+  "name": "Marketing (Abdo Code)",
+  "version": "1.2.0",
+  "description": "Create content, plan campaigns, and analyze performance across marketing channels. Maintain brand voice consistency, track competitors, and report on what's working.",
+  "skills": [
+    "skills/brand-review",
+    "skills/campaign-plan",
+    "skills/competitive-brief",
+    "skills/content-creation",
+    "skills/draft-content",
+    "skills/email-sequence",
+    "skills/performance-report",
+    "skills/seo-audit"
+  ],
+  "mcpServers": []
+}

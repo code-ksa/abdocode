@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "frontend-design",
+  "name": "Frontend design (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Frontend design skill for UI/UX implementation",
+  "skills": [
+    "skills/frontend-design"
+  ],
+  "mcpServers": []
+}

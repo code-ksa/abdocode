@@ -1,0 +1,16 @@
+{
+  "benchmarkVersion": "baseline-v2",
+  "pinnedAt": "2026-07-22T14:28:28.922Z",
+  "gitCommit": "fcde194d2283ae44333f310d94c408981c05978e",
+  "model": "deepseek-chat",
+  "provider": "deepseek (OpenAI-compatible)",
+  "temperature": 0.3,
+  "systemPromptSha256_16": "daa40b40326b3479",
+  "retry": "429/5xx/network, 3 attempts, establishment-only",
+  "midStreamRetry": "max 2, before any tool, fresh requestId",
+  "v2Budgets": "40 turns / 120 tools / 240s",
+  "suite": "FULL_SUITE 95 live (non-crash) + 5 local crash-injection",
+  "orderSwap": "per-task parity",
+  "taskSuccess": "accomplishment-based (objective verification passed + not hard-failed); reported alongside normalCompletion",
+  "note": "Final report must come from a CLEAN full run after fixes; re-runs of prior failures excluded."
+}

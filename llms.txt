@@ -1,0 +1,25 @@
+# AbdoCode
+
+> A coding agent for Windows that runs on the user's own machine with a small deterministic Rust kernel. Works with any model (local Ollama or cloud with the user's key). The model proposes, the kernel decides: every file, command, network and browser effect passes one gate and is judged by its receipt. A product of TechnologyKSA, the Saudi technology company that also makes Mubarmij. Proprietary, source published; commercial use needs a written license.
+
+## Start here
+
+- [README](README.md): what it is, install, license
+- [AGENTS.md](AGENTS.md): entry point for AI agents reading this repository, repository map, guarantees
+- [Agent protocol](docs/AGENT-PROTOCOL.md): drive the engine over framed stdio JSON; event glyphs; the text tool protocol (`نفّذ:`)
+- [Connectors](docs/CONNECTORS.md): built-in MCP servers and OAuth connectors (Google, Slack, Linear, Notion, Asana, Atlassian, Figma, Intercom, Granola, Gamma, GitHub)
+- [Architecture](docs/ARCHITECTURE.md): packages, engine loop, kernel, rails by model strength
+- [Security](docs/SECURITY.md): the gate, modes, vault, what never leaves the machine
+- [Updates](docs/UPDATES.md): release feed schema and the in-app notification
+- [Development](docs/DEVELOPMENT.md): build, gates, tests, installer
+- [The mind strategy](docs/MIND.md): why an open model works better inside this harness — receipts, adaptive rails, tool ladder, honest stops, self-teaching after updates, what is measured and what is next
+- [Contributing](CONTRIBUTING.md): idea first, execution after review; how a fix ships a lesson to every installed copy
+
+## Facts
+
+- Platform: Windows 10/11 x64; per-user NSIS installer; Tauri + WebView2 shell
+- Engine binary: `abdocode.exe` (Bun-compiled TypeScript); kernel: Rust (`abdo-tool-worker`)
+- Releases: https://github.com/code-ksa/abdocode/releases (installer + SHA256SUMS.txt)
+- Update feed (JSON, schemaVersion 1): https://raw.githubusercontent.com/code-ksa/abdocode-addons/main/release/abdocode-desktop.json
+- Extension marketplace index: https://raw.githubusercontent.com/code-ksa/abdocode-addons/main/release/marketplace.json
+- Contact: technoksaweb@gmail.com

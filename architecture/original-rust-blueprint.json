@@ -1,0 +1,1318 @@
+{
+  "schemaVersion": 1,
+  "name": "Abdo Code original Rust execution blueprint",
+  "source": "owner-supplied architecture, 2026-08-29",
+  "elementCount": 327,
+  "directoryCount": 122,
+  "fileCount": 205,
+  "elements": [
+    {
+      "path": "crates",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/run_id.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/session_id.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/task_id.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/operation_id.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/effect_id.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/attempt_id.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/grant_id.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/lease_id.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/ids/fencing_token.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol/request_meta.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol/commands.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol/replies.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol/events.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol/versions.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol/feature_bits.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol/schema_fingerprint.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/protocol/frame_limits.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/intent",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/intent/proposed.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/intent/admitted.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/intent/effect_class.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/intent/idempotency.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/intent/reconciliation.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/intent/resource_claims.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/intent/conditions.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/target",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/target/execution_root.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/target/process_identity.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/target/state_handle.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/target/surface_ref.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/target/target_ref.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/receipts",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/receipts/action_receipt.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/receipts/verification_receipt.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/receipts/observation.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/receipts/artifact_ref.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/policy_types",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/policy_types/decision.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/policy_types/trust_label.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/policy_types/sandbox_strength.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/policy_types/budget.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/errors",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/errors/taxonomy.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/errors/retry_disposition.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/codegen",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-contracts/src/codegen/json_schema.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/codegen/typescript_types.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/codegen/typescript_validators.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/src/codegen/compatibility_fixtures.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-contracts/Cargo.toml",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/reducer",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/admission",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/admission/deduplication.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/admission/causation.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/admission/version_guard.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/admission/state_handle_guard.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/state",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/state/run.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/state/task.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/state/effect.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/state/approval.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/state/worker.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/state/checkpoint.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-kernel/src/transition_guards",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/directives",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/unknown_outcome",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/reconciliation",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/invariants",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/safe_mode",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/src/reducer_versions",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-kernel/Cargo.toml",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/writer_actor",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/sqlite",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/sqlite/version_gate.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal/src/sqlite/wal_full.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal/src/sqlite/begin_immediate.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal/src/sqlite/defensive.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal/src/sqlite/checkpoint_policy.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal/src/event_log",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/command_inbox",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/transactional_outbox",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/effect_ledger",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/idempotency",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/projections",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/snapshots",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/snapshots/kernel_snapshot.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal/src/snapshots/checkpoint_manifest.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal/src/snapshots/branch_history.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-journal/src/migrations",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/integrity",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/recovery",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/src/online_backup",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-journal/Cargo.toml",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/workspace_trust",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/workspace_trust/gate.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/workspace_trust/receipt.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/workspace_trust/config_attestation.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/principals",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/capabilities",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/capabilities/typed_scopes.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/capabilities/attenuation.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/capabilities/revocation.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/grants",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/grants/opaque.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/grants/one_shot.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/grants/target_bound.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/grants/ttl.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/approvals",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/leases",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/leases/worker_lease.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/leases/surface_lease.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/leases/human_takeover.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/fencing",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/identities",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/target_binding",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/secrets",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-authority/src/secrets/secret_handle.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/secrets/oidc.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/src/secrets/audience_binding.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-authority/Cargo.toml",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/lattice",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/lattice/enterprise.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/lattice/organization.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/lattice/user.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/lattice/workspace.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/lattice/session.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/lattice/task.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/compiler",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/decisions",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/decisions/permit.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/decisions/deny.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/decisions/ask.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/decisions/stronger_sandbox.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/risk",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/path",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/command",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/process",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/egress",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/egress/domain.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/egress/port.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/egress/method.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/egress/path.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/secret",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/surface",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/taint_and_declassification",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/budgets",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/phase_profiles",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/phase_profiles/setup.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/phase_profiles/agent.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/phase_profiles/verification.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/hooks",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/src/hooks/guard_contract.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/hooks/observer_contract.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-policy/src/explanation",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-policy/Cargo.toml",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/lifecycle",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/actors",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/actors/session_actor.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/actors/worker_actor.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/actors/journal_actor.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/task_scope",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/task_scope/cancellation_tree.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/task_scope/task_tracker.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/task_scope/abort_registry.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/scheduler",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/scheduler/weighted_fair.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/scheduler/resource_conflicts.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/scheduler/control_lane.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/queues",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/queues/bounded_count.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/queues/bounded_bytes.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/queues/backpressure.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/queues/overload.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/supervisor",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/supervisor/process.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/supervisor/pty.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/supervisor/worker.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/supervisor/watchdog.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/supervisor/crash_loop.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/workers",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/workers/claim.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/workers/lease.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/workers/renew.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/workers/fence.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/workers/suspend_resume.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/ipc",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/ipc/named_pipe.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/ipc/unix_socket.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/ipc/peer_auth.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/ipc/framing.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/ipc/version_negotiation.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/ipc/flow_control.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/resources",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/resources/cpu.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/resources/memory.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/resources/pids.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/resources/handles.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/resources/output.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/resources/time.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/environment",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/environment/image_ref.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/environment/build_manifest.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/environment/last_known_good.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/environment/warm_pool_optional.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows/sandbox_feature_probe.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows/appcontainer_lpac.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows/restricted_token.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows/job_object.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows/exact_handle_list.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows/keeper.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows/private_desktop.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/windows/process_identity.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/linux",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/linux/pidfd.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/linux/namespaces.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/linux/no_new_privs.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/linux/landlock.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/linux/seccomp.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/linux/cgroup_v2.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/linux/egress_broker.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/macos",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/macos/app_sandbox.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/macos/signed_xpc_workers.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/macos/launch_constraints.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/platform/macos/tcc_ui_broker.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-runtime/src/diagnostics",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-runtime/Cargo.toml",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/catalog",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/catalog/descriptor.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/catalog/deterministic_snapshot.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/catalog/catalog_hash.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/registry",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/dispatch",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/dispatch/preflight.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/dispatch/reserve.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/dispatch/invoke.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/dispatch/settle.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/dispatch/reconcile.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/adapter_identity",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/adapter_identity/binary_digest.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/adapter_identity/argv_schema.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/adapter_identity/env_names.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/adapter_identity/capability_set.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/brokers",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/brokers/filesystem.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/brokers/shell.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/brokers/git.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/brokers/package.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/brokers/network.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/brokers/secret.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/brokers/external_protocol.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/surfaces",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/surfaces/surface_port.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/surfaces/observe.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/surfaces/act.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/surfaces/reconcile.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/surfaces/generation_bound_refs.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/surfaces/human_takeover.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/execution",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/execution/structured_argv.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/execution/explicit_shell_mode.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/execution/circuit_breaker.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/output",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/output/quotas.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/output/redaction.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/output/artifact_spill.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/worker",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-tools/src/worker/out_of_process.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/src/worker/optional_wasi.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-tools/Cargo.toml",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/receipt_builder",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/action_effect",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/pre_post_observations",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/verification_records",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/provenance",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/artifacts",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/artifacts/cas.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/artifacts/manifest.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/artifacts/digests.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/audit",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/audit/monotonic_sequence.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/audit/hash_chain.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/audit/signing.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/redaction",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/checkpoint_evidence",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/replay_bundle",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/final_attestation",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/telemetry",
+      "kind": "directory"
+    },
+    {
+      "path": "crates/abdo-evidence/src/telemetry/tracing.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/telemetry/metrics.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/telemetry/optional_otlp.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/src/telemetry/drop_counters.rs",
+      "kind": "file"
+    },
+    {
+      "path": "crates/abdo-evidence/Cargo.toml",
+      "kind": "file"
+    },
+    {
+      "path": "bins",
+      "kind": "directory"
+    },
+    {
+      "path": "bins/abdo-kernel",
+      "kind": "directory"
+    },
+    {
+      "path": "bins/abdo-tool-worker",
+      "kind": "directory"
+    },
+    {
+      "path": "schemas",
+      "kind": "directory"
+    },
+    {
+      "path": "migrations",
+      "kind": "directory"
+    },
+    {
+      "path": "tests",
+      "kind": "directory"
+    },
+    {
+      "path": "tests/contract",
+      "kind": "directory"
+    },
+    {
+      "path": "tests/replay",
+      "kind": "directory"
+    },
+    {
+      "path": "tests/crash_injection",
+      "kind": "directory"
+    },
+    {
+      "path": "tests/hostile_inputs",
+      "kind": "directory"
+    },
+    {
+      "path": "tests/platform",
+      "kind": "directory"
+    },
+    {
+      "path": "fuzz",
+      "kind": "directory"
+    },
+    {
+      "path": "benches",
+      "kind": "directory"
+    }
+  ]
+}

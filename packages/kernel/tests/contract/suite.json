@@ -1,0 +1,8 @@
+{
+  "suite": "contract",
+  "targets": [
+    "crates/abdo-contracts/tests/golden.rs",
+    "crates/abdo-contracts/tests/strict_mutations.rs",
+    "crates/abdo-contracts/tests/codegen.rs"
+  ]
+}

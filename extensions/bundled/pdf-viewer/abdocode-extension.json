@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "pdf-viewer",
+  "name": "PDF viewer (Abdo Code)",
+  "version": "0.2.0",
+  "description": "View, annotate, and sign PDFs in a live interactive viewer. Mark up contracts, fill forms with visual feedback, stamp approvals, and place signatures — then download the annotated copy.",
+  "skills": [
+    "skills/view-pdf",
+    "skills/cmd-annotate",
+    "skills/cmd-fill-form",
+    "skills/cmd-open",
+    "skills/cmd-sign"
+  ],
+  "mcpServers": []
+}

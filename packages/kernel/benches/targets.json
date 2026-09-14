@@ -1,0 +1,10 @@
+{
+  "strategy": "exact ignored release gates",
+  "targets": [
+    "crates/abdo-contracts/tests/id_10m.rs",
+    "crates/abdo-kernel/tests/transitions_1m.rs",
+    "crates/abdo-runtime/tests/schedule_100k.rs",
+    "crates/abdo-journal/tests/restore_100k.rs",
+    "crates/abdo-journal/tests/recovery_10k.rs"
+  ]
+}

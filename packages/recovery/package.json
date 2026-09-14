@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/recovery",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "AbdoCode startup reconciler for unfinished runs and safe recovery decisions without blind side-effect replay.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/contracts": "workspace:*",
+    "@abdo/event-store": "workspace:*",
+    "@abdo/session-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@abdo/persistence-sqlite": "workspace:*",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

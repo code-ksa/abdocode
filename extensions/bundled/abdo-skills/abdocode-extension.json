@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "abdo-skills",
+  "name": "Abdo Code skills (open set)",
+  "version": "1.0.0",
+  "description": "مهاراتٌ مفتوحة منقولة لعبدو كود: تصميمٌ على لوحة، منتجات ويب تفاعلية، بناءُ خوادم MCP، مصنعُ ثيمات، هويّةٌ بصرية، اتصالاتٌ داخلية، فنٌّ خوارزمي، صانعُ GIF لسلاك، صانعُ المهارات، تصميمُ الواجهات، واختبارُ تطبيقات الويب.",
+  "skills": [
+    "skills/canvas-design",
+    "skills/web-artifacts-builder",
+    "skills/mcp-builder",
+    "skills/theme-factory",
+    "skills/brand-guidelines",
+    "skills/internal-comms",
+    "skills/algorithmic-art",
+    "skills/slack-gif-creator",
+    "skills/skill-creator",
+    "skills/frontend-design",
+    "skills/webapp-testing",
+    "skills/import-memory",
+    "skills/learn",
+    "skills/morning"
+  ],
+  "mcpServers": []
+}

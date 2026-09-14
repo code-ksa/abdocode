@@ -1,0 +1,211 @@
+{
+  "label": "hardcanary",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "recovery": {
+    "v2_recovery": "5/5",
+    "v2_duplicate_side_effects": 0,
+    "v1_recovery": "unsupported (abdo has no equivalent programmatic crash/resume)",
+    "detail": [
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "before_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": false,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "before_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": false,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      }
+    ]
+  },
+  "summary": {
+    "v1": {
+      "runs": 25,
+      "successes": 25,
+      "successRate": 1,
+      "objectiveCorrectnessRate": 1,
+      "normalCompletionRate": 1,
+      "medianCompletionMs": 39792,
+      "medianInputTokens": 7333,
+      "medianOutputTokens": 1261,
+      "humanInterventionRate": 0,
+      "recoveryRate": 0,
+      "duplicateSideEffects": 0,
+      "stuckRuns": 0
+    },
+    "v2": {
+      "runs": 25,
+      "successes": 23,
+      "successRate": 0.92,
+      "objectiveCorrectnessRate": 0.92,
+      "normalCompletionRate": 0.76,
+      "medianCompletionMs": 42248,
+      "medianInputTokens": 31255,
+      "medianOutputTokens": 1639,
+      "humanInterventionRate": 0,
+      "recoveryRate": 0,
+      "duplicateSideEffects": 0,
+      "stuckRuns": 0
+    }
+  },
+  "byCategory": [
+    {
+      "category": "long_multi_tool",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 0.8461538461538461,
+      "v1MedianMs": 76733,
+      "v2MedianMs": 53097
+    },
+    {
+      "category": "multi_file_edit",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 18170,
+      "v2MedianMs": 7370
+    },
+    {
+      "category": "typescript_fix",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 29446,
+      "v2MedianMs": 54092
+    }
+  ],
+  "gate": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "v2_zero_duplicate_side_effects",
+        "status": "pass",
+        "detail": "0 duplicates"
+      },
+      {
+        "name": "v2_zero_stuck_runs",
+        "status": "pass",
+        "detail": "0 stuck"
+      },
+      {
+        "name": "v2_recovery_ge_95pct",
+        "status": "blocked",
+        "detail": "no recovery tasks ran"
+      },
+      {
+        "name": "v2_success_ge_v1",
+        "status": "fail",
+        "detail": "v2 92% vs v1 100%"
+      },
+      {
+        "name": "v2_human_intervention_le_v1",
+        "status": "pass",
+        "detail": "v2 0.00 vs v1 0.00"
+      },
+      {
+        "name": "v2_token_cost_within_15pct",
+        "status": "fail",
+        "detail": "326% vs v1"
+      },
+      {
+        "name": "v2_time_within_15pct",
+        "status": "pass",
+        "detail": "6% vs v1"
+      }
+    ]
+  },
+  "failures": [
+    {
+      "taskId": "long-4",
+      "runtime": "v2",
+      "failureClass": "provider_or_tool_error",
+      "checks": [
+        {
+          "name": "test",
+          "passed": true
+        },
+        {
+          "name": "expect:src/counter4.ts",
+          "passed": true
+        },
+        {
+          "name": "expect:src/counter4.test.ts",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "taskId": "hard-scaffold-test",
+      "runtime": "v2",
+      "failureClass": "provider_or_tool_error",
+      "checks": [
+        {
+          "name": "test",
+          "passed": true
+        },
+        {
+          "name": "expect:src/stack.ts",
+          "passed": true
+        },
+        {
+          "name": "expect:src/stack.test.ts",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cost": {
+    "FULL_SUITE_READY": false,
+    "LIVE_TRIALS": 200,
+    "ESTIMATED_INPUT_TOKENS": 3858800,
+    "ESTIMATED_OUTPUT_TOKENS": 290000,
+    "CANARY_GATE": "REVIEW",
+    "perTaskMedians": {
+      "v1": {
+        "input": 7333,
+        "output": 1261,
+        "ms": 39792
+      },
+      "v2": {
+        "input": 31255,
+        "output": 1639,
+        "ms": 42248
+      }
+    },
+    "estimatedWallClockMinutes": 137,
+    "note": "Approval required before spending API credits on the full 200-trial run."
+  }
+}

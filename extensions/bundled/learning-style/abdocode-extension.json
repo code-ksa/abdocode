@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "learning-style",
+  "name": "Learning output style (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Interactive learning mode that requests meaningful code contributions at decision points (mimics the unshipped Learning output style)",
+  "skills": [
+    "skills/learning-style"
+  ],
+  "mcpServers": []
+}

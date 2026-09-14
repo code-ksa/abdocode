@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "abdo-security",
+  "name": "Abdo Security (Abdo Code)",
+  "version": "1.0.0",
+  "description": "مراجعةٌ أمنية للشيفرة التي يكتبها الوكيل أو المستخدم: فحصُ الأسرار المكشوفة، ونقاطُ الحقن (SQL/أوامر/قوالب)، وسلامةُ المصادقة والتفويض، وتدقيقُ الاعتمادات، وقائمةُ فحصٍ قبل الإيداع — أصلٌ لعبدو كود يقابل إضافة الأمان في كلود بلا نصٍّ منقول.",
+  "skills": ["skills/security-review", "skills/secret-scan", "skills/dependency-audit", "skills/pre-commit-security"],
+  "mcpServers": []
+}

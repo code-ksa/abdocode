@@ -1,0 +1,331 @@
+{
+  "label": "confirmatory-smoke",
+  "provider": "qwen-local",
+  "model": "qwen3.5:4b-gpu",
+  "metricsSchemaVersion": 2,
+  "recovery": {
+    "v2_recovery": "5/5",
+    "v2_duplicate_side_effects": 0,
+    "v1_recovery": "unsupported (abdo has no equivalent programmatic crash/resume)",
+    "detail": [
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "before_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": false,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "before_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": false,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      }
+    ]
+  },
+  "summary": {
+    "v1": {
+      "runs": 4,
+      "successes": 1,
+      "successRate": 0.25,
+      "objectiveCorrectnessRate": 0.25,
+      "normalCompletionRate": 0.75,
+      "medianCompletionMs": 12327,
+      "medianInputTokens": 16034,
+      "medianOutputTokens": 171,
+      "humanInterventionRate": 0,
+      "recoveryRate": 0,
+      "duplicateSideEffects": 0,
+      "stuckRuns": 1,
+      "rollbacks": 0,
+      "rollbacksFromNonMutatingFailure": 0,
+      "verificationUnavailable": 0,
+      "repeatedCallsBlocked": 0,
+      "redundantStrategiesBlocked": 0,
+      "maxStrategyExecutionsPerState": 0
+    },
+    "v2": {
+      "runs": 4,
+      "successes": 4,
+      "successRate": 1,
+      "objectiveCorrectnessRate": 1,
+      "normalCompletionRate": 1,
+      "medianCompletionMs": 8259.5,
+      "medianInputTokens": 3284.5,
+      "medianOutputTokens": 535.5,
+      "humanInterventionRate": 0,
+      "recoveryRate": 0,
+      "duplicateSideEffects": 0,
+      "stuckRuns": 0,
+      "rollbacks": 0,
+      "rollbacksFromNonMutatingFailure": 0,
+      "verificationUnavailable": 1,
+      "repeatedCallsBlocked": 0,
+      "redundantStrategiesBlocked": 0,
+      "maxStrategyExecutionsPerState": 0
+    }
+  },
+  "byCategory": [
+    {
+      "category": "single_file_edit",
+      "v1SuccessRate": 0,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 0,
+      "v2MedianMs": 27692
+    },
+    {
+      "category": "typescript_fix",
+      "v1SuccessRate": 0,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 0,
+      "v2MedianMs": 8413
+    },
+    {
+      "category": "tests_diagnose",
+      "v1SuccessRate": 0,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 0,
+      "v2MedianMs": 8106
+    },
+    {
+      "category": "qa",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 12327,
+      "v2MedianMs": 3387
+    }
+  ],
+  "gate": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "metrics_schema_current",
+        "status": "pass",
+        "detail": "schema 2"
+      },
+      {
+        "name": "v2_zero_duplicate_side_effects",
+        "status": "pass",
+        "detail": "0 duplicates"
+      },
+      {
+        "name": "v2_zero_stuck_runs",
+        "status": "pass",
+        "detail": "0 stuck"
+      },
+      {
+        "name": "v2_zero_rollback_from_nonmutating_failure",
+        "status": "pass",
+        "detail": "0 illegal rollbacks (0 total rollbacks, 1 verification-unavailable runs)"
+      },
+      {
+        "name": "v2_recovery_ge_95pct",
+        "status": "blocked",
+        "detail": "no recovery tasks ran"
+      },
+      {
+        "name": "v2_success_ge_v1",
+        "status": "pass",
+        "detail": "v2 100% vs v1 25%"
+      },
+      {
+        "name": "v2_human_intervention_le_v1",
+        "status": "pass",
+        "detail": "v2 0.00 vs v1 0.00"
+      },
+      {
+        "name": "v2_token_cost_within_15pct",
+        "status": "pass",
+        "detail": "-80% vs v1"
+      },
+      {
+        "name": "v2_time_within_15pct",
+        "status": "pass",
+        "detail": "-33% vs v1"
+      }
+    ]
+  },
+  "failures": [
+    {
+      "taskId": "cf-edit-100",
+      "runtime": "v1",
+      "failureClass": "verification_failed",
+      "checks": [
+        {
+          "name": "expect:src/g100.ts",
+          "passed": false,
+          "detail": "not changed (changed: none)"
+        },
+        {
+          "name": "contains:src/g100.ts",
+          "passed": false,
+          "detail": "missing \"/**\""
+        },
+        {
+          "name": "contains:src/g100.ts",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "taskId": "cf-tsfix-100",
+      "runtime": "v1",
+      "failureClass": "stuck",
+      "checks": [
+        {
+          "name": "typecheck",
+          "passed": false,
+          "detail": "src/broken100.ts(2,14): error TS2363: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.\n"
+        },
+        {
+          "name": "contains:src/broken100.ts",
+          "passed": false,
+          "detail": "missing \"n * 100\""
+        }
+      ]
+    },
+    {
+      "taskId": "cf-utests-bound-1",
+      "runtime": "v1",
+      "failureClass": "verification_failed",
+      "checks": [
+        {
+          "name": "test",
+          "passed": false,
+          "detail": "\nbnd1.test.ts:\n1 | import { expect, test } from 'bun:test'\n2 | import { inRange1 } from './bnd1'\n3 | test('inRange1', () => {\n4 |   expect(inRange1(1)).toBe(false)\n5 |   expect(inRange1(0)).toBe(true)\n                          ^\nerror: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n"
+        },
+        {
+          "name": "forbid:bnd1.test.ts",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cost": {
+    "FULL_SUITE_READY": true,
+    "LIVE_TRIALS": 200,
+    "ESTIMATED_INPUT_TOKENS": 1931850,
+    "ESTIMATED_OUTPUT_TOKENS": 70650,
+    "CANARY_GATE": "PASS",
+    "perTaskMedians": {
+      "v1": {
+        "input": 16034,
+        "output": 171,
+        "ms": 12327
+      },
+      "v2": {
+        "input": 3284.5,
+        "output": 535.5,
+        "ms": 8259.5
+      }
+    },
+    "estimatedWallClockMinutes": 34,
+    "note": "Approval required before spending API credits on the full 200-trial run."
+  },
+  "trials": [
+    {
+      "taskId": "cf-edit-100",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 11342,
+      "ms": 27692
+    },
+    {
+      "taskId": "cf-edit-100",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": false,
+      "completedNormally": true,
+      "inputTokens": null,
+      "ms": 90644
+    },
+    {
+      "taskId": "cf-tsfix-100",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": false,
+      "completedNormally": false,
+      "inputTokens": null,
+      "ms": 130099
+    },
+    {
+      "taskId": "cf-tsfix-100",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3689,
+      "ms": 8413
+    },
+    {
+      "taskId": "cf-utests-bound-1",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 2880,
+      "ms": 8106
+    },
+    {
+      "taskId": "cf-utests-bound-1",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": false,
+      "completedNormally": true,
+      "inputTokens": 58414,
+      "ms": 116641
+    },
+    {
+      "taskId": "cf-uqa-out-0",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 16034,
+      "ms": 12327
+    },
+    {
+      "taskId": "cf-uqa-out-0",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 3387
+    }
+  ]
+}

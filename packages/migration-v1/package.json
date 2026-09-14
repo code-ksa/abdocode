@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/migration-v1",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "AbdoCode legacy importer that reads old SQLite data without mutation and produces a verified import report.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/contracts": "workspace:*",
+    "@abdo/event-store": "workspace:*"
+  },
+  "devDependencies": {
+    "@abdo/persistence-sqlite": "workspace:*",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

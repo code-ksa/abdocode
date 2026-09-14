@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "note": "Owned tool inventory after convergence. Every concrete built-in capability has exactly one implementation and one assembly site; dynamic extension channels remain explicit but are not silently counted as built-ins.",
+  "boundToSchemaFingerprint": "e009682bc2574f18ea056af1abe711c9",
+  "surfaces": {
+    "owned-registry": {
+      "root": "packages/builtin-tools/src",
+      "assembledBy": "packages/builtin-tools/src/index.ts",
+      "note": "The only concrete TypeScript tool surface. Admission and execution policy are supplied by @abdo/tools and the Rust abdo-tools broker."
+    }
+  },
+  "capabilities": [
+    { "capability": "read-file", "effectClass": "Read", "canonical": "owned-registry", "implementations": [{ "surface": "owned-registry", "id": "read_file", "file": "packages/builtin-tools/src/file-tools.ts" }] },
+    { "capability": "list-directory", "effectClass": "Read", "canonical": "owned-registry", "implementations": [{ "surface": "owned-registry", "id": "list_dir", "file": "packages/builtin-tools/src/file-tools.ts" }] },
+    { "capability": "write-file", "effectClass": "Mutate", "canonical": "owned-registry", "implementations": [{ "surface": "owned-registry", "id": "write_file", "file": "packages/builtin-tools/src/file-tools.ts" }] },
+    { "capability": "edit-file", "effectClass": "Mutate", "canonical": "owned-registry", "implementations": [{ "surface": "owned-registry", "id": "edit_file", "file": "packages/builtin-tools/src/file-tools.ts" }] },
+    { "capability": "shell", "effectClass": "Irreversible", "canonical": "owned-registry", "implementations": [{ "surface": "owned-registry", "id": "shell", "file": "packages/builtin-tools/src/shell.ts" }] },
+    { "capability": "structured-command", "effectClass": "Irreversible", "canonical": "owned-registry", "implementations": [{ "surface": "owned-registry", "id": "run_command", "file": "packages/builtin-tools/src/run-command.ts" }] }
+  ],
+  "dynamic": [
+    { "kind": "external-provider", "file": "packages/engine/src/mind/external.ts", "note": "Provider tools are admitted dynamically and remain outside the fixed built-in count." },
+    { "kind": "plugin", "file": "packages/plugin-runtime/src/index.ts", "note": "Plugin tools enter through the product plugin boundary and remain outside the fixed built-in count." }
+  ],
+  "brokers": {
+    "note": "Both secret acquisition and native tool admission have one named owner.",
+    "present": [
+      { "name": "secret-broker", "root": "packages/secret-broker" },
+      { "name": "rust-tool-broker", "root": "packages/kernel/crates/abdo-tools" }
+    ],
+    "absent": []
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/tools",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "AbdoCode safe tool runtime with registry, policy, approvals, redaction, dry-run, and rollback.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/contracts": "workspace:*",
+    "@abdo/control-contracts": "workspace:*",
+    "@abdo/normalizer": "workspace:*",
+    "@abdo/classifier": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

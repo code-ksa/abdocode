@@ -1,0 +1,59 @@
+{
+  "name": "abdocode",
+  "private": true,
+  "description": "عبدو كود — وكيل برمجة يعمل على جهازك بنواة Rust صغيرة وحتميّة، مع أيّ نموذج محلّيّ أو سحابيّ. AbdoCode — a local coding agent for Windows.",
+  "homepage": "https://github.com/code-ksa/abdocode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/code-ksa/abdocode.git"
+  },
+  "author": "TechnologyKSA (تكنولوجيا السعودية) <technoksaweb@gmail.com>",
+  "license": "UNLICENSED",
+  "type": "module",
+  "workspaces": {
+    "packages": [
+      "packages/*"
+    ],
+    "catalog": {
+      "@kobalte/core": "0.13.11",
+      "@pierre/diffs": "1.2.10",
+      "@shikijs/stream": "4.2.0",
+      "@solidjs/meta": "0.29.4",
+      "@tailwindcss/vite": "4.1.11",
+      "@tsconfig/bun": "1.0.9",
+      "@tsconfig/node22": "22.0.2",
+      "@types/bun": "1.3.13",
+      "@types/luxon": "3.7.1",
+      "@types/node": "24.12.2",
+      "@typescript/native-preview": "7.0.0-dev.20251207.1",
+      "ai": "6.0.168",
+      "diff": "8.0.2",
+      "fuzzysort": "3.1.0",
+      "luxon": "3.6.1",
+      "marked": "17.0.6",
+      "marked-shiki": "1.2.1",
+      "remeda": "2.26.0",
+      "remend": "1.3.0",
+      "shiki": "4.2.0",
+      "solid-js": "1.9.10",
+      "solid-list": "0.3.0",
+      "tailwindcss": "4.1.11",
+      "typescript": "5.8.2",
+      "vite": "7.1.4",
+      "vite-plugin-solid": "2.11.10"
+    }
+  },
+  "scripts": {
+    "model:empero:gpu": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-empero-gpu.ps1",
+    "typecheck": "bun turbo typecheck",
+    "structure": "bun scripts/original-rust-structure-gate.mjs && bun scripts/original-blueprint-readiness.mjs && bun scripts/composition-gate.ts && bun scripts/provider-parity-gate.mjs && bun scripts/provenance-surface-gate.mjs && bun scripts/public-boundary-gate.mjs && bun scripts/two-lines-gate.mjs",
+    "structure:blueprint": "bun scripts/original-blueprint-readiness.mjs",
+    "structure:test": "bun test scripts/composition-gate.test.ts scripts/provenance-surface-gate.test.ts",
+    "independence": "bun scripts/independence-gate.mjs && bun run structure",
+    "gate:two-lines": "bun scripts/two-lines-gate.mjs"
+  },
+  "devDependencies": {
+    "turbo": "2.10.2"
+  },
+  "packageManager": "bun@1.3.14"
+}

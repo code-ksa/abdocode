@@ -1,0 +1,176 @@
+{
+  "entries": [
+    {
+      "detail": {
+        "attempted": [],
+        "kind": "clean",
+        "repairs": [],
+        "sample": "already-json",
+        "value": {
+          "answer": "yes",
+          "count": 2
+        }
+      },
+      "kind": "parsed",
+      "step": 0
+    },
+    {
+      "detail": {
+        "attempted": [],
+        "kind": "repaired",
+        "repairs": [
+          "strip_code_fence"
+        ],
+        "sample": "fenced",
+        "value": {
+          "answer": "yes"
+        }
+      },
+      "kind": "parsed",
+      "step": 1
+    },
+    {
+      "detail": {
+        "attempted": [],
+        "kind": "repaired",
+        "repairs": [
+          "take_outermost_object"
+        ],
+        "sample": "prose-around-it",
+        "value": {
+          "answer": "yes"
+        }
+      },
+      "kind": "parsed",
+      "step": 2
+    },
+    {
+      "detail": {
+        "attempted": [],
+        "kind": "repaired",
+        "repairs": [
+          "remove_trailing_commas"
+        ],
+        "sample": "trailing-comma",
+        "value": {
+          "answer": "yes"
+        }
+      },
+      "kind": "parsed",
+      "step": 3
+    },
+    {
+      "detail": {
+        "attempted": [],
+        "kind": "repaired",
+        "repairs": [
+          "quote_unquoted_keys"
+        ],
+        "sample": "unquoted-keys",
+        "value": {
+          "answer": "yes"
+        }
+      },
+      "kind": "parsed",
+      "step": 4
+    },
+    {
+      "detail": {
+        "attempted": [],
+        "kind": "repaired",
+        "repairs": [
+          "single_to_double_quotes"
+        ],
+        "sample": "single-quotes",
+        "value": {
+          "answer": "yes"
+        }
+      },
+      "kind": "parsed",
+      "step": 5
+    },
+    {
+      "detail": {
+        "attempted": [],
+        "kind": "repaired",
+        "repairs": [
+          "strip_code_fence",
+          "take_outermost_object",
+          "remove_trailing_commas",
+          "quote_unquoted_keys",
+          "single_to_double_quotes"
+        ],
+        "sample": "several-at-once",
+        "value": {
+          "answer": "yes",
+          "extra": 1
+        }
+      },
+      "kind": "parsed",
+      "step": 6
+    },
+    {
+      "detail": {
+        "attempted": [
+          "trim",
+          "strip_code_fence",
+          "take_outermost_object",
+          "remove_trailing_commas",
+          "quote_unquoted_keys",
+          "single_to_double_quotes"
+        ],
+        "kind": "failed",
+        "repairs": [],
+        "sample": "not-json-at-all",
+        "value": null
+      },
+      "kind": "parsed",
+      "step": 7
+    },
+    {
+      "detail": {
+        "attempted": [
+          "trim",
+          "strip_code_fence",
+          "take_outermost_object",
+          "remove_trailing_commas",
+          "quote_unquoted_keys",
+          "single_to_double_quotes"
+        ],
+        "kind": "failed",
+        "repairs": [],
+        "sample": "truncated",
+        "value": null
+      },
+      "kind": "parsed",
+      "step": 8
+    },
+    {
+      "detail": {
+        "byRepair": {
+          "quote_unquoted_keys": 2,
+          "remove_trailing_commas": 2,
+          "single_to_double_quotes": 2,
+          "strip_code_fence": 2,
+          "take_outermost_object": 2
+        },
+        "clean": 1,
+        "cleanRate": 0.1111111111111111,
+        "failed": 2,
+        "repaired": 6,
+        "total": 9
+      },
+      "kind": "stats",
+      "step": 9
+    },
+    {
+      "detail": {
+        "suspicious": false,
+        "why": "the most common repair (strip_code_fence) fired on 22% of outputs"
+      },
+      "kind": "suspicion",
+      "step": 10
+    }
+  ],
+  "flow": "structured-output"
+}

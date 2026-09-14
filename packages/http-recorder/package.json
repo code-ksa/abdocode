@@ -1,0 +1,1 @@
+{"name":"@abdo/http-recorder","private":true,"type":"module","exports":{".":"./src/index.ts"},"scripts":{"typecheck":"tsgo --noEmit","test":"bun test"},"devDependencies":{"@tsconfig/bun":"catalog:","@types/bun":"catalog:","@typescript/native-preview":"catalog:"}}

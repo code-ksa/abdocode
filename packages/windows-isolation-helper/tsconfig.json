@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@tsconfig/bun/tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "noUncheckedIndexedAccess": true
+  },
+  // EVERY executable TypeScript file in the package, with nothing excluded to
+  // make the check pass. `scripts/` is included deliberately: the round runner,
+  // the regression and the evidence script all produce gate evidence, and a
+  // typecheck that skipped them would be the same false "typecheck clean" this
+  // slice exists to end. See docs/control-plane/CL-16A3-B2C0-TYPECHECK-BASELINE.md.
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
+}

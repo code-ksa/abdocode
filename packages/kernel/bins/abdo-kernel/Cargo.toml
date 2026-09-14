@@ -1,0 +1,19 @@
+[package]
+name = "abdo-kernel-bin"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Abdo Code kernel process"
+
+[features]
+default = []
+effectful-dispatch = ["abdo-runtime/effectful-dispatch"]
+
+[dependencies]
+abdo-runtime = { path = "../../crates/abdo-runtime" }
+
+[[bin]]
+name = "abdo-kernel"
+path = "src/main.rs"
+test = false
+bench = false

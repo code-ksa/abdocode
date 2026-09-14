@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "commit-commands",
+  "name": "Commit commands (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Streamline your git workflow with simple commands for committing, pushing, and creating pull requests",
+  "skills": [
+    "skills/cmd-clean-gone",
+    "skills/cmd-commit-push-pr",
+    "skills/cmd-commit"
+  ],
+  "mcpServers": []
+}

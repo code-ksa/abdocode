@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/kernel-tools",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "Owned fail-closed tool adapters that carry approved operations through the Rust kernel host.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/kernel": "workspace:*",
+    "@abdo/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

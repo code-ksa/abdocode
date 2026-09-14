@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Abdo Code Bridge",
+    "description": "Extension name shown in the store and toolbar"
+  },
+  "appDesc": {
+    "message": "Connects Abdo Code to your browser: reads pages, opens links, clicks and types with your approval. Never passwords. Local only.",
+    "description": "Store description (under 132 characters)"
+  }
+}

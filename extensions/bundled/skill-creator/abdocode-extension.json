@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "skill-creator",
+  "name": "Skill creator (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Create new skills, improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, update or optimize an existing skill, run evals to test a skill, or benchmark skill performance with variance analysis.",
+  "skills": [
+    "skills/skill-creator"
+  ],
+  "mcpServers": []
+}

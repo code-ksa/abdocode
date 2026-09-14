@@ -1,0 +1,11 @@
+{
+  "name": "@abdo/browser-bridge",
+  "version": "0.2.0",
+  "private": true,
+  "description": "إضافةُ المتصفّح لعبدو كود (كروم/إيدج/سفاري) وأدواتُ تعبئتها للمتاجر",
+  "type": "module",
+  "scripts": {
+    "pack": "node scripts/pack.mjs",
+    "check": "node scripts/pack.mjs --check"
+  }
+}

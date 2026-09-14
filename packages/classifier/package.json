@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/classifier",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "CL-05 \u2014 semantic capability + risk classification and argument-level resource analysis. Pure: no execution, no IO.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/control-contracts": "workspace:*",
+    "@abdo/normalizer": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

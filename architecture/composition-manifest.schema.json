@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://abdo.local/schemas/composition-manifest.schema.json",
+  "title": "AbdoCode composition manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "product",
+    "roots",
+    "sourcesOfTruth",
+    "packages",
+    "parallelImplementations",
+    "guards"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "product": { "const": "abdocode" },
+    "roots": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/root" }
+    },
+    "sourcesOfTruth": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/truthSource" }
+    },
+    "packages": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^@abdo/[a-z0-9-]+$" },
+      "additionalProperties": { "$ref": "#/$defs/package" }
+    },
+    "parallelImplementations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/parallel" }
+    },
+    "guards": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/guard" }
+    }
+  },
+  "$defs": {
+    "packageName": {
+      "type": "string",
+      "pattern": "^@abdo/[a-z0-9-]+$"
+    },
+    "root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "kind", "entry", "argv", "reachability"],
+      "properties": {
+        "package": { "$ref": "#/$defs/packageName" },
+        "kind": { "enum": ["process", "command", "quality", "migration"] },
+        "entry": { "type": "string", "minLength": 1 },
+        "argv": { "type": "array", "items": { "type": "string" } },
+        "reachability": { "enum": ["manifest", "production-imports"] },
+        "launches": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "truthSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "scope"],
+      "properties": {
+        "package": { "$ref": "#/$defs/packageName" },
+        "scope": { "type": "string", "minLength": 1 },
+        "durableArtifact": { "type": "string", "minLength": 1 }
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "command", "asserts"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "kind": { "enum": ["static", "unit", "integration", "runtime", "build"] },
+        "command": { "type": "string", "minLength": 1 },
+        "asserts": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sprint", "reason", "targetConsumer", "completionCondition"],
+      "properties": {
+        "sprint": { "type": "string", "pattern": "^R(?:[0-9]|[1-9][0-9]+)$" },
+        "reason": { "type": "string", "minLength": 1 },
+        "targetConsumer": { "$ref": "#/$defs/packageName" },
+        "completionCondition": { "type": "string", "minLength": 1 }
+      }
+    },
+    "truthClaims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owns", "consumes"],
+      "properties": {
+        "owns": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "consumes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effects", "journal", "network"],
+      "properties": {
+        "effects": { "enum": ["none", "proposal-only", "rust-kernel-host", "test-only", "legacy-direct-temporary"] },
+        "journal": { "enum": ["none", "rust-effect-journal", "session-event-store", "projection-only", "legacy-ledger-temporary"] },
+        "network": { "enum": ["none", "local-only", "owner-configured-egress", "test-only", "legacy-direct-temporary"] }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "owner", "status", "runtimeRoots", "capabilities", "truth", "boundaries", "proofs"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^packages/[a-z0-9-]+$" },
+        "role": { "enum": ["composition-root", "authority", "contract", "runtime", "adapter", "policy", "persistence", "ui", "quality", "migration", "devtool"] },
+        "owner": { "enum": ["kernel", "engine", "model", "control", "tools", "security", "desktop", "ui", "quality", "migration", "platform"] },
+        "status": { "enum": ["connected", "integration-only", "diagnostic-only", "standalone", "planned-orphan", "deprecated"] },
+        "runtimeRoots": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "capabilities": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "truth": { "$ref": "#/$defs/truthClaims" },
+        "boundaries": { "$ref": "#/$defs/boundaries" },
+        "proofs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/proof" } },
+        "plan": { "$ref": "#/$defs/plan" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "planned-orphan" } }, "required": ["status"] },
+          "then": { "required": ["plan"], "properties": { "runtimeRoots": { "maxItems": 0 } } }
+        },
+        {
+          "if": { "properties": { "status": { "enum": ["connected", "integration-only", "diagnostic-only", "standalone"] } }, "required": ["status"] },
+          "then": { "properties": { "runtimeRoots": { "minItems": 1 } } }
+        }
+      ]
+    },
+    "parallel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "capability", "canonicalPackage", "parallelPath", "markers", "disposition", "sprint", "reason"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "capability": { "type": "string", "minLength": 1 },
+        "canonicalPackage": { "$ref": "#/$defs/packageName" },
+        "parallelPath": { "type": "string", "minLength": 1 },
+        "markers": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "disposition": { "enum": ["remove", "replace", "retain-as-adapter"] },
+        "sprint": { "type": "string", "pattern": "^R(?:[0-9]|[1-9][0-9]+)$" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "command"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "command": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
