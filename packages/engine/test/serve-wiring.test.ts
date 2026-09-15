@@ -116,7 +116,10 @@ describe("serve convergence wiring", () => {
     // والغلافان النصّيان يسقطانه فقط؛ وحالة read في المُوزِّع تمرّ من القمع نفسه لا من نصّ رفضٍ ثانٍ.
     expect(source).toContain('return "error" in plan ? invalid(plan.error) : readThroughKernelV(plan.file, plan.range)')
     expect(source).toContain("const readCommand = async (args: readonly string[]): Promise<string> => (await readCommandV(args)).output")
-    expect(source).toContain("return readCommandV(framedBody.split(/\\s+/).slice(1))")
+    // د7ب: القراءةُ المؤطَّرة تُسجَّل في نطاق الدور من خطّة planRead نفسِها ثمّ تمرّ من القمع الواحد.
+    expect(source).toContain("const readArgs = framedBody.split(/\\s+/).slice(1)")
+    expect(source).toContain('if (!("error" in readPlan)) turnReadPaths.add(turnScopeKey(readPlan.file))')
+    expect(source).toContain("return readCommandV(readArgs)")
     expect(source).not.toContain("readThroughKernelRange")
     expect(source).toContain("sliceReadRange(text, range.from, range.to)")
     // المنافذ الثلاثة: REPL يحفظ المسار ذا الفراغات كما كان (splitReadTail)،

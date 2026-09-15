@@ -1,6 +1,6 @@
 {
-  "version": "4.0.32",
-  "reviewed": "2026-09-14",
+  "version": "4.0.38",
+  "reviewed": "2026-09-15",
   "note": "Reviewed lessons shipped with this release. Each is a measured defect turned into a rule; the engine promotes them into the shared general awareness once per version through the same promotion rule as any lesson (class check, secret sweep, no project identity). Contributors: propose lessons in a pull request; the maintainers review before they ship.",
   "lessons": [
     { "cls": "env_trap", "text": "على ويندوز: لا تفتح البرامج بـrun (notepad في صدفة المحرّك سكربتُ غلافٍ يفتح ملفّاً ويُظهر قائمةَ اختيار برنامج) — استعمل desk open <البرنامج> ثمّ desk ui؛ وإن ظهرت نافذةٌ جديدة ركّزها بـpid واقرأها واضغط الخيار." },
@@ -8,6 +8,7 @@
     { "cls": "playbook", "text": "لملء حقلٍ في تطبيق سطح مكتب: desk ui ثمّ desk set uN <نصّ> (يستبدل ويقرأ راجعاً) ثمّ desk ui للإثبات — لا desk click ولا desk type إلّا حين لا تعلن الواجهةُ عناصرَها." },
     { "cls": "env_trap", "text": "الأداةُ اسمُها الأوّل في سطر النداء: «browser extension» أداةُ browser بفعل extension، و«bridge pair» لاقتران الإضافة — ليست مهارات؛ لا تستدعِ skill باسم أداة." },
     { "cls": "playbook", "text": "إضافةُ المتصفّح: bridge status لمعرفة الاقتران؛ إن لم تكن متّصلة نفّذ bridge pair (يفتح نافذةَ الاقتران ويُقلع المتصفّح)؛ إن أعاد رابطَ التثبيت فقل للمستخدم أن يثبّتها من الرابط ولا تكرّر النداء." },
-    { "cls": "env_trap", "text": "شاشةٌ مكبَّرة (125٪/150٪): إحداثيّاتُ desk بكسلاتٌ فعليّة من زاوية النافذة كما في اللقطة — لا تحوّلها؛ ولقطتان متطابقتان بعد نقرةٍ تعنيان أنّ الفعل لم يقع، فلا تكرّر النقرة نفسَها." }
+    { "cls": "env_trap", "text": "شاشةٌ مكبَّرة (125٪/150٪): إحداثيّاتُ desk بكسلاتٌ فعليّة من زاوية النافذة كما في اللقطة — لا تحوّلها؛ ولقطتان متطابقتان بعد نقرةٍ تعنيان أنّ الفعل لم يقع، فلا تكرّر النقرة نفسَها." },
+    {"cls":"playbook","text":"نطاقُ الدور: بعد إتمام ما طُلب لا تلمس ملفّاً لم يسمِّه المستخدمُ ولم تقرأه ولم تُنشئه في هذا الدور (ملفُّ الحزمة مثلاً)، ولا تشغّل بناءً لم يُطلب. إن احتجت تعديلَ ملفٍّ موجود اقرأه أوّلاً بأداة read ثمّ عدِّل ما رأيت؛ وإن لم يكن من المهمّة فأنهِ الدور واسأل المستخدم."}
   ]
 }

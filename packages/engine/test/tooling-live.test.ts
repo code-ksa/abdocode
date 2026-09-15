@@ -52,12 +52,20 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     expect(ctx[0]).toContain("notes.md-1- line one")
     expect(ctx[0]).toContain("notes.md:2: line two")
     expect(ctx[0]).toContain("notes.md-3- line three")
+    // د7ب — نطاقُ الدور عبر المحرّك الحقيقيّ: المستخدمُ قال «go» فقط؛ notes.md موجودٌ ولم يُسمَّ ولم يُقرأ (grep ليس قراءة) ⇦ رفضٌ مسمّى
+    // يطلب القراءةَ أوّلاً، والملفُّ لا يُمسّ. ثمّ التوأمُ الإيجابيّ: read في الدور نفسِه ⇦ medit يمرّ.
+    const unread = await turn("نفّذ: medit notes.md <<<\nline one\n=>\nLINE ONE\n@@\nline three\n=>\nLINE THREE")
+    expect(unread[0]).toContain("رُفض تعديل notes.md")
+    expect(unread[0]).toContain("read notes.md")
+    expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("line one\nline two\nline three\n")
     // medit: حزمتان تُطبَّقان معاً؛ حزمةٌ لا تطابق تُسقط الكلّ
-    const ok = await turn("نفّذ: medit notes.md <<<\nline one\n=>\nLINE ONE\n@@\nline three\n=>\nLINE THREE")
-    expect(ok[0]).toMatch(/✍|كتابة|notes\.md/)
+    const ok = await turn("نفّذ: read notes.md", "نفّذ: medit notes.md <<<\nline one\n=>\nLINE ONE\n@@\nline three\n=>\nLINE THREE")
+    expect(ok[0]).toContain("line two")
+    expect(ok[1]).toMatch(/✍|كتابة|notes\.md/)
     expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("LINE ONE\nline two\nLINE THREE\n")
-    const bad = await turn("نفّذ: medit notes.md <<<\nline two\n=>\nX\n@@\nmissing text\n=>\nY")
-    expect(bad[0]).toContain("الحزمة 2")
+    // نطاقُ الدور يُصفَّر كلَّ دور: قراءةُ الدور السابق لا تكفي، فالقراءةُ تسبق التحرير هنا أيضاً — بمسارٍ مطلق (كما يكتبه nemotron حيّاً) والتحريرُ نسبيّ: مفتاحٌ واحد.
+    const bad = await turn(`نفّذ: read ${join(project, "notes.md")}`, "نفّذ: medit notes.md <<<\nline two\n=>\nX\n@@\nmissing text\n=>\nY")
+    expect(bad[1]).toContain("الحزمة 2")
     expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("LINE ONE\nline two\nLINE THREE\n")
     // run --bg: معرّفٌ، ثمّ logs يرى الخرج، ثمّ stop يوقف عمليةً ما زالت تعمل
     const bg = await turn("نفّذ: run --bg 1..3 | ForEach-Object { \"tick$_\"; Start-Sleep -Milliseconds 400 }; Start-Sleep -Seconds 20")

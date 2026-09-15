@@ -92,6 +92,7 @@ import { ensureExtensionPaired, launchBrowserWindows, runningBrowsersWindows } f
 import { readBridgePairing } from "./mcp-servers/chrome-bridge"
 import { RELEASE_LESSONS_APPLIED_FILE, RELEASE_LESSONS_FILE, applyReleaseLessons, releaseLessonsLine } from "./release-lessons"
 import { windowAllowedByTask } from "./desktop-name-gate"
+import { fileEditAllowedByTurn, scopeKey } from "./turn-scope-gate"
 import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
 import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, normalizeArabic, parseGateMode, type GateDecision } from "./front-gate"
 import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"
@@ -2795,7 +2796,11 @@ const runServeShell = async (): Promise<void> => {
     if (!checked.ok) return refused(checked.why)
     // مجلّدٌ يحمل اسمَ الهدف: كان `readFileSync`/الكتابة ترمي EISDIR فيسقط الدورُ كلُّه — يُقال بالاسم ويُكمل الدور.
     if (existsSync(checked.abs) && lstatSync(checked.abs).isDirectory()) return invalid(`المسار مجلّدٌ لا ملفّ: ${target}`)
-    if (word === "write" && existsSync(checked.abs)) before = readFileSync(checked.abs, "utf-8")
+    // د7ب — نطاقُ الدور: ملفٌّ موجودٌ لم يسمِّه المستخدمُ ولم يُقرأ ولم يُنشأ في الدور ولم يتغيّر بعد بدئه يُرفض باسمه قبل أيّ فحصٍ للمحتوى.
+    const targetExists = existsSync(checked.abs)
+    const scope = fileEditAllowedByTurn({ target: turnScopeKey(normalizedTarget), exists: targetExists, modifiedAtMs: targetExists ? lstatSync(checked.abs).mtimeMs : undefined, turnStartedAtMs: turnScopeStartedAt, taskText: desktopTaskText, readThisTurn: turnReadPaths, createdThisTurn: turnCreatedPaths })
+    if (!scope.ok) return refused(scope.why)
+    if (word === "write" && targetExists) before = readFileSync(checked.abs, "utf-8")
 
     const identityWrite = { projectDir: PROJECT_DIR, normalizedTarget, operation: word === "write" ? "write" as const : "edit" as const, before, after }
     const authProblem = projectAuthViolation(identityWrite)
@@ -2911,6 +2916,7 @@ const runServeShell = async (): Promise<void> => {
     // نقطةُ الرجوع قبل الأثر (بعد البوّابة وفحص القرص): الأصلُ أو علامةُ «لم يكن» — مرّةً لكلّ مسارٍ في الدور.
     try { checkpoints.record(currentSession, turnId, PROJECT_DIR, checked.abs) } catch (error) { process.stderr.write(`checkpoint: ${String(error).slice(0, 120)}\n`) }
     const r = await runAdapterV("write", "write_file", { path: checked.abs, content: after }, `write_${turnId}_${nextToolSeq()}`, _hooks.signal)
+    if (r.verdict?.ok === true) { turnReadPaths.add(turnScopeKey(normalizedTarget)); if (!targetExists) turnCreatedPaths.add(turnScopeKey(normalizedTarget)) }
     // startsWith يقرّر شكل البادئة وحده كما كان؛ الحكم من المحوّل لا من النصّ.
     return {
       output: r.output.startsWith("رُفض") ? r.output : `✍ ${target} — كتابة ذرّية عبر السياسة وعامل Rust.\n${r.output}`,
@@ -3292,7 +3298,10 @@ const runServeShell = async (): Promise<void> => {
         if (spec.name === "read") {
           // القراءة الموجَّهة تحمل حكم النواة؛ اشتقاق الذيل مطابق لـexecuteBody،
           // والخطّة (ملفٌ ومقطعٌ اختياري) من planRead وحده — لا نصّ رفضٍ ثانٍ هنا.
-          return readCommandV(framedBody.split(/\s+/).slice(1))
+          const readArgs = framedBody.split(/\s+/).slice(1)
+          const readPlan = planRead(readArgs)
+          if (!("error" in readPlan)) turnReadPaths.add(turnScopeKey(readPlan.file))
+          return readCommandV(readArgs)
         }
         return plain(await executeBody(framedBody, hooks))
       }
@@ -3527,6 +3536,12 @@ const runServeShell = async (): Promise<void> => {
   // أ2 — بوّابةُ الاسم: نوافذُ يثق بها الوكيل لأنّه فتحها أو ظهرت نتيجةَ فعله (مقبضاً)، ونصُّ مهمّة الدور الجاري لمطابقة الأسماء.
   const desktopTrustedHwnds = new Set<number>()
   let desktopTaskText = ""
+  // د7ب — نطاقُ الدور للكتابة: ما قرأه النموذجُ وما أنشأه في هذا الدور (بمفتاح scopeKey)، ولحظةُ بدء الدور لقياس «الطازج» على القرص.
+  const turnReadPaths = new Set<string>()
+  const turnCreatedPaths = new Set<string>()
+  let turnScopeStartedAt = Date.now()
+  // مفتاحٌ واحد للملفّ كيفما كُتب مسارُه (مطلقاً كما يكتبه nemotron حيّاً، أو نسبيّاً): يُحلّ على مجلّد المشروع ثمّ يُطوى.
+  const turnScopeKey = (path: string): string => scopeKey(relative(PROJECT_DIR, resolve(PROJECT_DIR, path)))
   /** لقطةُ الصفحة إلى لوحة القشرة (إطارُ browser-shot الذي كانت الواجهةُ تستمع له بلا باثّ) — للعرض لا للاستدلال. */
   const paneShot = async (): Promise<string> => {
     if (surface === undefined) return ""
@@ -5073,6 +5088,7 @@ const runServeShell = async (): Promise<void> => {
       : undefined
     const effectiveGoal = priorGoal?.goal ?? turn.body
     desktopTaskText = `${turn.body}\n${priorGoal?.goal ?? ""}`
+    turnReadPaths.clear(); turnCreatedPaths.clear(); turnScopeStartedAt = Date.now()
     currentGoalText = turn.body
     turnFamilies = familiesFor(effectiveGoal, turnFamilies)
     // د2 — المحرّك الدلاليّ (plugins.semanticFrame): إطارٌ حتميّ للطلب قبل أوّل نداء —
