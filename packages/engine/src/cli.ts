@@ -93,6 +93,9 @@ import { readBridgePairing } from "./mcp-servers/chrome-bridge"
 import { RELEASE_LESSONS_APPLIED_FILE, RELEASE_LESSONS_FILE, applyReleaseLessons, releaseLessonsLine } from "./release-lessons"
 import { windowAllowedByTask } from "./desktop-name-gate"
 import { fileEditAllowedByTurn, scopeKey } from "./turn-scope-gate"
+import { bridgeCallArgs, parseBrowserAction, uploadPathVerdict } from "./browser-actions-args"
+import { goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck } from "./acceptance-goal-words"
+import { surfaceVerdict } from "./surface-receipt-verdict"
 import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
 import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, normalizeArabic, parseGateMode, type GateDecision } from "./front-gate"
 import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"
@@ -321,6 +324,8 @@ const unknownTool = (output: string): DispatchResultV => ({ output, verdict: { o
 const okText = (output: string): DispatchResultV => ({ output, verdict: VERDICT_OK })
 /** بلا حكم — يُستنتَج من النصّ عند المستهلك ويُعدّ في الدفتر (قائمة §9 المعلَنة). */
 const plain = (output: string): DispatchResultV => ({ output })
+// ن3 — إيصالُ سطحٍ بحكمٍ مشتقٍّ من صدره: بلا حكمٍ كان receiptSucceeded يسقط إلى رمز خروجٍ لا وجودَ له فلا يرى الإقفالُ open ناجحاً قطّ (مقيس 09-15).
+const surfaced = (output: string): DispatchResultV => ({ output, verdict: surfaceVerdict(output) })
 
 type AdapterToolName = "write_file" | "edit_file" | "git_read" | "git_change" | "package_install" | "network_fetch"
 
@@ -3379,15 +3384,15 @@ const runServeShell = async (): Promise<void> => {
           const out = await runSurfaceTool(spec.name, rest, turnId)
           // الأتمتةُ المرئيّة تفهم خطأها بعينها: رفضُ العقد أو مرجعٌ ضائع أو تعذّرٌ ⇦ لقطةٌ للحالة تُلحق بالنداء التالي إن كان النموذجُ يرى.
           if (liveSurface !== undefined && /^(?:العقد رفض|مرجعٌ غير معروف|تعذّر|رُفض)/u.test(out) && ["tap", "fill", "key", "look", "find", "scroll", "dismiss"].includes(spec.name) && shotRoute(loadSettings()).reaches) {
-            try { const data = await liveSurface.captureScreenshot({ format: "jpeg", quality: 50 }); if (shotFitsModel(data) && pendingShots.length < 4) { pendingShots.push({ data, url: surfaceUrl, mime: "image/jpeg" }); return plain(out + "\n(أُرفقت لقطةٌ لحالة الصفحة عند الخطأ — انظرها قبل المحاولة التالية)") } } catch { /* اللقطةُ مساعِدةٌ لا شرط */ }
+            try { const data = await liveSurface.captureScreenshot({ format: "jpeg", quality: 50 }); if (shotFitsModel(data) && pendingShots.length < 4) { pendingShots.push({ data, url: surfaceUrl, mime: "image/jpeg" }); return surfaced(out + "\n(أُرفقت لقطةٌ لحالة الصفحة عند الخطأ — انظرها قبل المحاولة التالية)") } } catch { /* اللقطةُ مساعِدةٌ لا شرط */ }
           }
-          return plain(out)
+          return surfaced(out)
         }
         catch (cause) {
           const message = String(cause instanceof Error ? cause.message : cause)
           if (!/القناة مغلقة|channel is closed/u.test(message)) throw cause
           surface = undefined; surfaceRefs = []; surfaceGeneration += 1
-          if (spec.name === "open" || spec.name === "ui") return plain(await runSurfaceTool("ui", rest, turnId))
+          if (spec.name === "open" || spec.name === "ui") return surfaced(await runSurfaceTool("ui", rest, turnId))
           return invalid("انقطع اتصالُ متصفّح الوكيل (أُغلق أو قُتل خارج المحرّك) — أعد open <الرابط> ليُوصل من جديد.")
         }
       }
@@ -3633,9 +3638,12 @@ const runServeShell = async (): Promise<void> => {
       // تكافؤُ الفحص (09-14): page styles|dom <ref>|css <selector>|assets تُمرَّر إلى <bridge>.inspect بكائن JSON — الإضافةُ تنفّذ القراءةَ نفسَها في تبويب المستخدم.
       const inspect = name === "page" ? /^(styles?|dom|css|assets)\b/u.exec(rest.trim()) : null
       // أمرُ المالك 09-15: الكتابةُ والمفاتيحُ في تبويب المستخدم عبر الإضافة تمرّ بالبوّابة نفسِها (موافقةٌ لكلّ نداء)؛ حقولُ الاعتماد ترفضها الإضافةُ نفسُها وتسلّمها للمستخدم.
-      const target = inspect !== null ? "inspect" : ({ page: "page", open: "open", ui: "open", look: "look", tap: "tap", fill: "fill", key: "key", scroll: "scroll", shot: "shot" } as Record<string, string | undefined>)[name]
-      const callArgs = inspect !== null ? JSON.stringify({ mode: inspect[1]!.startsWith("style") ? "styles" : inspect[1], target: rest.trim().slice(inspect[0].length).trim().slice(0, 120) }) : rest
-      if (target === undefined) return `الأداةُ ${name} غيرُ متاحة عبر إضافة المتصفّح — المتاح: page [styles|dom|css|assets]/open/look/tap/scroll/shot، أو بدّل: browser owned`
+      const target = inspect !== null ? "inspect" : ({ page: "page", open: "open", ui: "open", look: "look", tap: "tap", fill: "fill", key: "key", scroll: "scroll", shot: "shot", select: "select", upload: "upload", drag: "drag" } as Record<string, string | undefined>)[name]
+      // ن3 — الأفعالُ ذاتُ المفاتيح المتعدّدة (fill/select/upload/drag) تُبنى كائنَ JSON — النصُّ الحرّ كان يُرفض «تحتاج كائنَ JSON بمفاتيح» (مقيس 09-15)؛ ومسارُ upload يُحكم قبل أن يغادر (داخل المشروع، ليس سرّاً).
+      const built = inspect !== null ? { ok: true as const, args: JSON.stringify({ mode: inspect[1]!.startsWith("style") ? "styles" : inspect[1], target: rest.trim().slice(inspect[0].length).trim().slice(0, 120) }) } : bridgeCallArgs(target ?? name, rest, PROJECT_DIR)
+      if (!built.ok) return built.why
+      const callArgs = built.args
+      if (target === undefined) return `الأداةُ ${name} غيرُ متاحة عبر إضافة المتصفّح — المتاح: page [styles|dom|css|assets]/open/look/tap/fill/key/scroll/shot/select/upload/drag، أو بدّل: browser owned`
       if (target === "open" && !browserSiteAllowed(SETTINGS_FILE, rest.trim())) return "رُفض: الموقعُ خارج سياسة المواقع المحفوظة — أضفه من الإعدادات ▸ الصلاحيّات قبل فتحه في متصفّحك"
       const session = externals.get(bridge.id)
       const toolName = `${bridge.id}.${target}`
@@ -4002,6 +4010,69 @@ const runServeShell = async (): Promise<void> => {
       if (landed.sensitive) return `كتبتُ في «${node.name || node.role}» (${landed.length} حرفاً — قيمةُ حقلِ الاعتماد لا تُقرأ).`
       if (landed.value !== text) return `كتبتُ في «${node.name || node.role}» لكنّ ما استقرّ ليس ما طُلب: «${(landed.value ?? "").slice(0, 80)}» — الصفحةُ قد تنسّق الحقلَ أو ترفض بعضَ الحروف؛ اقرأها بـpage قبل المتابعة.`
       return `كتبتُ «${text.slice(0, 60)}» في «${node.name || node.role}» بإدخالٍ موثوق، وقرأتُ الحقلَ بعدها فطابق.`
+    }
+
+    // ن3 — قائمةٌ منسدلة / رفعُ ملفّ / سحبٌ وإفلات: العقدُ نفسُه (الجيلُ والهويّةُ قبل السؤال وبعده)، والأثرُ يُقرأ راجعاً لا يُدّعى.
+    if (name === "select") {
+      const p = parseBrowserAction("select", rest)
+      if (!p.ok) return p.why
+      const verdict = Surface.judge({ generation: surfaceGeneration }, { kind: "select", ref, generation: surfaceGeneration, choice: p.choice })
+      if (!verdict.ok) return `العقد رفض: ${verdict.why}`
+      const before = await locateChecked()
+      if ("why" in before) return `لم أختر: ${before.why}`
+      const ok = await gate(turnId, "outside-workspace", `اختيارُ «${p.choice.slice(0, 40)}» في «${node.name || node.role}»`)
+      if (!ok) return `رُفض الاختيار — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`
+      const after = await locateChecked()
+      if ("why" in after) return `لم أختر بعد موافقتك: ${after.why}`
+      const picked = await surface.selectOption(ref, p.choice)
+      await paneShot()
+      if (picked === undefined) return `تعذّر الاختيارُ في «${node.name || node.role}» — العنصرُ لم يعد في الصفحة؛ أعد page`
+      if (!picked.ok && picked.why === "not-select") return `«${node.name || node.role}» ليس قائمةً منسدلةً أصليّة (${picked.role}) — افتحها بـtap ${ref} ثمّ اختر العنصرَ الظاهر بـtap أو بـkey ArrowDown/Enter بعد page`
+      if (!picked.ok) return `لا خيارَ يطابق «${p.choice.slice(0, 40)}» في «${node.name || node.role}». الخياراتُ: ${picked.options.slice(0, 20).join(" | ")}${picked.options.length > 20 ? " | …" : ""}`
+      return `اخترتُ «${picked.picked}» (القيمة «${picked.value.slice(0, 40)}»، ${picked.index + 1}/${picked.total}) في «${node.name || node.role}» وقرأتُ القائمةَ بعدها فطابقت.`
+    }
+
+    if (name === "upload") {
+      const p = parseBrowserAction("upload", rest)
+      if (!p.ok) return p.why
+      const fileVerdict = uploadPathVerdict(p.path, PROJECT_DIR)
+      if (!fileVerdict.ok) return fileVerdict.why
+      const verdict = Surface.judge({ generation: surfaceGeneration }, { kind: "upload", ref, generation: surfaceGeneration, file: fileVerdict.name })
+      if (!verdict.ok) return `العقد رفض: ${verdict.why}`
+      const before = await locateChecked()
+      if ("why" in before) return `لم أرفع: ${before.why}`
+      const ok = await gate(turnId, "outside-workspace", `رفعُ الملفّ «${fileVerdict.name}» (${fileVerdict.bytes} بايت) إلى «${node.name || node.role}» في الصفحة ${surfaceUrl}`)
+      if (!ok) return `رُفض الرفع — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`
+      const after = await locateChecked()
+      if ("why" in after) return `لم أرفع بعد موافقتك: ${after.why}`
+      const landed = await surface.setFiles(ref, [fileVerdict.abs])
+      await paneShot()
+      if (landed === undefined || (!landed.ok && landed.why === "missing")) return `تعذّر الرفعُ إلى «${node.name || node.role}» — العنصرُ لم يعد في الصفحة؛ أعد page`
+      if (!landed.ok) return `«${node.name || node.role}» ليس حقلَ ملفّ (input type=file) — ابحث بـfind عن حقل الملفّ أو زرّ «اختر ملفّاً» الذي يفتح حقلاً`
+      if (landed.files.length === 0) return `أسندتُ «${fileVerdict.name}» إلى «${node.name || node.role}» لكنّ الحقلَ يقرأ فارغاً — الصفحةُ قد ترفض النوعَ أو الحجم؛ تحقّق بـpage`
+      return `رفعتُ «${fileVerdict.name}» إلى «${node.name || node.role}» وقرأتُ الحقلَ بعدها: ${landed.files.join("، ")}.`
+    }
+
+    if (name === "drag") {
+      const p = parseBrowserAction("drag", rest)
+      if (!p.ok) return p.why
+      const findAny = (nodes: readonly import("./mind/surface").PageNode[], wanted: string): import("./mind/surface").PageNode | undefined => { for (const n of nodes) { if (n.ref === wanted) return n; const inner = n.children === undefined ? undefined : findAny(n.children, wanted); if (inner !== undefined) return inner } return undefined }
+      const target = findAny(surfaceRefs, p.to)
+      if (target === undefined) return `مرجعُ الهدف غير معروف «${p.to}» — اقرأ الصفحة بـpage أوّلاً`
+      const verdict = Surface.judge({ generation: surfaceGeneration }, { kind: "drag", ref, to: p.to, generation: surfaceGeneration })
+      if (!verdict.ok) return `العقد رفض: ${verdict.why}`
+      const from = await locateChecked()
+      if ("why" in from) return `لم أسحب: ${from.why}`
+      const dest = await surface.locate(p.to)
+      if (dest === undefined || dest.width === 0 || dest.height === 0 || !dest.inView) return `لم أسحب: هدفُ الإفلات «${target.name || target.role}» ليس ظاهراً في العرض — مرّر بـscroll ثمّ أعد page`
+      const ok = await gate(turnId, "outside-workspace", `سحبُ «${node.name || node.role}» وإفلاتُه على «${target.name || target.role}»`)
+      if (!ok) return `رُفض السحب — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`
+      const again = await locateChecked()
+      if ("why" in again) return `لم أسحب بعد موافقتك: ${again.why}`
+      await surface.dragTo({ x: again.at.x, y: again.at.y }, { x: dest.x, y: dest.y })
+      const html5 = await surface.dragHtml5(ref, p.to)
+      await paneShot()
+      return `سحبتُ «${node.name || node.role}» من (${again.at.x},${again.at.y}) وأفلتُّه على «${target.name || target.role}» عند (${dest.x},${dest.y}) بالماوس الموثوق${html5 ? " وبأحداث السحب HTML5" : ""}. أعد page لترى أثرَه.`
     }
 
     return `أداةُ سطحٍ مجهولة: ${name}`
@@ -5605,14 +5676,14 @@ const runServeShell = async (): Promise<void> => {
       }
       // بوابات القبول تُشتقّ من الهدف الفعليّ: هدف الدور السابق عند الاستئناف، وإلا نصّ الدور.
       // د7 (مقيس 09-15): «أنشئ ملفّاً» كانت تُشعل بوّابةَ البناء فتطلب npm run build في مشروعٍ بلا سكربت build ويضيفه النموذج — كلماتُ الإنشاء ليست بناءً.
-      const requiresBuild = !planningOnly && /(?:\bbuild\b|البناء|ابنِ?|بناءً)/iu.test(effectiveGoal)
+      const requiresBuild = !planningOnly && goalRequiresBuild(effectiveGoal)
       // بوّابتا npm تنطبقان حين يعرّف package.json السكربتَ فعلاً؛ حزمةٌ بلا build/typecheck = «لا ينطبق» لا «أضِف سكربتاً لإرضائي».
       const packageHasScript = (name: string): boolean => { try { const pkg = JSON.parse(readFileSync(join(PROJECT_DIR, "package.json"), "utf8")) as { scripts?: Record<string, unknown> }; return typeof pkg.scripts?.[name] === "string" } catch { return false } }
-      const requiresTypecheck = !planningOnly && /(?:\btypecheck\b|type-check|فحص الأنواع|التحقق النوعي)/iu.test(effectiveGoal)
+      const requiresTypecheck = !planningOnly && goalRequiresTypecheck(effectiveGoal)
       // next.js أو رمز npm/pnpm مستقلّ أو كلمة «موقع» مستقلّة — «NEXT_ACTION» في نصّ
       // هدفٍ كانت تطابق (قيس 2026-09-02: إيدو جلوبال).
       const requiresNpmAudit = !planningOnly && /(?:next\.?js|(?<![\p{L}\w])p?npm(?![\w])|(?<![\p{L}])موقع(?![\p{L}]))/iu.test(effectiveGoal)
-      const requiresTests = !planningOnly && /(?:npm\s+(?:run\s+)?test|اختبار|اختبارات|tests?\b)/iu.test(effectiveGoal)
+      const requiresTests = !planningOnly && goalRequiresTests(effectiveGoal)
       const isTestCommand = (command: string) => /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:run\s+)?test|bun\s+(?:run\s+)?test|node\s+--test)\b/iu.test(command)
       const isBuildCommand = (command: string) => /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:run\s+)?build|bun\s+run\s+build|cargo\s+build)\b/iu.test(command)
       const isTypecheckCommand = (command: string) => /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:run\s+)?typecheck|bun\s+run\s+typecheck|(?:npx\s+)?tsc\s+--noEmit|cargo\s+check)\b/iu.test(command)

@@ -17,15 +17,17 @@
  * - الردودُ نصٌّ فقط للنموذج (عقدُ MCP عندنا)؛ اللقطةُ تُحفظ ملفّاً على قرص المستخدم ويُعاد مسارُها — لا تُرسل.
  */
 import { randomBytes } from "node:crypto"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { join, resolve } from "node:path"
+import { isAbsolute, basename, join, resolve } from "node:path"
 import { browserSiteAllowed } from "../browser-site-policy"
 import { judge } from "../mind/surface"
 
 export const CHROME_BRIDGE_PROTOCOL = "2025-11-25"
 export const DEFAULT_BRIDGE_PORT = 9367
 export const CALL_TIMEOUT_MS = 20_000
+/** ن3 — ما لا يُرفع بالنيابة عن أحد مهما كان الطلب (نسخةُ الجسر من قاعدة المحرّك). */
+export const UPLOAD_SECRET_FILE = /(^|[\\/])(\.env(\..*)?|\.npmrc|\.netrc|id_(rsa|ed25519|ecdsa)(\.pub)?|.*\.(pem|key|p12|pfx|kdbx)|secrets?\.(json|ya?ml|toml)|credentials(\.json)?)$/iu
 
 type RpcId = string | number | null
 type RpcRequest = { jsonrpc?: string; id?: RpcId; method?: string; params?: Record<string, unknown> }
@@ -40,6 +42,10 @@ export const BRIDGE_TOOLS = Object.freeze([
   { name: "tap", description: "نقرةٌ موثوقة على عنصرٍ بمرجعه (عبر منقّح كروم — يرى المستخدم الشارة)", inputSchema: { type: "object", properties: { ref: { type: "string", minLength: 2, maxLength: 12 } }, required: ["ref"], additionalProperties: false } },
   { name: "fill", description: "كتابةٌ موثوقة في حقلٍ بمرجعه — حقولُ الاعتماد مرفوضةٌ وتُسلَّم للمستخدم", inputSchema: { type: "object", properties: { ref: { type: "string", minLength: 2, maxLength: 12 }, text: { type: "string", maxLength: 2000 } }, required: ["ref", "text"], additionalProperties: false } },
   { name: "key", description: "ضغطةُ مفتاحٍ باسمه (Enter, Tab, Escape, ArrowDown…)", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: 16 } }, required: ["key"], additionalProperties: false } },
+  // ن3 (09-15) — قائمةٌ منسدلة ورفعُ ملفّ وسحبٌ في تبويب المستخدم؛ المسارُ المرفوع مطلقٌ حُكم في المحرّك (داخل المشروع، ليس سرّاً) ويُعاد فحصُه هنا.
+  { name: "select", description: "اختيارُ خيارٍ في قائمةٍ منسدلة (select) بمرجعها: بالنصّ أو القيمة؛ يُقرأ ما استقرّ", inputSchema: { type: "object", properties: { ref: { type: "string", minLength: 2, maxLength: 12 }, text: { type: "string", minLength: 1, maxLength: 200 } }, required: ["ref", "text"], additionalProperties: false } },
+  { name: "upload", description: "رفعُ ملفٍّ من قرص المستخدم إلى حقل ملفّ (input type=file) بمرجعه — مسارٌ مطلقٌ داخل المشروع، لا ملفّاتِ اعتماد", inputSchema: { type: "object", properties: { ref: { type: "string", minLength: 2, maxLength: 12 }, path: { type: "string", minLength: 1, maxLength: 1024 } }, required: ["ref", "path"], additionalProperties: false } },
+  { name: "drag", description: "سحبُ عنصرٍ بمرجعه وإفلاتُه على عنصرٍ آخر بمرجعه (ماوسٌ موثوق + أحداثُ سحب HTML5)", inputSchema: { type: "object", properties: { from: { type: "string", minLength: 2, maxLength: 12 }, to: { type: "string", minLength: 2, maxLength: 12 } }, required: ["from", "to"], additionalProperties: false } },
   { name: "scroll", description: "تمريرٌ في الصفحة: up أو down بعدد شاشات", inputSchema: { type: "object", properties: { direction: { type: "string", enum: ["up", "down"] }, count: { type: "integer", minimum: 1, maximum: 10 } }, required: ["direction"], additionalProperties: false } },
   { name: "shot", description: "لقطةُ التبويب الفعّال تُحفظ PNG على قرص المستخدم ويُعاد مسارُها", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   // 2026-09-14 — تكافؤُ أدوات الفحص مع المتصفّح المملوك: تصميمُ الصفحة بالأرقام، عنصرٌ بمرجعه، قواعدُ CSS لمحدِّد، الأصول.
@@ -244,6 +250,37 @@ export class ChromeBridge {
         if (!/^[A-Za-z]{1,16}$/.test(key)) return "الصيغة: key <Enter|Tab|Escape|…>"
         const pressed = await this.send("key", { key })
         return `ضغطتُ ${key} في متصفّح المستخدم ${inputMode(pressed)}.`
+      }
+      case "select": {
+        const ref = String(args.ref ?? ""); const node = this.#node(ref); const text = String(args.text ?? "").trim()
+        if (node === undefined) return `مرجعٌ غير معروف «${ref}» — اقرأ الصفحة بـchrome.page أوّلاً`
+        if (text.length === 0) return "الصيغة: select {ref, text}"
+        const verdict = judge({ generation: this.#generation }, { kind: "select", ref, generation: this.#generation, choice: text })
+        if (!verdict.ok) return `العقد رفض: ${verdict.why}`
+        const r = await this.send("select", { ref, text }) as { ok?: boolean; why?: string; picked?: string; value?: string; options?: string[] } | null
+        if (r === null || r === undefined) return `تعذّر الاختيارُ في «${node.name || node.role}» — العنصرُ لم يعد في الصفحة؛ أعد chrome.page`
+        if (r.ok !== true && r.why === "not-select") return `«${node.name || node.role}» ليس قائمةً منسدلةً أصليّة — افتحها بـtap ثمّ اختر الظاهرَ بـtap أو key`
+        if (r.ok !== true) return `لا خيارَ يطابق «${text.slice(0, 40)}» في «${node.name || node.role}». الخياراتُ: ${(r.options ?? []).slice(0, 20).join(" | ")}`
+        return `اخترتُ «${r.picked ?? ""}» (القيمة «${String(r.value ?? "").slice(0, 40)}») في «${node.name || node.role}» في متصفّح المستخدم وقرأتُ القائمةَ بعدها.`
+      }
+      case "upload": {
+        const ref = String(args.ref ?? ""); const node = this.#node(ref); const path = String(args.path ?? "")
+        if (node === undefined) return `مرجعٌ غير معروف «${ref}» — اقرأ الصفحة بـchrome.page أوّلاً`
+        if (!isAbsolute(path) || !existsSync(path) || UPLOAD_SECRET_FILE.test(path)) return `رُفض الرفع: المسارُ ليس مطلقاً موجوداً غيرَ سرّيّ — ${path.slice(0, 120)}`
+        const verdict = judge({ generation: this.#generation }, { kind: "upload", ref, generation: this.#generation, file: basename(path) })
+        if (!verdict.ok) return `العقد رفض: ${verdict.why}`
+        const r = await this.send("upload", { ref, path }) as { ok?: boolean; why?: string; files?: string[] } | null
+        if (r === null || r === undefined) return `تعذّر الرفعُ إلى «${node.name || node.role}» — العنصرُ لم يعد في الصفحة؛ أعد chrome.page`
+        if (r.ok !== true) return r.why === "not-file" ? `«${node.name || node.role}» ليس حقلَ ملفّ (input type=file)` : `تعذّر الرفع: ${r.why ?? ""}`
+        return `رفعتُ «${basename(path)}» إلى «${node.name || node.role}» في متصفّح المستخدم وقرأتُ الحقلَ بعدها: ${(r.files ?? []).join("، ")}.`
+      }
+      case "drag": {
+        const from = String(args.from ?? ""); const to = String(args.to ?? ""); const a = this.#node(from); const b = this.#node(to)
+        if (a === undefined || b === undefined) return `مرجعٌ غير معروف «${a === undefined ? from : to}» — اقرأ الصفحة بـchrome.page أوّلاً`
+        const verdict = judge({ generation: this.#generation }, { kind: "drag", ref: from, to, generation: this.#generation })
+        if (!verdict.ok) return `العقد رفض: ${verdict.why}`
+        const r = await this.send("drag", { from, to })
+        return `سحبتُ «${a.name || a.role}» وأفلتُّه على «${b.name || b.role}» في متصفّح المستخدم ${inputMode(r)}.`
       }
       case "scroll": {
         const direction = args.direction === "up" ? "up" : "down"

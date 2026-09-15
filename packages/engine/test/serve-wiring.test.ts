@@ -282,8 +282,9 @@ describe("serve convergence wiring", () => {
     expect(source).toContain("const effectiveGoal = priorGoal?.goal ?? turn.body")
     // بوابات القبول الأربع تُشتقّ من الهدف الفعليّ لا من نصّ الدور.
     for (const gate of ["requiresBuild", "requiresTypecheck", "requiresNpmAudit", "requiresTests"]) {
-      expect(source).toMatch(new RegExp(`const ${gate} = !planningOnly && /[^\\n]*/iu\\.test\\(effectiveGoal\\)`, "u"))
-      expect(source).not.toMatch(new RegExp(`const ${gate} = !planningOnly && /[^\\n]*/iu\\.test\\(turn\\.body\\)`, "u"))
+      // ن3: build/typecheck/tests من وحدة acceptance-goal-words؛ npm audit ما زال تعبيراً مضمَّناً — كلُّها على الهدف الفعليّ.
+      expect(source).toMatch(new RegExp(`const ${gate} = !planningOnly && (?:/[^\\n]*/iu\\.test\\(effectiveGoal\\)|goalRequires\\w+\\(effectiveGoal\\))`, "u"))
+      expect(source).not.toMatch(new RegExp(`const ${gate} = !planningOnly && (?:/[^\\n]*/iu\\.test\\(turn\\.body\\)|goalRequires\\w+\\(turn\\.body\\))`, "u"))
     }
     // بوابة الخرج المسمّى في موضعَيها.
     expect(source.split("outputEvidenceVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor))").length - 1).toBe(2)

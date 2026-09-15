@@ -22,7 +22,7 @@ describe("extension inspect parity — wiring", () => {
     expect(cli).toContain('const inspect = name === "page" ? /^(styles?|dom|css|assets)\\b/u.exec(rest.trim()) : null')
     expect(cli).toContain('const target = inspect !== null ? "inspect" :')
     expect(cli).toContain("const r = await session.call(toolName, callArgs)")
-    expect(JSON.parse(readFileSync(resolve(import.meta.dir, "../../browser-bridge/extension/manifest.json"), "utf8")).version).toBe("0.4.2")
+    expect(JSON.parse(readFileSync(resolve(import.meta.dir, "../../browser-bridge/extension/manifest.json"), "utf8")).version).toBe("0.5.0")
   })
 
   test("bridge: dom with an unknown ref is refused before reaching the extension; styles reaches it with mode/target", async () => {

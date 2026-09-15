@@ -90,7 +90,7 @@ export const MCP_PRESETS: readonly McpPreset[] = Object.freeze([
     summary: "يقود الوكيلُ متصفّحَك الحقيقيّ عبر إضافة عبدو كود: يقرأ التبويب الفعّال ويفتح روابط وينقر ويكتب في غير السرّيّ ويلتقط لقطة — بموافقتك وعلى هذا الجهاز وحده. بعد «وصّل» انسخ رمزَ الاقتران إلى نافذة الإضافة.",
     argv: Object.freeze(["mcp-chrome-bridge"]),
     input: Object.freeze({ kind: "none" as const, label: "لا مُدخل", placeholder: "" }),
-    tools: Object.freeze(["page", "open", "look", "tap", "fill", "key", "scroll", "shot"]),
+    tools: Object.freeze(["page", "open", "look", "tap", "fill", "key", "scroll", "shot", "select", "upload", "drag"]),
   }),
 ])
 

@@ -65,6 +65,13 @@ export interface CdpRefLocation {
   readonly sensitive: boolean
 }
 
+/** ن3 — نتيجةُ اختيار خيارٍ في قائمةٍ منسدلة: ما اختير فعلاً كما تقرؤه الصفحة، أو سببُ الرفض مع الخيارات المتاحة. */
+export type CdpSelectResult =
+  | { readonly ok: true; readonly picked: string; readonly value: string; readonly index: number; readonly total: number }
+  | { readonly ok: false; readonly why: "not-select" | "no-option"; readonly role: string; readonly options: readonly string[] }
+
+/** ن3 — نتيجةُ رفع ملفّ: أسماءُ ما استقرّ في الحقل كما تقرؤه الصفحة، أو سببُ الرفض. */
+export type CdpUploadResult = { readonly ok: true; readonly files: readonly string[] } | { readonly ok: false; readonly why: "not-file" | "missing" }
 interface CdpTarget {
   id: string
   webSocketDebuggerUrl: string
@@ -585,6 +592,76 @@ ${TREE_HELPERS}
     return ok === "yes"
   }
 
+  /**
+   * ن3 — اختيارُ خيارٍ في <select> بمرجعه: بالنصّ أو القيمة (تامّةً ثمّ بادئةً ثمّ احتواءً، بلا حساسيةٍ للحالة)، ثمّ يُبثّ
+   * input وchange كما يفعل المتصفّح كي تراه أُطرُ الواجهة. ما ليس <select> (قائمةٌ مبنيّةٌ بـdiv) يُقال باسمه: يُفتح بـtap ويُختار بـtap/key.
+   */
+  async selectOption(ref: string, choice: string): Promise<CdpSelectResult | undefined> {
+    await this.#guardCurrentPage()
+    if (!/^r\d{1,6}$/.test(ref)) return undefined
+    const json = await this.#eval(
+      `(() => { const el = document.querySelector('[data-abdo-ref="${ref}"]'); if (!el) return "";
+  const want = ${JSON.stringify(choice)}
+  const norm = (s) => String(s == null ? "" : s).trim().toLowerCase().replace(/\\s+/g, " ")
+  if (el.tagName !== "SELECT") return JSON.stringify({ ok: false, why: "not-select", role: el.tagName.toLowerCase() + (el.getAttribute("role") ? "[" + el.getAttribute("role") + "]" : ""), options: [] })
+  const opts = Array.from(el.options)
+  const texts = opts.map((o) => o.text.trim())
+  const w = norm(want)
+  const byExact = opts.findIndex((o) => norm(o.text) === w || norm(o.value) === w || norm(o.label) === w)
+  const byPrefix = byExact >= 0 ? byExact : opts.findIndex((o) => norm(o.text).startsWith(w))
+  const idx = byPrefix >= 0 ? byPrefix : opts.findIndex((o) => norm(o.text).includes(w))
+  if (idx < 0) return JSON.stringify({ ok: false, why: "no-option", role: "combobox", options: texts.slice(0, 40) })
+  el.selectedIndex = idx
+  el.dispatchEvent(new Event("input", { bubbles: true }))
+  el.dispatchEvent(new Event("change", { bubbles: true }))
+  const picked = el.options[el.selectedIndex]
+  return JSON.stringify({ ok: true, picked: picked ? picked.text.trim() : "", value: picked ? String(picked.value) : "", index: el.selectedIndex, total: opts.length }) })()`,
+    )
+    try { return json ? (JSON.parse(json) as CdpSelectResult) : undefined } catch { return undefined }
+  }
+
+  /**
+   * ن3 — رفعُ ملفّاتٍ إلى <input type=file> بمرجعه عبر DOM.setFileInputFiles (المسارُ الذي يفتحه المتصفّح نفسُه، لا نقرٌ على حوار
+   * النظام). المسارُ حُكم قبل الوصول هنا (داخل المشروع، ليس سرّاً)؛ وما استقرّ يُقرأ من الحقل بعدها — «رفعتُ» ادّعاءٌ حتى تُقرأ الأسماء.
+   */
+  async setFiles(ref: string, files: readonly string[]): Promise<CdpUploadResult | undefined> {
+    await this.#guardCurrentPage()
+    if (!/^r\d{1,6}$/.test(ref) || files.length === 0) return undefined
+    const kind = await this.#eval(`(() => { const el = document.querySelector('[data-abdo-ref="${ref}"]'); if (!el) return "missing"; return el.tagName === "INPUT" && (el.type || "").toLowerCase() === "file" ? "file" : "other" })()`)
+    if (kind === "missing") return { ok: false, why: "missing" }
+    if (kind !== "file") return { ok: false, why: "not-file" }
+    const handle = (await this.#send("Runtime.evaluate", { expression: `document.querySelector('[data-abdo-ref="${ref}"]')`, returnByValue: false })) as { result?: { objectId?: string; subtype?: string } }
+    const objectId = handle?.result?.objectId
+    if (objectId === undefined || handle?.result?.subtype === "null") return { ok: false, why: "missing" }
+    await this.#send("DOM.enable", {}).catch(() => undefined)
+    await this.#send("DOM.setFileInputFiles", { files: [...files], objectId })
+    await this.#send("Runtime.releaseObject", { objectId }).catch(() => undefined)
+    const names = await this.#eval(`(() => { const el = document.querySelector('[data-abdo-ref="${ref}"]'); if (!el || !el.files) return "[]"; return JSON.stringify(Array.from(el.files).map((f) => f.name + " (" + f.size + " بايت)")) })()`)
+    try { return { ok: true, files: JSON.parse(names || "[]") as string[] } } catch { return { ok: true, files: [] } }
+  }
+
+  /** ن3 — سحبٌ بالماوس الموثوق: ضغطٌ عند المصدر، حركةٌ على خطواتٍ، إفلاتٌ عند الهدف — كما يفعل إصبع المشغّل (يخدم السحبَ المبنيّ على أحداث المؤشّر). */
+  async dragTo(from: { readonly x: number; readonly y: number }, to: { readonly x: number; readonly y: number }): Promise<void> {
+    await this.#guardCurrentPage()
+    await this.#send("Input.dispatchMouseEvent", { type: "mouseMoved", x: from.x, y: from.y })
+    await this.#send("Input.dispatchMouseEvent", { type: "mousePressed", x: from.x, y: from.y, button: "left", buttons: 1, clickCount: 1 })
+    const steps = 8
+    for (let i = 1; i <= steps; i += 1) {
+      const x = Math.round(from.x + ((to.x - from.x) * i) / steps), y = Math.round(from.y + ((to.y - from.y) * i) / steps)
+      await this.#send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "left", buttons: 1 })
+    }
+    await this.#send("Input.dispatchMouseEvent", { type: "mouseReleased", x: to.x, y: to.y, button: "left", buttons: 0, clickCount: 1 })
+  }
+
+  /** ن3 — سحبُ HTML5 (draggable/ondrop) بأحداث DragEvent وDataTransfer مشترَك بين المصدر والهدف — تكملةٌ للماوس حين تعتمد الصفحةُ على واجهة السحب لا على المؤشّر. */
+  async dragHtml5(fromRef: string, toRef: string): Promise<boolean> {
+    await this.#guardCurrentPage()
+    if (!/^r\d{1,6}$/.test(fromRef) || !/^r\d{1,6}$/.test(toRef)) return false
+    const ok = await this.#eval(`(() => { const a = document.querySelector('[data-abdo-ref="${fromRef}"]'), b = document.querySelector('[data-abdo-ref="${toRef}"]'); if (!a || !b) return "no";
+  const dt = new DataTransfer(); const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }))
+  fire(a, "dragstart"); fire(b, "dragenter"); fire(b, "dragover"); fire(b, "drop"); fire(a, "dragend"); return "yes" })()`)
+    return ok === "yes"
+  }
   /** ب3 — تحويمٌ فوق موضع: يُظهر القوائمَ والتلميحات كما يفعل المؤشّر. */
   async hoverAt(x: number, y: number): Promise<void> {
     await this.#guardCurrentPage()

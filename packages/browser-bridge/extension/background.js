@@ -16,8 +16,14 @@ const settings = async () => {
   return { port: Number(stored.port) || DEFAULT_PORT, token: String(stored.token || "") }
 }
 
-const activeTab = async () => {
-  const [tab] = await api.tabs.query({ active: true, lastFocusedWindow: true })
+// التبويبُ الفعّال بسلّم بدائل: النافذةُ المركَّزة أخيراً قد تعود فارغةً بعد إعادة تشغيل عامل الخدمة (MV3) أو حين تكون النافذةُ
+// المركَّزة غيرَ عاديّة (مقيس 09-15: «no active tab» وكروم مفتوح) — فتُسأل النوافذُ العاديّة ثمّ أيُّ تبويبٍ فعّال، و`open` ينشئ تبويباً.
+const activeTab = async ({ createIfNone = false } = {}) => {
+  const pick = (tabs) => (tabs || []).find((t) => t && typeof t.id === "number")
+  let tab = pick(await api.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []))
+  if (!tab) tab = pick(await api.tabs.query({ active: true, windowType: "normal" }).catch(() => []))
+  if (!tab) tab = pick(await api.tabs.query({ active: true }).catch(() => []))
+  if (!tab && createIfNone) tab = await api.tabs.create({ url: "about:blank", active: true })
   if (!tab || typeof tab.id !== "number") throw new Error("no active tab")
   return tab
 }
@@ -37,7 +43,7 @@ const READ_TREE = () => {
     if (t === "button") return "button"
     if (t === "select") return "combobox"
     if (t === "textarea") return "textbox"
-    if (t === "input") { const type = (el.getAttribute("type") || "text").toLowerCase(); return type === "password" ? "textbox:password" : type === "checkbox" || type === "radio" ? type : type === "submit" || type === "button" ? "button" : "textbox" }
+    if (t === "input") { const type = (el.getAttribute("type") || "text").toLowerCase(); return type === "password" ? "textbox:password" : type === "file" ? "textbox:file" : type === "checkbox" || type === "radio" ? type : type === "submit" || type === "button" ? "button" : "textbox" }
     if (/^h[1-6]$/.test(t)) return "heading"
     return el.getAttribute("role") || t
   }
@@ -198,6 +204,51 @@ const INSPECT = (mode, target) => {
   return JSON.stringify(out)
 }
 
+// ن3 — قائمةٌ منسدلة أصليّة: مطابقةُ الخيار بالنصّ/القيمة (تامّةً ثمّ بادئةً ثمّ احتواءً) ثمّ input/change كما يفعل المتصفّح.
+const SELECT_OPTION = (ref, want) => {
+  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  if (!el) return null
+  const norm = (s) => String(s == null ? "" : s).trim().toLowerCase().replace(/\s+/g, " ")
+  if (el.tagName !== "SELECT") return { ok: false, why: "not-select", role: el.tagName.toLowerCase(), options: [] }
+  const opts = Array.from(el.options)
+  const w = norm(want)
+  let idx = opts.findIndex((o) => norm(o.text) === w || norm(o.value) === w || norm(o.label) === w)
+  if (idx < 0) idx = opts.findIndex((o) => norm(o.text).startsWith(w))
+  if (idx < 0) idx = opts.findIndex((o) => norm(o.text).includes(w))
+  if (idx < 0) return { ok: false, why: "no-option", role: "combobox", options: opts.map((o) => o.text.trim()).slice(0, 40) }
+  el.selectedIndex = idx
+  el.dispatchEvent(new Event("input", { bubbles: true }))
+  el.dispatchEvent(new Event("change", { bubbles: true }))
+  const picked = el.options[el.selectedIndex]
+  return { ok: true, picked: picked ? picked.text.trim() : "", value: picked ? String(picked.value) : "", index: el.selectedIndex, total: opts.length }
+}
+
+const FILE_INPUT_KIND = (ref) => {
+  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  if (!el) return "missing"
+  return el.tagName === "INPUT" && (el.type || "").toLowerCase() === "file" ? "file" : "other"
+}
+
+const READ_FILES = (ref) => {
+  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  if (!el || !el.files) return []
+  return Array.from(el.files).map((f) => f.name + " (" + f.size + " بايت)")
+}
+
+// ن3 — سحبُ HTML5 بأحداث DragEvent وDataTransfer مشترَك (تكملةٌ للماوس الموثوق أو بديلُه في المسار الاصطناعيّ).
+const SYNTH_DRAG = (fromRef, toRef) => {
+  const a = document.querySelector('[data-abdo-ref="' + fromRef + '"]'), b = document.querySelector('[data-abdo-ref="' + toRef + '"]')
+  if (!a || !b) return null
+  const dt = new DataTransfer()
+  const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }))
+  const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect()
+  const pt = (r) => ({ clientX: Math.round(r.x + r.width / 2), clientY: Math.round(r.y + r.height / 2), bubbles: true, cancelable: true, buttons: 1 })
+  a.dispatchEvent(new PointerEvent("pointerdown", pt(ra))); a.dispatchEvent(new MouseEvent("mousedown", pt(ra)))
+  fire(a, "dragstart"); fire(b, "dragenter"); fire(b, "dragover"); fire(b, "drop"); fire(a, "dragend")
+  b.dispatchEvent(new PointerEvent("pointerup", pt(rb))); b.dispatchEvent(new MouseEvent("mouseup", pt(rb)))
+  return { mode: "synthetic" }
+}
+
 const inPage = async (tabId, func, args = []) => {
   const [frame] = await api.scripting.executeScript({ target: { tabId }, func, args })
   return frame && frame.result
@@ -213,7 +264,7 @@ const withDebugger = async (tabId, work) => {
 }
 
 const perform = async (action, args) => {
-  const tab = await activeTab()
+  const tab = await activeTab({ createIfNone: action === "open" })
   switch (action) {
     case "hello": return { trusted: TRUSTED_INPUT, ua: navigator.userAgent.slice(0, 120), version: api.runtime.getManifest().version }
     case "page": return inPage(tab.id, READ_TREE)
@@ -260,6 +311,40 @@ const perform = async (action, args) => {
         await send("Input.dispatchKeyEvent", { type: "keyUp", key: args.key, windowsVirtualKeyCode: vk })
         return { mode: "trusted" }
       })
+    }
+    case "select": {
+      const r = await inPage(tab.id, SELECT_OPTION, [args.ref, String(args.text)])
+      if (!r) throw new Error("element not found")
+      return r
+    }
+    case "upload": {
+      // رفعٌ بلا حوار نظام: DOM.setFileInputFiles عبر المنقّح على كائن الحقل — يحتاج صلاحيّةَ debugger (كروم/إيدج)؛ سفاري بلا منقّح يُقال له.
+      const kind = await inPage(tab.id, FILE_INPUT_KIND, [args.ref])
+      if (kind === "missing") return null
+      if (kind !== "file") return { ok: false, why: "not-file" }
+      if (!TRUSTED_INPUT) return { ok: false, why: "upload needs the debugger permission (Chrome/Edge)" }
+      return withDebugger(tab.id, async (send) => {
+        const handle = await send("Runtime.evaluate", { expression: "document.querySelector('[data-abdo-ref=\"" + String(args.ref) + "\"]')", returnByValue: false })
+        const objectId = handle && handle.result && handle.result.objectId
+        if (!objectId) return null
+        await send("DOM.enable", {})
+        await send("DOM.setFileInputFiles", { files: [String(args.path)], objectId })
+        const files = await inPage(tab.id, READ_FILES, [args.ref])
+        return { ok: true, files: Array.isArray(files) ? files : [] }
+      })
+    }
+    case "drag": {
+      const from = await inPage(tab.id, LOCATE, [args.from]); const to = await inPage(tab.id, LOCATE, [args.to])
+      if (!from || !to) throw new Error("element not found")
+      if (!TRUSTED_INPUT) { const r = await inPage(tab.id, SYNTH_DRAG, [args.from, args.to]); if (!r) throw new Error("element not found"); return r }
+      await withDebugger(tab.id, async (send) => {
+        await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: from.x, y: from.y })
+        await send("Input.dispatchMouseEvent", { type: "mousePressed", x: from.x, y: from.y, button: "left", buttons: 1, clickCount: 1 })
+        for (let i = 1; i <= 8; i += 1) await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: Math.round(from.x + ((to.x - from.x) * i) / 8), y: Math.round(from.y + ((to.y - from.y) * i) / 8), button: "left", buttons: 1 })
+        await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: to.x, y: to.y, button: "left", buttons: 0, clickCount: 1 })
+      })
+      await inPage(tab.id, SYNTH_DRAG, [args.from, args.to])
+      return { mode: "trusted" }
     }
     case "shot": return api.tabs.captureVisibleTab(tab.windowId, { format: "png" })
     default: throw new Error("unknown action")

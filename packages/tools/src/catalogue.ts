@@ -120,6 +120,9 @@ export const TOOLS: readonly ToolSpec[] = [
   { name: "shot", effect: "read", usage: "shot [full]", summary: "لقطةُ شاشةٍ للصفحة — إلى اللوحة، وإلى نموذج الرؤية في النداء التالي؛ «shot full» يمرّر الصفحةَ كلَّها ويلتقطها بلاطاتٍ (حتى ٨) تصل النموذجَ أربعاً في كلّ نداء", agentCallable: true, runner: "surface" },
   { name: "scroll", effect: "read", usage: "scroll <up|down|top|bottom> [عدد]", summary: "تمريرٌ بعجلة الماوس في الصفحة الموصولة", agentCallable: true, runner: "surface" },
   { name: "hover", effect: "read", usage: "hover <مرجع>", summary: "تحويمُ المؤشّر فوق عنصرٍ بمرجعه", agentCallable: true, runner: "surface" },
+  { name: "select", effect: "outside-workspace", usage: "select <مرجع> <نصّ الخيار>", summary: "اختيارُ خيارٍ في قائمةٍ منسدلة (combobox من page) بنصّه أو قيمته — تُقرأ القائمةُ بعدها فإن لم يطابق قيل؛ وما ليس select أصليّاً يُفتح بـtap ويُختار بـtap/key", agentCallable: true, runner: "surface" },
+  { name: "upload", effect: "outside-workspace", usage: "upload <مرجع> <مسار ملفّ داخل المشروع>", summary: "رفعُ ملفٍّ إلى حقل ملفّ (textbox:file من page) بلا حوار نظام — الملفُّ من داخل المشروع فقط، ولا ملفّاتِ اعتماد؛ يُقرأ الحقلُ بعدها", agentCallable: true, runner: "surface" },
+  { name: "drag", effect: "outside-workspace", usage: "drag <مرجعُ المصدر> <مرجعُ الهدف>", summary: "سحبُ عنصرٍ وإفلاتُه على آخر بمرجعيهما (ماوسٌ موثوق ثمّ أحداثُ سحب HTML5) — أعد page لترى الأثر", agentCallable: true, runner: "surface" },
   { name: "key", effect: "outside-workspace", usage: "key <Enter|Tab|Escape|…>", summary: "ضغطةُ مفتاحٍ موثوقة (قد تُرسل نموذجاً)", agentCallable: true, runner: "surface" },
   // ذ9هـ — أدواتي في المتصفّح: العثورُ على العنصر بدل قراءة الشجرة كاملةً، وقراءةُ طرفيّة الصفحة بدل تخمين العطب.
   // م12 — إغلاقُ الطبقة العائمة (مقيس 09-14: نافذةُ لغة Google أوقفت النموذج): يقرأ الصفحةَ ويختار الإغلاقَ الأسلم ثمّ ينقر بمسار tap.

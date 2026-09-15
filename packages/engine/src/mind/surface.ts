@@ -34,6 +34,10 @@ export type SurfaceAction =
   | { readonly kind: "read_text"; readonly ref?: string }
   // ب5 — تسليمُ حقلٍ للمستخدم: تركيزٌ بلا كتابة — الاعتمادُ يُدخله المالك بيده.
   | { readonly kind: "handoff"; readonly ref: string; readonly generation: number }
+  // ن3 — قائمةٌ منسدلة، رفعُ ملفّ، سحبٌ وإفلات: إدخالٌ في عالمٍ خارجيّ كالنقر والكتابة.
+  | { readonly kind: "select"; readonly ref: string; readonly generation: number; readonly choice: string }
+  | { readonly kind: "upload"; readonly ref: string; readonly generation: number; readonly file: string }
+  | { readonly kind: "drag"; readonly ref: string; readonly to: string; readonly generation: number }
 
 /** ما يصنّفه العقد لبوابة النمط. */
 export const classify = (action: SurfaceAction): RequestKind => {
@@ -50,6 +54,9 @@ export const classify = (action: SurfaceAction): RequestKind => {
     case "click":
     case "type":
     case "key":
+    case "select":
+    case "upload":
+    case "drag":
       // الإدخال أثرٌ على عالمٍ خارجيّ لا يملك تراجعاً — أقصى صنفٍ عندنا
       return "outside-workspace"
   }
@@ -82,7 +89,7 @@ export interface SurfaceState {
  * حكمُ العقد على فعلٍ قبل تنفيذه. لا يلمس شبكةً ولا سطحاً — لهذا يُقاس.
  */
 export const judge = (state: SurfaceState, action: SurfaceAction): Verdict => {
-  if (action.kind === "click" || action.kind === "type" || action.kind === "hover" || action.kind === "handoff") {
+  if (action.kind === "click" || action.kind === "type" || action.kind === "hover" || action.kind === "handoff" || action.kind === "select" || action.kind === "upload" || action.kind === "drag") {
     if (action.generation !== state.generation) {
       return {
         ok: false,
@@ -155,6 +162,9 @@ const describe = (a: SurfaceAction): string => {
     case "key": return `اضغط ${a.key}`
     case "read_text": return a.ref === undefined ? "اقرأ النصّ" : `اقرأ نصّ ${a.ref}`
     case "handoff": return `سلّم ${a.ref} للمستخدم`
+    case "select": return `اختر في ${a.ref}: ${a.choice.slice(0, 40)}`
+    case "upload": return `ارفع إلى ${a.ref}: ${a.file.slice(0, 60)}`
+    case "drag": return `اسحب ${a.ref} إلى ${a.to}`
   }
 }
 

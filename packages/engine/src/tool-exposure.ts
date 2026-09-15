@@ -5,7 +5,7 @@
  * ينفّذ أيَّ أداةٍ مسجَّلة سُمّيت باسمها، فلا تُحجب قدرةٌ، إنّما تُوفَّر التوكنات على ما لا يلزم.
  */
 export const TOOL_FAMILIES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  browser: ["ui", "page", "open", "tap", "fill", "shot", "scroll", "hover", "key", "find", "dismiss", "wait", "network", "console", "look", "surface", "browser", "bridge"],
+  browser: ["ui", "page", "open", "tap", "fill", "shot", "scroll", "hover", "key", "find", "dismiss", "wait", "network", "console", "look", "surface", "browser", "bridge", "select", "upload", "drag"],
   desktop: ["desk"],
   delegation: ["team", "delegate", "handoff", "agents"],
 })
