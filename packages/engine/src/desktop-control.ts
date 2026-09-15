@@ -48,7 +48,7 @@ export interface DesktopRunner { run(script: string, timeoutMs: number): Promise
 /** أفعالُ الإدخال: تحتاج نافذةً مربوطةً وتحقّقاً من المقدّمة قبل الحقن. القراءةُ (لقطة/نوافذ/تركيز) لا. */
 export const INPUT_KINDS: ReadonlySet<DesktopAction["kind"]> = new Set(["click", "type", "key", "scroll", "set", "press"] as const)
 
-export const DESKTOP_USAGE = "الصيغة: desk open <برنامج|مسار> | desk shot [screen] | desk windows | desk focus <عنوان النافذة | pid:رقم> | desk ui [عمق] | desk set <مرجع> <نص> | desk press <مرجع> | desk click <x> <y> [right|double] | desk type <نص> | desk key <Enter|Tab|Esc|ctrl+s|alt+f4|win|…> | desk scroll <up|down> [عدد] — والإحداثيّاتُ من زاوية النافذة المركَّزة العليا اليسرى (بكسلاتٌ فعليّة كاللقطة)"
+export const DESKTOP_USAGE = "الصيغة: desk open <برنامج|مسار> | desk wait <نصّ> [ث] | desk shot [screen] | desk windows | desk focus <عنوان النافذة | pid:رقم> | desk ui [عمق] | desk set <مرجع> <نص> | desk press <مرجع> | desk click <x> <y> [right|double] | desk type <نص> | desk key <Enter|Tab|Esc|ctrl+s|alt+f4|win|…> | desk scroll <up|down> [عدد] — والإحداثيّاتُ من زاوية النافذة المركَّزة العليا اليسرى (بكسلاتٌ فعليّة كاللقطة)"
 export const UI_DEFAULT_DEPTH = 8, UI_MAX_DEPTH = 14, UI_ELEMENT_CAP = 400
 export const NEEDS_FOCUS = `لا نافذةَ مربوطة: ركّز نافذةً أوّلاً بـ«desk focus <جزءٌ من العنوان>» — الإدخالُ لا يُرسَل إلى «أيّ نافذةٍ في المقدّمة». ${DESKTOP_USAGE}`
 

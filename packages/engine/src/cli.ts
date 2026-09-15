@@ -92,7 +92,7 @@ import { ensureExtensionPaired, launchBrowserWindows, runningBrowsersWindows } f
 import { readBridgePairing } from "./mcp-servers/chrome-bridge"
 import { RELEASE_LESSONS_APPLIED_FILE, RELEASE_LESSONS_FILE, applyReleaseLessons, releaseLessonsLine } from "./release-lessons"
 import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
-import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, parseGateMode, type GateDecision } from "./front-gate"
+import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, normalizeArabic, parseGateMode, type GateDecision } from "./front-gate"
 import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"
 import { SqliteFactStore, validFor, type FactKind } from "@abdo/memory"
 import { packageIdentityViolation, parallelApiRouteViolation, projectDomainViolation, projectIdentityViolation } from "./project-identity-guard"
@@ -3228,6 +3228,28 @@ const runServeShell = async (): Promise<void> => {
         // بصنف outside-workspace؛ القراءةُ (لقطة/نوافذ) بلا بوّابة لكنّها لا تغادر الجهاز إلا إلى نموذج الرؤية الذي ضبطه المستخدم.
         if (loadSettings().desktopControlEnabled !== true) return denied("رُفض التحكّم بسطح المكتب: «تحكّم سطح المكتب» مطفأٌ — فعّله من الإعدادات ← التشغيل والأمان (كلُّ فعلٍ يبقى بموافقتك)، أو استعمل متصفّح الوكيل (open/page/tap/fill). | Desktop control is switched off in this app: Settings → Runtime & safety → «Desktop control». Only the user can enable it — ask them, then retry; no other tool reaches the desktop.", "policy_denied")
         const { parseDesktopCommand, runDesktop } = await import("./desktop-control")
+        // ن4 — desk wait <نصّ> [ث]: انتظارُ نافذةٍ بعنوانها أو عنصرٍ باسمه في النافذة المربوطة (قراءةٌ بلا بوّابة).
+        if (/^wait\s+/u.test(rest.trim())) {
+          const m = /^wait\s+(.*?)(?:\s+(\d{1,2}))?\s*$/u.exec(rest.trim())
+          const needle = (m?.[1] ?? "").replace(/^["'«»]+|["'«»]+$/gu, "").trim()
+          if (needle.length === 0) return invalid("desk wait <نصّ> [ثوانٍ ≤ 60]")
+          const seconds = Math.min(60, Math.max(1, Number.parseInt(m?.[2] ?? "15", 10) || 15))
+          const fold = (s: string) => normalizeArabic(s).toLowerCase()
+          const started = Date.now()
+          const shotsDir = join(STATE_ROOT, "desktop-shots")
+          while (Date.now() - started < seconds * 1000) {
+            const w = await runDesktop({ kind: "windows" }, { shotsDir })
+            const win = w.windows?.find((x) => fold(x.title).includes(fold(needle)))
+            if (win !== undefined) return okText(`ظهرت نافذةُ «${win.title.slice(0, 80)}» (pid ${win.pid}) بعد ${((Date.now() - started) / 1000).toFixed(1)} ث — desk focus pid:${win.pid} ثمّ desk ui.`)
+            if (desktopBound !== undefined) {
+              const ui = await runDesktop({ kind: "ui", depth: 8 }, { shotsDir, bound: desktopBound })
+              const el = ui.elements?.find((e) => fold(`${e.name} ${e.value ?? ""}`).includes(fold(needle)))
+              if (el !== undefined) { desktopUi = { depth: 8, elements: ui.elements! }; return okText(`ظهر u${el.ref} [${el.type}] «${el.name.slice(0, 60)}» في «${desktopBound.title.slice(0, 50)}» بعد ${((Date.now() - started) / 1000).toFixed(1)} ث — المراجعُ محدَّثة؛ desk set/press u${el.ref} مباشرةً.`) }
+            }
+            await new Promise((r) => setTimeout(r, 1000))
+          }
+          return invalid(`لم يظهر «${needle.slice(0, 60)}» خلال ${seconds} ث — لا نافذةَ بهذا العنوان${desktopBound === undefined ? " (ولا نافذةَ مربوطة لفحص عناصرها)" : " ولا عنصرَ بهذا الاسم في النافذة المربوطة"}.`)
+        }
         const action = parseDesktopCommand(rest)
         if ("error" in action) return invalid(action.error)
         // ب11 — **اللقطةُ الشاملة تخرج من الجهاز**: صورةُ كلّ الشاشات (بريدٌ ومحادثاتٌ ومديرُ كلمات مرور) كانت تُلتقط
@@ -3546,6 +3568,24 @@ const runServeShell = async (): Promise<void> => {
     }
     // م12 — dismiss (مقيس 09-14: نافذةُ «Looking for results in English?» أوقفت النموذجَ بعد فشل البحث المنظّم):
     // تقرأ الصفحةَ بالمسار نفسِه (مملوك أو إضافة)، تختار الإغلاقَ الأسلمَ بالمعنى، وتنقره عبر tap الموثوق — لا نقرَ أعمى.
+    // ن4 (أمرُ المالك 09-15): انتظارُ ظهور نصٍّ أو مرجعٍ في الصفحة بعد فعلٍ — استطلاعٌ محدود يسمّي ما ظهر أو لم يظهر، بدل قراءةٍ مبكّرة فتكرار.
+    if (name === "wait") {
+      const m = /^(.*?)(?:\s+(\d{1,2}))?\s*$/u.exec(rest.trim())
+      const needle = (m?.[1] ?? "").replace(/^["'«»]+|["'«»]+$/gu, "").trim()
+      if (needle.length === 0) return "الصيغة: wait <نصّ أو [rN]> [ثوانٍ ≤ 60] — ينتظر ظهورَه في الصفحة"
+      const seconds = Math.min(60, Math.max(1, Number.parseInt(m?.[2] ?? "15", 10) || 15))
+      const fold = (s: string) => normalizeArabic(s).toLowerCase()
+      const started = Date.now()
+      let last = ""
+      while (Date.now() - started < seconds * 1000) {
+        last = await runSurfaceTool("page", "", turnId)
+        if (/^(?:لا سطحَ|رُفض|✕)/u.test(last)) return last
+        const hitLine = last.split("\n").find((l) => fold(l).includes(fold(needle)))
+        if (hitLine !== undefined) return `ظهر «${needle.slice(0, 60)}» بعد ${((Date.now() - started) / 1000).toFixed(1)} ث: ${hitLine.trim().slice(0, 160)}\nأعد page لقراءة الصفحة كاملةً.`
+        await new Promise((r) => setTimeout(r, 800))
+      }
+      return `لم يظهر «${needle.slice(0, 60)}» خلال ${seconds} ث. أوّلُ سطور الصفحة الآن:\n${last.split("\n").slice(0, 8).join("\n")}`
+    }
     if (name === "dismiss") {
       const rendered = await runSurfaceTool("page", "", turnId)
       if (/^(?:لا سطحَ|رُفض|✕)/u.test(rendered)) return rendered
@@ -5534,7 +5574,10 @@ const runServeShell = async (): Promise<void> => {
         }
       }
       // بوابات القبول تُشتقّ من الهدف الفعليّ: هدف الدور السابق عند الاستئناف، وإلا نصّ الدور.
-      const requiresBuild = !planningOnly && /(?:\bbuild\b|البناء|ابنِ?|بناءً|أنشئ|انشئ|إنشاء|انشاء)/iu.test(effectiveGoal)
+      // د7 (مقيس 09-15): «أنشئ ملفّاً» كانت تُشعل بوّابةَ البناء فتطلب npm run build في مشروعٍ بلا سكربت build ويضيفه النموذج — كلماتُ الإنشاء ليست بناءً.
+      const requiresBuild = !planningOnly && /(?:\bbuild\b|البناء|ابنِ?|بناءً)/iu.test(effectiveGoal)
+      // بوّابتا npm تنطبقان حين يعرّف package.json السكربتَ فعلاً؛ حزمةٌ بلا build/typecheck = «لا ينطبق» لا «أضِف سكربتاً لإرضائي».
+      const packageHasScript = (name: string): boolean => { try { const pkg = JSON.parse(readFileSync(join(PROJECT_DIR, "package.json"), "utf8")) as { scripts?: Record<string, unknown> }; return typeof pkg.scripts?.[name] === "string" } catch { return false } }
       const requiresTypecheck = !planningOnly && /(?:\btypecheck\b|type-check|فحص الأنواع|التحقق النوعي)/iu.test(effectiveGoal)
       // next.js أو رمز npm/pnpm مستقلّ أو كلمة «موقع» مستقلّة — «NEXT_ACTION» في نصّ
       // هدفٍ كانت تطابق (قيس 2026-09-02: إيدو جلوبال).
@@ -6048,20 +6091,22 @@ const runServeShell = async (): Promise<void> => {
           if (acceptanceStalls >= 2) break
           continue
         }
-        if (loop.stopReason !== "complete" && requiresTypecheck && !successfulTypecheck && pending === undefined && existsSync(join(PROJECT_DIR, "package.json"))) {
+        if (loop.stopReason !== "complete" && requiresTypecheck && !successfulTypecheck && pending === undefined && packageHasScript("typecheck")) {
           lastStop = "acceptance-pending"
           pending = "run npm run typecheck"
           await emitEvent(turn.id, "↻ توقف النموذج قبل إثبات الأنواع؛ سيُنفذ typecheck تلقائيًا في الحقبة التالية لإنتاج خطأ قابل للإصلاح.")
           continue
         }
-        if (loop.stopReason !== "complete" && requiresBuild && !successfulBuild && pending === undefined && existsSync(join(PROJECT_DIR, "package.json"))) {
+        if (loop.stopReason !== "complete" && requiresBuild && !successfulBuild && pending === undefined && packageHasScript("build")) {
           lastStop = "acceptance-pending"
           pending = "run npm run build"
           await emitEvent(turn.id, "↻ توقف النموذج قبل إثبات البناء؛ سيُنفذ فحص البناء تلقائيًا في الحقبة التالية لإنتاج خطأ قابل للإصلاح.")
           continue
         }
         if (emptyStalls >= 2) break
-        if (loop.stopReason === "complete" && requiresBuild && !successfulBuild) {
+        if (loop.stopReason === "complete" && requiresBuild && !successfulBuild && existsSync(join(PROJECT_DIR, "package.json")) && !packageHasScript("build")) {
+          await emitEvent(turn.id, "↻ شرطُ البناء لا ينطبق: package.json بلا سكربت build — لا يُضاف سكربتٌ لإرضاء البوّابة؛ التحقّقُ بما طُلب.")
+        } else if (loop.stopReason === "complete" && requiresBuild && !successfulBuild) {
           lastStop = "acceptance-pending"
           const hasPackage = existsSync(join(PROJECT_DIR, "package.json"))
           pending = hasPackage ? "run npm run build" : undefined

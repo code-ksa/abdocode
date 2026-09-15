@@ -326,7 +326,7 @@ describe("serve convergence wiring", () => {
   // جزءٌ من الربط؛ وحدات القرار في front-gate.test، وملاحظة الدفتر في token-economy-wiring.
   test("routerGate is a flat tri-state setting (default off = nothing constructed), validated by name, read once per turn", async () => {
     const desktop = await Bun.file(new URL("../../desktop/ui/index.html", import.meta.url)).text()
-    expect(source).toContain('import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, parseGateMode, type GateDecision } from "./front-gate"')
+    expect(source).toContain('import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, normalizeArabic, parseGateMode, type GateDecision } from "./front-gate"') // ن4 (09-15): normalizeArabic لمطابقة wait
     // المفتاحان مسطّحان في Settings/SETTINGS_KEYS — لا بلاجين منطقي (اللوحة تسلسل [data-plugin] كمنطقيّات).
     expect(source).toContain('"railPolicy", "routerGate", "gateModel", "plugins"')
     expect(source).toContain('routerGate?: "off" | "cheap" | "auto"')
