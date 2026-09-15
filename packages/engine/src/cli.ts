@@ -91,6 +91,7 @@ import { dismissReceipt, parseRenderedTree, pickDismissTarget } from "./overlay-
 import { ensureExtensionPaired, launchBrowserWindows, runningBrowsersWindows } from "./extension-pairing"
 import { readBridgePairing } from "./mcp-servers/chrome-bridge"
 import { RELEASE_LESSONS_APPLIED_FILE, RELEASE_LESSONS_FILE, applyReleaseLessons, releaseLessonsLine } from "./release-lessons"
+import { windowAllowedByTask } from "./desktop-name-gate"
 import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
 import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, normalizeArabic, parseGateMode, type GateDecision } from "./front-gate"
 import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"
@@ -3240,7 +3241,7 @@ const runServeShell = async (): Promise<void> => {
           while (Date.now() - started < seconds * 1000) {
             const w = await runDesktop({ kind: "windows" }, { shotsDir })
             const win = w.windows?.find((x) => fold(x.title).includes(fold(needle)))
-            if (win !== undefined) return okText(`ظهرت نافذةُ «${win.title.slice(0, 80)}» (pid ${win.pid}) بعد ${((Date.now() - started) / 1000).toFixed(1)} ث — desk focus pid:${win.pid} ثمّ desk ui.`)
+            if (win !== undefined) { desktopTrustedHwnds.add(win.hwnd); return okText(`ظهرت نافذةُ «${win.title.slice(0, 80)}» (pid ${win.pid}) بعد ${((Date.now() - started) / 1000).toFixed(1)} ث — desk focus pid:${win.pid} ثمّ desk ui.`) }
             if (desktopBound !== undefined) {
               const ui = await runDesktop({ kind: "ui", depth: 8 }, { shotsDir, bound: desktopBound })
               const el = ui.elements?.find((e) => fold(`${e.name} ${e.value ?? ""}`).includes(fold(needle)))
@@ -3258,13 +3259,20 @@ const runServeShell = async (): Promise<void> => {
         if (action.kind === "shot" && action.scope !== "screen" && desktopBound === undefined) {
           return invalid("لا نافذةَ مربوطة: «desk focus <جزءٌ من العنوان>» ثمّ أعد اللقطة — أو اطلب صراحةً «desk shot screen» لتصوير الشاشة كلِّها (تحتاج موافقتك، وتخرج إلى نموذج الرؤية إن ضُبط).")
         }
+        // أ2 — الإدخالُ في نافذةٍ لم يسمِّها المستخدمُ ولم يفتحها الوكيلُ ولم تظهر نتيجةَ فعله يُرفض باسمه قبل أيّ موافقة (حتى في «صلاحيّة كاملة»).
+        if (desktopBound !== undefined && ["click", "type", "key", "scroll", "set", "press"].includes(action.kind)) {
+          const verdict = windowAllowedByTask({ title: desktopBound.title, pid: desktopBoundPid, hwnd: desktopBound.hwnd, taskText: desktopTaskText, trustedHwnds: desktopTrustedHwnds })
+          if (!verdict.ok) return denied(verdict.why, "policy_denied")
+          desktopTrustedHwnds.add(desktopBound.hwnd)
+        }
         if (action.kind !== "windows" && action.kind !== "ui" && (action.kind !== "shot" || action.scope === "screen")) {
           const ok = await gate(turnId, "outside-workspace", action.kind === "shot" ? "لقطةٌ لكامل الشاشة (تُرسل إلى نموذج الرؤية إن ضُبط)" : `سطح المكتب: desk ${rest.slice(0, 160)}`, spec.name)
           if (!ok) return denied("رُفض فعلُ سطح المكتب — لم تُمنح الموافقة.", "policy_denied")
         }
         const result = await runDesktop(action, { shotsDir: join(STATE_ROOT, "desktop-shots"), ...(desktopBound === undefined ? {} : { bound: desktopBound }), ...(desktopUi === undefined ? {} : { ui: desktopUi }), ...(desktopKnownHwnds === undefined ? {} : { knownHwnds: desktopKnownHwnds }) })
         if (result.windows !== undefined) desktopKnownHwnds = result.windows.map((w) => w.hwnd)
-        if (result.bound !== undefined) { if (result.bound.hwnd !== desktopBound?.hwnd) desktopUi = undefined; desktopBound = result.bound }
+        if (result.bound !== undefined) { if (result.bound.hwnd !== desktopBound?.hwnd) desktopUi = undefined; desktopBound = result.bound; desktopBoundPid = desktopPidByHwnd.get(result.bound.hwnd) ?? Number((result as { text: string }).text.match(/pid (\d+)/)?.[1] ?? 0); if (action.kind === "open") desktopTrustedHwnds.add(result.bound.hwnd) }
+        if (action.kind === "windows" && result.windows !== undefined) { const known = new Set(desktopKnownHwnds ?? []); for (const w of result.windows) { desktopPidByHwnd.set(w.hwnd, w.pid); if (desktopKnownHwnds !== undefined && !known.has(w.hwnd)) desktopTrustedHwnds.add(w.hwnd) } }
         if (action.kind === "ui" && result.elements !== undefined) desktopUi = { depth: action.depth, elements: result.elements }
         if (result.ok && result.shot !== undefined) {
           try {
@@ -3510,10 +3518,15 @@ const runServeShell = async (): Promise<void> => {
   // ب6 — النافذةُ التي ركّزها الوكيل بـdesk focus: **مقبضُها** هو الحدّ (يُتحقَّق منه داخل سكربت الفعل قبل أوّل حرف)،
   // ومستطيلُها يُعاد قياسُه هناك أيضاً. بلا ربطٍ لا إدخالَ أصلاً — لا حقنَ في «أيّ نافذةٍ في المقدّمة».
   let desktopBound: import("./desktop-control").DesktopBound | undefined
+  let desktopBoundPid = 0
+  const desktopPidByHwnd = new Map<number, number>()
   // م6ب — آخرُ شجرة «desk ui» لهذه النافذة: مراجعُ set/press تُطابَق عليها، وتسقط مع تغيّر النافذة المربوطة.
   let desktopUi: import("./desktop-control").UiContext | undefined
   // م6و — النوافذُ التي عدّها آخرُ windows/open: ما يظهر بعدها يُسمّى «جديدة» (قائمةُ اختيار برنامج، حوار).
   let desktopKnownHwnds: readonly number[] | undefined
+  // أ2 — بوّابةُ الاسم: نوافذُ يثق بها الوكيل لأنّه فتحها أو ظهرت نتيجةَ فعله (مقبضاً)، ونصُّ مهمّة الدور الجاري لمطابقة الأسماء.
+  const desktopTrustedHwnds = new Set<number>()
+  let desktopTaskText = ""
   /** لقطةُ الصفحة إلى لوحة القشرة (إطارُ browser-shot الذي كانت الواجهةُ تستمع له بلا باثّ) — للعرض لا للاستدلال. */
   const paneShot = async (): Promise<string> => {
     if (surface === undefined) return ""
@@ -5059,6 +5072,7 @@ const runServeShell = async (): Promise<void> => {
       ? (() => { try { return pickPriorGoal(factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts, memorySearchEnabled, currentSession)) } catch { return undefined } })()
       : undefined
     const effectiveGoal = priorGoal?.goal ?? turn.body
+    desktopTaskText = `${turn.body}\n${priorGoal?.goal ?? ""}`
     currentGoalText = turn.body
     turnFamilies = familiesFor(effectiveGoal, turnFamilies)
     // د2 — المحرّك الدلاليّ (plugins.semanticFrame): إطارٌ حتميّ للطلب قبل أوّل نداء —
