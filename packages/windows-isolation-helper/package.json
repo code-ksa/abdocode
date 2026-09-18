@@ -1,0 +1,29 @@
+{
+  "name": "@abdo/windows-isolation-helper",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "CL-16A2-C/D spike: AppContainer + Job Object measurement helper (Rust), its durable resource-lifecycle journal, and their adversarial tests. NOT wired to the production launcher.",
+  "exports": {
+    ".": "./src/journal.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "powershell -ExecutionPolicy Bypass -File build.ps1",
+    "typecheck": "tsgo --noEmit",
+    "test": "bun scripts/sweep.ts",
+    "test:all-at-once": "bun test"
+  },
+  "dependencies": {
+    "@abdo/contracts": "workspace:*",
+    "@abdo/event-store": "workspace:*",
+    "@abdo/persistence-sqlite": "workspace:*",
+    "@abdo/tools": "workspace:*",
+    "@abdo/builtin-tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "ralph-loop",
+  "name": "Ralph loop (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Continuous self-referential AI loops for interactive iterative development, implementing the Ralph Wiggum technique. Run Abdo Code in a while-true loop with the same prompt until task completion.",
+  "skills": [
+    "skills/cmd-cancel-ralph",
+    "skills/cmd-help",
+    "skills/cmd-ralph-loop"
+  ],
+  "mcpServers": []
+}

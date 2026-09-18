@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/grants",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "CL-03 \u2014 durable, event-sourced approval grants. Atomic reservation before any side effect; state rebuilt from events, never process memory.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/contracts": "workspace:*",
+    "@abdo/control-contracts": "workspace:*",
+    "@abdo/event-store": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

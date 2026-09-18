@@ -1,0 +1,47 @@
+---
+const layers = [
+  { name: "النواة", detail: "تنفيذ Rust حتمي بعقود ثنائية دقيقة وسجل أدلة قابل للتحقق." },
+  { name: "السياسة", detail: "لا توسّع للصلاحيات من داخل الطلب، والقرارات الحساسة تحتاج موافقة مرتبطة بالعمل نفسه." },
+  { name: "الأدوات", detail: "فهرس واحد مملوك للمشروع، وعامل محدود يرفض ما لا يستطيع عزله أو التحقق منه." },
+  { name: "المنتج", detail: "اثنتان وخمسون حزمة مرتبطة بجذور تشغيل وبناء واختبار معلنة." },
+]
+---
+
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content="الواجهة الرسمية لعبدو كود" />
+    <title>عبدو كود</title>
+    <style>
+      :root { color-scheme: light; font-family: Tahoma, Arial, sans-serif; background: #f5f2ea; color: #171611; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 15% 15%, #fff8d8 0, transparent 32%), #f5f2ea; }
+      main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: 72px 0; }
+      .eyebrow { color: #986d00; font-weight: 700; letter-spacing: .04em; }
+      h1 { max-width: 780px; margin: 14px 0 20px; font-size: clamp(44px, 8vw, 86px); line-height: 1.04; }
+      .lead { max-width: 720px; color: #575348; font-size: clamp(18px, 2.3vw, 24px); line-height: 1.9; }
+      .status { display: inline-flex; align-items: center; gap: 10px; margin-top: 24px; padding: 10px 16px; border: 1px solid #d7cda9; border-radius: 999px; background: #fffdf5; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: #b88900; box-shadow: 0 0 0 5px #f5e9bd; }
+      section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 64px; }
+      article { min-height: 190px; padding: 28px; border: 1px solid #ded8c7; border-radius: 24px; background: rgba(255,255,255,.72); box-shadow: 0 18px 50px rgba(56,45,10,.06); }
+      h2 { margin: 0 0 14px; font-size: 27px; }
+      article p { margin: 0; color: #625d50; line-height: 1.85; }
+      footer { margin-top: 56px; padding-top: 22px; border-top: 1px solid #d8d1bd; color: #716b5d; }
+      @media (max-width: 680px) { main { padding: 42px 0; } section { grid-template-columns: 1fr; margin-top: 42px; } article { min-height: auto; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">منتج مستقل مملوك لعبدو كود</p>
+      <h1>عبدو كود</h1>
+      <p class="lead">بيئة عمل عربية مبنية حول نواة Rust جديدة، بحدود واضحة بين القرار والتنفيذ والأدلة، ومن دون اعتماد تشغيلي على مشاريع أو مستودعات خارجية.</p>
+      <div class="status"><span class="dot"></span><span>الوثائق العامة قيد التجهيز للإصدار</span></div>
+      <section aria-label="طبقات المنتج">
+        {layers.map((layer) => <article><h2>{layer.name}</h2><p>{layer.detail}</p></article>)}
+      </section>
+      <footer>هذه الصفحة ثابتة ولا تتصل بأي خدمة أثناء تشغيلها.</footer>
+    </main>
+  </body>
+</html>

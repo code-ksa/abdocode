@@ -1,0 +1,18 @@
+.ncw-composer-context{width:min(100%,900px);margin:0 auto 8px;box-sizing:border-box;font-size:12px;color:var(--muted,#737373)}
+.ncw-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 4px}.ncw-mode-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ncw-attach,.ncw-attachment button{background:transparent;color:inherit;border:1px solid var(--border,#ddd);border-radius:7px;padding:5px 9px;cursor:pointer;font:inherit}.ncw-attach:hover,.ncw-attachment button:hover{background:var(--hover,#efefed)}
+.ncw-attach:disabled{opacity:.55;cursor:default}.ncw-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.ncw-attachment{display:inline-flex;align-items:center;gap:6px;max-width:100%;border:1px solid var(--border,#ddd);border-radius:9px;padding:4px 6px 4px 10px;color:var(--text,#292929);background:var(--surface,#fff)}.ncw-attachment>span{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ncw-attachment button{border:0;padding:1px 5px;font-size:17px}.ncw-attach:focus-visible,.ncw-attachment button:focus-visible{outline:2px solid #2a7de1;outline-offset:2px}
+
+.ncw-hint{font-size:11px;padding:5px 4px;opacity:.85}.ncw-drop-active{outline:2px solid #2a7de1!important;outline-offset:3px;background:color-mix(in srgb,#2a7de1 8%,var(--surface,#fff))!important}
+.native-shell .ncw-input-surface{border:1px solid var(--ns-line,#dcdcd8);border-radius:11px;background:var(--ns-card,#fff);box-shadow:var(--ns-shadow);overflow:hidden}
+.native-shell .ncw-input-surface:focus-within{border-color:var(--accent,#888)}
+.native-shell .ncw-input-surface #prompt{border:0;border-radius:0;box-shadow:none;background:transparent}
+.ncw-input-surface .ncw-attachments{margin:0;padding:12px 12px 2px;gap:10px}.ncw-input-surface .ncw-attachments:empty{display:none}
+.ncw-image-attachment{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:3px;width:76px;padding:4px;border-radius:8px}
+.ncw-thumbnail{display:block;width:76px;height:64px;object-fit:contain;border-radius:4px;background:var(--ns-card,#fff)}
+.ncw-image-attachment>span{font-size:10px;line-height:13px;max-width:76px;text-align:center}
+.ncw-image-attachment button{position:absolute;top:-6px;right:-6px;width:21px;height:21px;padding:0;border:1px solid var(--ns-line,#ddd);border-radius:50%;background:var(--ns-card,#fff);color:var(--ns-fg,#333);line-height:18px}
+.native-shell #composer:has(.ncw-attachment) #send{top:auto;bottom:36px}
+.native-shell #composer.approving>.ncw-input-surface{display:none}
+/* 09-14: الإرفاقُ أيقونةٌ مستديرة «+» كما في مُدخل كلود؛ المصغّراتُ فوق النصّ كما كانت */
+.ncw-attach-icon{width:30px;height:30px;padding:0;border-radius:50%;font-size:20px;line-height:1;display:inline-flex;align-items:center;justify-content:center}

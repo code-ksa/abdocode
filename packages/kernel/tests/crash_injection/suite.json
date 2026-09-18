@@ -1,0 +1,8 @@
+{
+  "suite": "crash_injection",
+  "targets": [
+    "crates/abdo-runtime/tests/crash_boundaries.rs",
+    "crates/abdo-runtime/tests/no_blind_retry.rs",
+    "crates/abdo-journal/tests/migration_atomicity.rs"
+  ]
+}

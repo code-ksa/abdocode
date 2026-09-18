@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"نافذة عبدو كود: أحداث core فقط — لا shell ولا fs ولا شبكة من الويب-فيو","local":true,"windows":["main","panel-*"],"permissions":["core:default","core:window:allow-set-theme"]}}

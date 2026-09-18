@@ -1,0 +1,78 @@
+{
+  "id": "benchmark-baseline-v1",
+  "frozen": "2026-07-22T12:51:52.886Z",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "v1": {
+    "success": 94,
+    "of": 95,
+    "medianMs": 10938,
+    "medianInputTokens": 6186
+  },
+  "v2": {
+    "success": 78,
+    "of": 95,
+    "medianMs": 3792,
+    "medianInputTokens": 2519.5
+  },
+  "recovery": "5/5",
+  "byCategory": [
+    {
+      "category": "qa",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 8744.5,
+      "v2MedianMs": 2278.5
+    },
+    {
+      "category": "read_search",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 8393,
+      "v2MedianMs": 2843
+    },
+    {
+      "category": "single_file_edit",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 11309,
+      "v2MedianMs": 5207.5
+    },
+    {
+      "category": "multi_file_edit",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 0.7333333333333333,
+      "v1MedianMs": 13203,
+      "v2MedianMs": 7739
+    },
+    {
+      "category": "typescript_fix",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 0.8,
+      "v1MedianMs": 11000.5,
+      "v2MedianMs": 3914
+    },
+    {
+      "category": "tests_diagnose",
+      "v1SuccessRate": 0.9,
+      "v2SuccessRate": 0.1,
+      "v1MedianMs": 16351,
+      "v2MedianMs": 9186
+    },
+    {
+      "category": "git_analysis",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 8484.5,
+      "v2MedianMs": 2928
+    },
+    {
+      "category": "long_multi_tool",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 0.6,
+      "v1MedianMs": 68371,
+      "v2MedianMs": 24635
+    }
+  ],
+  "note": "FROZEN — do not change taskSuccess/fixtures without issuing a new benchmark version. Measured with completed-only taskSuccess (original rules)."
+}

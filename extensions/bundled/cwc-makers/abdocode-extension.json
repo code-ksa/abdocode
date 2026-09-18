@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "cwc-makers",
+  "name": "CWC makers (Abdo Code)",
+  "version": "1.0.0",
+  "description": "Seamless onboarding for the Code-with-Abdo Code Makers Cardputer: one /maker-setup command clones the build-with-claude repo, flashes UIFlow firmware, and installs the Abdo Code Buddy app bundle onto a freshly-plugged-in M5Stack Cardputer-Adv.",
+  "skills": [
+    "skills/cardputer-buddy",
+    "skills/m5-onboard",
+    "skills/cmd-maker-setup"
+  ],
+  "mcpServers": []
+}

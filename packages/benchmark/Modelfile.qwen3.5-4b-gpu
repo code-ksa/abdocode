@@ -1,0 +1,9 @@
+FROM qwen3.5:4b
+
+# The 65,536-token window covers the legacy runtime's larger tool context and
+# still keeps the complete model on the RTX 5070 Laptop GPU.
+PARAMETER num_gpu 99
+PARAMETER num_ctx 65536
+PARAMETER temperature 0
+PARAMETER top_k 20
+PARAMETER top_p 0.95

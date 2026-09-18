@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@abdo/providers",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "Owner-controlled provider catalogue and request preparation; never performs discovery or network I/O.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@abdo/egress": "workspace:*",
+    "@abdo/harness": "workspace:*",
+    "@abdo/model-gateway": "workspace:*",
+    "@abdo/registry": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

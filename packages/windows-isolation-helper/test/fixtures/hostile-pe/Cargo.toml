@@ -1,0 +1,25 @@
+# CL-16A3 MEGA-1 — the ADVERSARIAL fixture for the suspended-create probe.
+#
+# A SEPARATE CRATE ON PURPOSE. This binary exists only to prove that the probe
+# never runs its code, so it must never be reachable from the helper's own build:
+# it is not a `[[bin]]` of `abdo-winiso`, it is not in `helper-manifest.json`,
+# and no production artefact depends on it. A test fixture that ships is not a
+# test fixture.
+#
+# It is built on demand by the test and left in this crate's own target/.
+[package]
+name = "abdo-hostile-pe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+
+[[bin]]
+name = "abdo-hostile-pe"
+path = "src/main.rs"
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+strip = true

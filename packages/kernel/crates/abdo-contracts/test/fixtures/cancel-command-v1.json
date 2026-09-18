@@ -1,0 +1,18 @@
+{
+  "_diagnostic_only": true,
+  "fixture": "cancel-command-v1",
+  "message": "Command.Cancel",
+  "protocol_version": 1,
+  "schema_fingerprint_hex": "e009682bc2574f18ea056af1abe711c9",
+  "frame_length": 87,
+  "frame_hex": "414244430100e009682bc2574f18ea056af1abe711c901003b0000000201000000000000000000000000000000020000000000000000000000000000000300000000000000000000000000000001010400000000000000",
+  "shape": {
+    "tag": "Cancel",
+    "command_id": "1",
+    "cancellation_id": "2",
+    "proposal_id": "3",
+    "scope": "Workspace",
+    "cause": "Root",
+    "requested_at_ms": "4"
+  }
+}

@@ -1,0 +1,49 @@
+[package]
+name = "abdo-winiso"
+version = "0.1.0"
+edition = "2021"
+description = "CL-16A2-C spike: run a process inside a Windows AppContainer + Job Object, with zero capabilities."
+publish = false
+
+# NO DEPENDENCIES, DELIBERATELY.
+#
+# Every Win32 call in this helper is declared by hand in `src/win.rs` against
+# std only. A crate dependency would mean a network fetch at build time and a
+# supply chain this slice has not measured — and the whole point of CL-16A2-C is
+# a helper whose source, toolchain and binary can each be hashed and pinned.
+# There is also no build.rs: nothing runs at build time.
+[dependencies]
+
+[[bin]]
+name = "abdo-winiso"
+path = "src/main.rs"
+
+# P5c2 §5. A DELIBERATELY HOSTILE TARGET, for the tests only.
+#
+# It lives in `src/` rather than `src/bin/` so that build.ps1's source hash —
+# which globs `src/*.rs` WITHOUT recursing — covers it like every other input.
+# A test fixture that can change behaviour while the recorded source hash stays
+# still is exactly the drift this package refuses elsewhere.
+#
+# NOT A TRUSTED ARTEFACT. The manifest records its hash separately and the
+# verifier never accepts it as the helper; nothing in the launch path can reach
+# it. It is named only by the tests that run it AS A TARGET, which is the
+# position an untrusted program occupies anyway.
+[[bin]]
+name = "abdo-hostile-target"
+path = "src/hostile-target.rs"
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+# Determinism inputs, NOT a reproducibility guarantee: no incremental state, no
+# debug info, one codegen unit, in the artefact whose SHA-256 is pinned. These
+# remove several sources of variation but they have NOT been shown to remove all
+# of them — three clean builds of a byte-identical tree produced three different
+# binaries at an identical size (see build.ps1's header). Byte-for-byte
+# reproducibility is unproven and tracked as release debt; the manifest pins the
+# exact artefact that was built, which is what the trust decision rests on.
+debug = false
+strip = true
+incremental = false
+codegen-units = 1

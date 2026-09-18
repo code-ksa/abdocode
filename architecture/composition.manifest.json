@@ -1,0 +1,1991 @@
+{
+  "$schema": "./composition-manifest.schema.json",
+  "schemaVersion": 1,
+  "product": "abdocode",
+  "roots": {
+    "desktop": {
+      "package": "@abdo/desktop",
+      "kind": "process",
+      "entry": "packages/desktop/src-tauri/src/main.rs",
+      "argv": [],
+      "reachability": "manifest",
+      "launches": [
+        "engine-serve"
+      ]
+    },
+    "engine-serve": {
+      "package": "@abdo/engine",
+      "kind": "command",
+      "entry": "packages/engine/src/cli.ts",
+      "argv": [
+        "serve"
+      ],
+      "reachability": "production-imports"
+    },
+    "engine-integration": {
+      "package": "@abdo/engine",
+      "kind": "command",
+      "entry": "packages/engine/src/composition.ts",
+      "argv": [
+        "integration"
+      ],
+      "reachability": "production-imports"
+    },
+    "engine-stack": {
+      "package": "@abdo/engine",
+      "kind": "command",
+      "entry": "packages/engine/src/stack.ts",
+      "argv": [
+        "stack"
+      ],
+      "reachability": "production-imports"
+    },
+    "workspace-quality": {
+      "package": "@abdo/benchmark",
+      "kind": "quality",
+      "entry": "packages/benchmark/src/index.ts",
+      "argv": [],
+      "reachability": "production-imports"
+    },
+    "migration": {
+      "package": "@abdo/migration-v1",
+      "kind": "migration",
+      "entry": "packages/migration-v1/src/index.ts",
+      "argv": [],
+      "reachability": "production-imports"
+    },
+    "transport-quality": {
+      "package": "@abdo/transport-contracts",
+      "kind": "quality",
+      "entry": "packages/transport-contracts/src/index.ts",
+      "argv": [],
+      "reachability": "production-imports"
+    },
+    "ui-library": {
+      "package": "@abdo/ui",
+      "kind": "ui",
+      "entry": "packages/ui/package.json",
+      "argv": [],
+      "reachability": "production-imports"
+    },
+    "public-docs": {
+      "package": "@abdo/web",
+      "kind": "ui",
+      "entry": "packages/web/astro.config.mjs",
+      "argv": [],
+      "reachability": "production-imports"
+    },
+    "release-tools": {
+      "package": "@abdo/script",
+      "kind": "command",
+      "entry": "packages/script/src/index.ts",
+      "argv": [],
+      "reachability": "production-imports"
+    }
+  },
+  "sourcesOfTruth": {
+    "effect-authority": {
+      "package": "@abdo/kernel",
+      "scope": "Effect admission, authority, settlement and verification"
+    },
+    "effect-journal": {
+      "package": "@abdo/kernel",
+      "scope": "Authoritative effect phases and receipts",
+      "durableArtifact": "journal_effects"
+    },
+    "session-lifecycle": {
+      "package": "@abdo/session-runtime",
+      "scope": "Conversation and run lifecycle; never effect authority"
+    },
+    "session-storage": {
+      "package": "@abdo/persistence-sqlite",
+      "scope": "Durable adapter for session events"
+    },
+    "tool-policy": {
+      "package": "@abdo/tools",
+      "scope": "Tool registry, policy decision and enforcement point"
+    },
+    "egress-policy": {
+      "package": "@abdo/egress",
+      "scope": "Fetch destination authorization"
+    },
+    "provider-catalog": {
+      "package": "@abdo/providers",
+      "scope": "Owner-controlled provider definitions"
+    },
+    "registry-semantics": {
+      "package": "@abdo/registry",
+      "scope": "Deterministic registry behavior"
+    },
+    "harness-profiles": {
+      "package": "@abdo/prompting",
+      "scope": "Owned harness profile definitions"
+    },
+    "conversation-ir": {
+      "package": "@abdo/model-gateway",
+      "scope": "Provider-neutral model messages, turns, wire codecs and bounded framing"
+    },
+    "local-transport-contracts": {
+      "package": "@abdo/transport-contracts",
+      "scope": "Versioned local submit, steer, interrupt and event frames with bounded fail-closed decoding"
+    },
+    "verification-evidence": {
+      "package": "@abdo/evidence",
+      "scope": "Verified tamper-evident result receipts"
+    }
+  },
+  "packages": {
+    "@abdo/benchmark": {
+      "path": "packages/benchmark",
+      "role": "quality",
+      "owner": "quality",
+      "status": "standalone",
+      "runtimeRoots": [
+        "workspace-quality"
+      ],
+      "capabilities": [
+        "comparative-benchmark"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "test-only",
+        "journal": "projection-only",
+        "network": "test-only"
+      },
+      "proofs": [
+        {
+          "id": "benchmark-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/benchmark test",
+          "asserts": [
+            "benchmark harness tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/browser": {
+      "path": "packages/browser",
+      "role": "adapter",
+      "owner": "tools",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "browser-control"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "projection-only",
+        "network": "owner-configured-egress"
+      },
+      "proofs": [
+        {
+          "id": "browser-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/browser test",
+          "asserts": [
+            "browser adapter tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/builtin-tools": {
+      "path": "packages/builtin-tools",
+      "role": "adapter",
+      "owner": "tools",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "filesystem-tools",
+        "process-tools"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "tool-policy",
+          "effect-authority"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "builtin-tool-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/builtin-tools test",
+          "asserts": [
+            "builtin tool tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/classifier": {
+      "path": "packages/classifier",
+      "role": "policy",
+      "owner": "control",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "risk-classification"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "tool-policy"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "classifier-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/classifier test",
+          "asserts": [
+            "classifier tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/compaction": {
+      "path": "packages/compaction",
+      "role": "runtime",
+      "owner": "engine",
+      "status": "diagnostic-only",
+      "runtimeRoots": [
+        "engine-stack"
+      ],
+      "capabilities": [
+        "context-compaction"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "compaction-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/compaction test",
+          "asserts": [
+            "compaction tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/context": {
+      "path": "packages/context",
+      "role": "runtime",
+      "owner": "engine",
+      "status": "diagnostic-only",
+      "runtimeRoots": [
+        "engine-stack"
+      ],
+      "capabilities": [
+        "context-budgeting"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "context-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/context test",
+          "asserts": [
+            "context tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/contracts": {
+      "path": "packages/contracts",
+      "role": "contract",
+      "owner": "engine",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration",
+        "engine-stack"
+      ],
+      "capabilities": [
+        "domain-contracts"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "contract-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/contracts test",
+          "asserts": [
+            "domain contract tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/control-contracts": {
+      "path": "packages/control-contracts",
+      "role": "contract",
+      "owner": "control",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "control-decision-contracts"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "control-contract-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/control-contracts test",
+          "asserts": [
+            "control contract tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/controlplane": {
+      "path": "packages/controlplane",
+      "role": "runtime",
+      "owner": "control",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "orchestration-control-plane"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "controlplane-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/controlplane test",
+          "asserts": [
+            "control plane tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/desktop": {
+      "path": "packages/desktop",
+      "role": "composition-root",
+      "owner": "desktop",
+      "status": "connected",
+      "runtimeRoots": [
+        "desktop"
+      ],
+      "capabilities": [
+        "desktop-shell"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle",
+          "effect-journal"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "desktop-build",
+          "kind": "build",
+          "command": "bun --cwd packages/desktop build",
+          "asserts": [
+            "Tauri payload contains engine and Rust kernel from this tree"
+          ]
+        }
+      ]
+    },
+    "@abdo/egress": {
+      "path": "packages/egress",
+      "role": "policy",
+      "owner": "security",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "egress-authorization"
+      ],
+      "truth": {
+        "owns": [
+          "egress-policy"
+        ],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "owner-configured-egress"
+      },
+      "proofs": [
+        {
+          "id": "egress-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/egress test",
+          "asserts": [
+            "forbidden hosts override runtime allows"
+          ]
+        }
+      ]
+    },
+    "@abdo/engine": {
+      "path": "packages/engine",
+      "role": "composition-root",
+      "owner": "engine",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve",
+        "engine-integration",
+        "engine-stack"
+      ],
+      "capabilities": [
+        "engine-cli",
+        "desktop-serve"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority",
+          "effect-journal",
+          "session-lifecycle",
+          "session-storage",
+          "tool-policy",
+          "egress-policy",
+          "provider-catalog",
+          "harness-profiles",
+          "conversation-ir"
+        ]
+      },
+      "boundaries": {
+        "effects": "legacy-direct-temporary",
+        "journal": "session-event-store",
+        "network": "legacy-direct-temporary"
+      },
+      "proofs": [
+        {
+          "id": "engine-build",
+          "kind": "build",
+          "command": "bun --cwd packages/engine build",
+          "asserts": [
+            "compiled engine is built from the composition root"
+          ]
+        }
+      ]
+    },
+    "@abdo/engine-host": {
+      "path": "packages/engine-host",
+      "role": "composition-root",
+      "owner": "engine",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve",
+        "engine-integration"
+      ],
+      "capabilities": [
+        "owned-composition",
+        "durable-session-host",
+        "serve-journal-projection"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle",
+          "session-storage",
+          "tool-policy"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "engine-host-tests",
+          "kind": "integration",
+          "command": "bun --cwd packages/engine-host test",
+          "asserts": [
+            "owned composition uses the durable session runtime and enforced tool registry",
+            "serve protocol state survives SQLite reopen and imports retired JSONL rows exactly once"
+          ]
+        }
+      ]
+    },
+    "@abdo/event-store": {
+      "path": "packages/event-store",
+      "role": "contract",
+      "owner": "engine",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration",
+        "engine-stack"
+      ],
+      "capabilities": [
+        "event-store-port"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "event-store-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/event-store test",
+          "asserts": [
+            "event store contract tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/grants": {
+      "path": "packages/grants",
+      "role": "policy",
+      "owner": "control",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "durable-approval-grants"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle",
+          "tool-policy"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "grant-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/grants test",
+          "asserts": [
+            "grant reservation tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/harness": {
+      "path": "packages/harness",
+      "role": "adapter",
+      "owner": "model",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "model-harness-adapter"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority",
+          "harness-profiles",
+          "conversation-ir"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "harness-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/harness test",
+          "asserts": [
+            "harness uses generated Rust contracts and owned profiles"
+          ]
+        }
+      ]
+    },
+    "@abdo/healing": {
+      "path": "packages/healing",
+      "role": "runtime",
+      "owner": "quality",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "failure-strategy-ladder"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle",
+          "effect-journal"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "healing-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/healing test",
+          "asserts": [
+            "healing tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/kernel": {
+      "path": "packages/kernel",
+      "role": "authority",
+      "owner": "kernel",
+      "status": "connected",
+      "runtimeRoots": [
+        "desktop",
+        "engine-serve",
+        "engine-integration"
+      ],
+      "capabilities": [
+        "effect-authority",
+        "effect-journal",
+        "generated-contracts"
+      ],
+      "truth": {
+        "owns": [
+          "effect-authority",
+          "effect-journal"
+        ],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "rust-kernel-host",
+        "journal": "rust-effect-journal",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "kernel-tests",
+          "kind": "integration",
+          "command": "bun --cwd packages/kernel test",
+          "asserts": [
+            "Rust contracts, authority, journal and host gates pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/kernel-tools": {
+      "path": "packages/kernel-tools",
+      "role": "adapter",
+      "owner": "tools",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "kernel-tool-adapter",
+        "read-bound-object"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority",
+          "effect-journal",
+          "tool-policy"
+        ]
+      },
+      "boundaries": {
+        "effects": "rust-kernel-host",
+        "journal": "rust-effect-journal",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "kernel-tool-tests",
+          "kind": "integration",
+          "command": "bun --cwd packages/kernel-tools test",
+          "asserts": [
+            "bound reads return only a Rust-verified digest and fail closed on unknown outcomes"
+          ]
+        }
+      ]
+    },
+    "@abdo/lsp": {
+      "path": "packages/lsp",
+      "role": "adapter",
+      "owner": "tools",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "language-server-intelligence"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "lsp-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/lsp test",
+          "asserts": [
+            "LSP failures remain unavailable rather than inferred"
+          ]
+        }
+      ]
+    },
+    "@abdo/memory": {
+      "path": "packages/memory",
+      "role": "runtime",
+      "owner": "engine",
+      "status": "diagnostic-only",
+      "runtimeRoots": [
+        "engine-stack"
+      ],
+      "capabilities": [
+        "structured-memory"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "memory-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/memory test",
+          "asserts": [
+            "memory provenance tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/model-gateway": {
+      "path": "packages/model-gateway",
+      "role": "adapter",
+      "owner": "model",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "conversation-ir",
+        "provider-codecs",
+        "bounded-stream-framing"
+      ],
+      "truth": {
+        "owns": [
+          "conversation-ir"
+        ],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "model-gateway-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/model-gateway test",
+          "asserts": [
+            "provider families encode and decode through one neutral IR",
+            "stream framing fails closed at its byte ceiling"
+          ]
+        }
+      ]
+    },
+    "@abdo/migration-v1": {
+      "path": "packages/migration-v1",
+      "role": "migration",
+      "owner": "migration",
+      "status": "standalone",
+      "runtimeRoots": [
+        "migration"
+      ],
+      "capabilities": [
+        "legacy-read-only-import"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "migration-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/migration-v1 test",
+          "asserts": [
+            "legacy source remains read-only and import is verified"
+          ]
+        }
+      ]
+    },
+    "@abdo/normalizer": {
+      "path": "packages/normalizer",
+      "role": "policy",
+      "owner": "control",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "command-normalization"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "tool-policy"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "normalizer-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/normalizer test",
+          "asserts": [
+            "normalization tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/persistence-sqlite": {
+      "path": "packages/persistence-sqlite",
+      "role": "persistence",
+      "owner": "engine",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "session-event-storage"
+      ],
+      "truth": {
+        "owns": [
+          "session-storage"
+        ],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "sqlite-tests",
+          "kind": "integration",
+          "command": "bun --cwd packages/persistence-sqlite test",
+          "asserts": [
+            "SQLite event-store adapter tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/project-index": {
+      "path": "packages/project-index",
+      "role": "runtime",
+      "owner": "engine",
+      "status": "diagnostic-only",
+      "runtimeRoots": [
+        "engine-stack"
+      ],
+      "capabilities": [
+        "project-index"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "project-index-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/project-index test",
+          "asserts": [
+            "content-hash invalidation tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/prompting": {
+      "path": "packages/prompting",
+      "role": "runtime",
+      "owner": "model",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "harness-profiles",
+        "prompt-shaping"
+      ],
+      "truth": {
+        "owns": [
+          "harness-profiles"
+        ],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "prompting-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/prompting test",
+          "asserts": [
+            "owned harness profiles parse and apply deterministically"
+          ]
+        }
+      ]
+    },
+    "@abdo/providers": {
+      "path": "packages/providers",
+      "role": "adapter",
+      "owner": "model",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "provider-catalog",
+        "request-preparation"
+      ],
+      "truth": {
+        "owns": [
+          "provider-catalog"
+        ],
+        "consumes": [
+          "registry-semantics",
+          "harness-profiles",
+          "conversation-ir",
+          "egress-policy"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "owner-configured-egress"
+      },
+      "proofs": [
+        {
+          "id": "provider-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/providers test",
+          "asserts": [
+            "catalog is local and remote providers require owner configuration"
+          ]
+        }
+      ]
+    },
+    "@abdo/recovery": {
+      "path": "packages/recovery",
+      "role": "runtime",
+      "owner": "quality",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "crash-reconciliation"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle",
+          "effect-journal"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "recovery-tests",
+          "kind": "integration",
+          "command": "bun --cwd packages/recovery test",
+          "asserts": [
+            "unknown outcomes are never blindly replayed"
+          ]
+        }
+      ]
+    },
+    "@abdo/registry": {
+      "path": "packages/registry",
+      "role": "runtime",
+      "owner": "model",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "deterministic-registry"
+      ],
+      "truth": {
+        "owns": [
+          "registry-semantics"
+        ],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "registry-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/registry test",
+          "asserts": [
+            "duplicate refusal and digest stability tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/reliability": {
+      "path": "packages/reliability",
+      "role": "adapter",
+      "owner": "quality",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "tool-reliability"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority",
+          "tool-policy"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "reliability-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/reliability test",
+          "asserts": [
+            "atomicity, redaction and process-tree tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/schema": {
+      "path": "packages/schema",
+      "role": "contract",
+      "owner": "engine",
+      "status": "diagnostic-only",
+      "runtimeRoots": [
+        "engine-stack"
+      ],
+      "capabilities": [
+        "token-estimator",
+        "golden-trace"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "schema-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/schema test",
+          "asserts": [
+            "pure schema tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/script": {
+      "path": "packages/script",
+      "role": "devtool",
+      "owner": "tools",
+      "status": "standalone",
+      "runtimeRoots": [
+        "release-tools"
+      ],
+      "capabilities": [
+        "script-tooling"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "script-structure",
+          "kind": "static",
+          "command": "bun scripts/composition-gate.ts",
+          "asserts": [
+            "script remains an explicitly planned orphan until R5 supplies a runnable adapter proof"
+          ]
+        }
+      ]
+    },
+    "@abdo/secret-broker": {
+      "path": "packages/secret-broker",
+      "role": "policy",
+      "owner": "security",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "secret-handles"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "secret-broker-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/secret-broker test",
+          "asserts": [
+            "opaque reference and lease tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/session-runtime": {
+      "path": "packages/session-runtime",
+      "role": "runtime",
+      "owner": "engine",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "session-loop"
+      ],
+      "truth": {
+        "owns": [
+          "session-lifecycle"
+        ],
+        "consumes": [
+          "tool-policy",
+          "session-storage"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "session-runtime-tests",
+          "kind": "integration",
+          "command": "bun --cwd packages/session-runtime test",
+          "asserts": [
+            "every run lands a terminal event"
+          ]
+        }
+      ]
+    },
+    "@abdo/tools": {
+      "path": "packages/tools",
+      "role": "policy",
+      "owner": "tools",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "tool-registry",
+        "tool-policy"
+      ],
+      "truth": {
+        "owns": [
+          "tool-policy"
+        ],
+        "consumes": [
+          "effect-authority",
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "session-event-store",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "tool-tests",
+          "kind": "integration",
+          "command": "bun --cwd packages/tools test",
+          "asserts": [
+            "policy denial, approval, timeout and rollback tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/transport-contracts": {
+      "path": "packages/transport-contracts",
+      "role": "contract",
+      "owner": "control",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve",
+        "transport-quality"
+      ],
+      "capabilities": [
+        "local-transport-contracts",
+        "bounded-framing",
+        "shell-jsonl-validation"
+      ],
+      "truth": {
+        "owns": [
+          "local-transport-contracts"
+        ],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "local-only"
+      },
+      "proofs": [
+        {
+          "id": "transport-contract-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/transport-contracts test",
+          "asserts": [
+            "current shell frames reject malformed fields",
+            "versioned local frames reject unknown fields, trailing bytes and oversized declarations"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R9",
+        "reason": "The engine consumes the contract, but desktop still uses inherited stdio JSON-lines rather than the authenticated framed carrier",
+        "targetConsumer": "@abdo/desktop",
+        "completionCondition": "Desktop and engine exchange submit, steer, interrupt and event frames over authenticated local IPC"
+      }
+    },
+    "@abdo/ui": {
+      "path": "packages/ui",
+      "role": "ui",
+      "owner": "ui",
+      "status": "standalone",
+      "runtimeRoots": [
+        "ui-library"
+      ],
+      "capabilities": [
+        "shared-ui-components"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "ui-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/ui test",
+          "asserts": [
+            "shared UI tests pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/verification": {
+      "path": "packages/verification",
+      "role": "quality",
+      "owner": "quality",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "unified-verdict"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle",
+          "effect-journal"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "test-only"
+      },
+      "proofs": [
+        {
+          "id": "verification-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/verification test",
+          "asserts": [
+            "unavailable is never accepted as pass"
+          ]
+        }
+      ]
+    },
+    "@abdo/web": {
+      "path": "packages/web",
+      "role": "ui",
+      "owner": "ui",
+      "status": "standalone",
+      "runtimeRoots": [
+        "public-docs"
+      ],
+      "capabilities": [
+        "web-surface"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "session-lifecycle"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "web-build",
+          "kind": "build",
+          "command": "bun --cwd packages/web build",
+          "asserts": [
+            "web surface builds without an external runtime dependency"
+          ]
+        }
+      ]
+    },
+    "@abdo/windows-isolation-helper": {
+      "path": "packages/windows-isolation-helper",
+      "role": "adapter",
+      "owner": "platform",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "windows-process-isolation"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "effect-authority",
+          "tool-policy",
+          "session-storage"
+        ]
+      },
+      "boundaries": {
+        "effects": "proposal-only",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "windows-isolation-tests",
+          "kind": "integration",
+          "command": "bun --cwd packages/windows-isolation-helper test",
+          "asserts": [
+            "isolation is enforced or refused without downgrade"
+          ]
+        }
+      ]
+    },
+    "@abdo/agent-server": {
+      "path": "packages/agent-server",
+      "role": "runtime",
+      "owner": "engine",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "local-agent-session-router"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "local-transport-contracts"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "local-only"
+      },
+      "proofs": [
+        {
+          "id": "agent-server-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/agent-server test",
+          "asserts": [
+            "agent-server fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/browser-router": {
+      "path": "packages/browser-router",
+      "role": "policy",
+      "owner": "tools",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "deterministic-browser-ladder"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "browser-router-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/browser-router test",
+          "asserts": [
+            "browser-router fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/client-sdk": {
+      "path": "packages/client-sdk",
+      "role": "contract",
+      "owner": "engine",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "local-resumable-client"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "local-transport-contracts"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "local-only"
+      },
+      "proofs": [
+        {
+          "id": "client-sdk-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/client-sdk test",
+          "asserts": [
+            "client-sdk fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/computer-router": {
+      "path": "packages/computer-router",
+      "role": "policy",
+      "owner": "tools",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "generation-bound-computer-targets"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "computer-router-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/computer-router test",
+          "asserts": [
+            "computer-router fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/evidence": {
+      "path": "packages/evidence",
+      "role": "contract",
+      "owner": "kernel",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "tamper-evident-verification-receipts"
+      ],
+      "truth": {
+        "owns": [
+          "verification-evidence"
+        ],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "evidence-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/evidence test",
+          "asserts": [
+            "evidence fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/http-recorder": {
+      "path": "packages/http-recorder",
+      "role": "adapter",
+      "owner": "security",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "redacted-bounded-http-evidence"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "http-recorder-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/http-recorder test",
+          "asserts": [
+            "http-recorder fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/plugin-runtime": {
+      "path": "packages/plugin-runtime",
+      "role": "runtime",
+      "owner": "security",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "local-plugin-manifests"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "plugin-runtime-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/plugin-runtime test",
+          "asserts": [
+            "plugin-runtime fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/public-config": {
+      "path": "packages/public-config",
+      "role": "policy",
+      "owner": "security",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "trust-gated-public-project-config"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "public-config-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/public-config test",
+          "asserts": [
+            "public-config fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/skill-factory": {
+      "path": "packages/skill-factory",
+      "role": "devtool",
+      "owner": "tools",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "verified-skill-generation"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "skill-factory-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/skill-factory test",
+          "asserts": [
+            "skill-factory fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/tool-worker": {
+      "path": "packages/tool-worker",
+      "role": "contract",
+      "owner": "tools",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "bounded-tool-worker-contract"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "tool-worker-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/tool-worker test",
+          "asserts": [
+            "tool-worker fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    },
+    "@abdo/transport-codegen": {
+      "path": "packages/transport-codegen",
+      "role": "devtool",
+      "owner": "engine",
+      "status": "integration-only",
+      "runtimeRoots": [
+        "engine-integration"
+      ],
+      "capabilities": [
+        "deterministic-transport-reference"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": [
+          "local-transport-contracts"
+        ]
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "projection-only",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "transport-codegen-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/transport-codegen test",
+          "asserts": [
+            "transport-codegen fail-closed behavior passes"
+          ]
+        }
+      ],
+      "plan": {
+        "sprint": "R10",
+        "reason": "Connected to the owned integration root; production adoption remains separately gated",
+        "targetConsumer": "@abdo/engine",
+        "completionCondition": "Production paths consume the package without a parallel implementation"
+      }
+    }
+  },
+  "parallelImplementations": [],
+  "guards": [
+    {
+      "id": "original-rust-structure",
+      "command": "bun scripts/original-rust-structure-gate.mjs"
+    },
+    {
+      "id": "composition",
+      "command": "bun scripts/composition-gate.ts"
+    },
+    {
+      "id": "independence",
+      "command": "bun scripts/independence-gate.mjs"
+    },
+    {
+      "id": "workspace-typecheck",
+      "command": "bun run typecheck"
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+# The fixture is built on demand by the test. Its artefact is never committed and
+# never ships: it is not a helper [[bin]] and not in helper-manifest.json.
+target/

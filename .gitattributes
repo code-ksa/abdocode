@@ -1,0 +1,23 @@
+# البصماتُ الذهبيّة بايتاتٌ لا نصّ: core.autocrlf=true كان يقلب LF إلى CRLF في نسخة العمل فتحمرّ
+# بوّابةُ بايتات النواة (`golden.rs`) على ويندوز وحده بلا تغييرٍ في المصدر (ذاكرة kernel-gate-line-endings).
+# النطاقُ مقصودٌ ضيّقاً: مثبّتاتُ النواة وحدها، كي لا تُقلب ملفّاتُ جبهةٍ أخرى.
+packages/kernel/**/fixtures/** -text
+*.bin -text
+# 5.1ب (09-16): ملفّاتٌ ثنائيّة كان git يحسبها نصّاً (لا NUL في أوّل 8k) فيقلب LF إلى CRLF عند السحب — sample.pdf أحمرَ اختبارَ cargo في الفورك.
+*.pdf -text
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.webp -text
+*.ico -text
+*.woff -text
+*.woff2 -text
+*.ttf -text
+*.exe -text
+*.dll -text
+docs/ export-ignore
+work/ export-ignore
+# لوحةُ قياس التحكّم (ن10) هارنسُ الصانع: تعتمد على مسبار CDP للمثبَّت ومسارات جهازه — لا تشحن في اللقطة العامّة
+scripts/control-board.mjs export-ignore
+scripts/control-board-tasks.json export-ignore

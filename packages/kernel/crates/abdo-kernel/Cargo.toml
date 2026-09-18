@@ -1,0 +1,13 @@
+[package]
+name = "abdo-kernel"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Pure deterministic reducer for the Abdo Code trusted kernel"
+
+[dependencies]
+abdo-contracts = { path = "../abdo-contracts" }
+sha2 = { version = "=0.11.0", default-features = false }
+
+[lib]
+path = "src/lib.rs"

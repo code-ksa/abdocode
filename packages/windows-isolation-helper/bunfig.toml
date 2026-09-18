@@ -1,0 +1,12 @@
+# CL-16A3-B2B-ROOT-FINAL-GATE §1 — the measurement server must be stopped by the
+# run that started it, not by whatever runs next.
+#
+# `harness.ts` used `process.on("exit", stopServer)`, and that hook is NEVER
+# called under `bun test` (proved with a probe). The server therefore outlived
+# every test process and held its own queue directory open, which is why residue
+# could only ever settle at "2, reaped by the next run".
+#
+# A preloaded module can register `afterAll`, which does run — see
+# `test/setup-teardown.ts`.
+[test]
+preload = ["./test/setup-teardown.ts"]

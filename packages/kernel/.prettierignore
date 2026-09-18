@@ -1,0 +1,2 @@
+# Canonical Rust codegen output; byte parity is enforced by contracts:check.
+src/generated/contracts.ts

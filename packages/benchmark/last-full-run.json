@@ -1,0 +1,2015 @@
+{
+  "label": "full",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "recovery": {
+    "v2_recovery": "5/5",
+    "v2_duplicate_side_effects": 0,
+    "v1_recovery": "unsupported (abdo has no equivalent programmatic crash/resume)",
+    "detail": [
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "before_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": false,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "after_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": true,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      },
+      {
+        "killPoint": "before_write",
+        "crashDetected": true,
+        "resumeSucceeded": true,
+        "sideEffectPresent": false,
+        "toolReRun": false,
+        "duplicateSideEffects": 0,
+        "finalState": "completed"
+      }
+    ]
+  },
+  "summary": {
+    "v1": {
+      "runs": 95,
+      "successes": 94,
+      "successRate": 0.9894736842105263,
+      "objectiveCorrectnessRate": 0.9894736842105263,
+      "normalCompletionRate": 0.9894736842105263,
+      "medianCompletionMs": 15543.5,
+      "medianInputTokens": 6189.5,
+      "medianOutputTokens": 257,
+      "humanInterventionRate": 0,
+      "recoveryRate": 0,
+      "duplicateSideEffects": 0,
+      "stuckRuns": 1
+    },
+    "v2": {
+      "runs": 95,
+      "successes": 91,
+      "successRate": 0.9578947368421052,
+      "objectiveCorrectnessRate": 0.9578947368421052,
+      "normalCompletionRate": 0.8842105263157894,
+      "medianCompletionMs": 6719,
+      "medianInputTokens": 5078,
+      "medianOutputTokens": 380,
+      "humanInterventionRate": 0,
+      "recoveryRate": 0,
+      "duplicateSideEffects": 0,
+      "stuckRuns": 0
+    }
+  },
+  "byCategory": [
+    {
+      "category": "qa",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 8561,
+      "v2MedianMs": 2250
+    },
+    {
+      "category": "read_search",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 8165,
+      "v2MedianMs": 4244
+    },
+    {
+      "category": "single_file_edit",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 14065,
+      "v2MedianMs": 6602
+    },
+    {
+      "category": "multi_file_edit",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 0.9333333333333333,
+      "v1MedianMs": 22593,
+      "v2MedianMs": 20951.5
+    },
+    {
+      "category": "typescript_fix",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 0.8,
+      "v1MedianMs": 19675.5,
+      "v2MedianMs": 14191.5
+    },
+    {
+      "category": "tests_diagnose",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 23958.5,
+      "v2MedianMs": 11785.5
+    },
+    {
+      "category": "git_analysis",
+      "v1SuccessRate": 1,
+      "v2SuccessRate": 1,
+      "v1MedianMs": 15656,
+      "v2MedianMs": 3044
+    },
+    {
+      "category": "long_multi_tool",
+      "v1SuccessRate": 0.8,
+      "v2SuccessRate": 0.8,
+      "v1MedianMs": 94555.5,
+      "v2MedianMs": 72067
+    }
+  ],
+  "gate": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "v2_zero_duplicate_side_effects",
+        "status": "pass",
+        "detail": "0 duplicates"
+      },
+      {
+        "name": "v2_zero_stuck_runs",
+        "status": "pass",
+        "detail": "0 stuck"
+      },
+      {
+        "name": "v2_recovery_ge_95pct",
+        "status": "blocked",
+        "detail": "no recovery tasks ran"
+      },
+      {
+        "name": "v2_success_ge_v1",
+        "status": "fail",
+        "detail": "v2 96% vs v1 99%"
+      },
+      {
+        "name": "v2_human_intervention_le_v1",
+        "status": "pass",
+        "detail": "v2 0.00 vs v1 0.00"
+      },
+      {
+        "name": "v2_token_cost_within_15pct",
+        "status": "pass",
+        "detail": "-18% vs v1"
+      },
+      {
+        "name": "v2_time_within_15pct",
+        "status": "pass",
+        "detail": "-57% vs v1"
+      }
+    ]
+  },
+  "failures": [
+    {
+      "taskId": "multi-11",
+      "runtime": "v2",
+      "failureClass": "provider_or_tool_error",
+      "checks": [
+        {
+          "name": "expect:src/c11.ts",
+          "passed": true
+        },
+        {
+          "name": "expect:src/u11.ts",
+          "passed": true
+        },
+        {
+          "name": "contains:src/c11.ts",
+          "passed": true
+        },
+        {
+          "name": "contains:src/u11.ts",
+          "passed": true
+        },
+        {
+          "name": "absent:src/u11.ts",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "taskId": "tsfix-0",
+      "runtime": "v2",
+      "failureClass": "provider_or_tool_error",
+      "checks": [
+        {
+          "name": "typecheck",
+          "passed": true
+        },
+        {
+          "name": "contains:src/broken0.ts",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "taskId": "tsfix-9",
+      "runtime": "v2",
+      "failureClass": "provider_or_tool_error",
+      "checks": [
+        {
+          "name": "typecheck",
+          "passed": true
+        },
+        {
+          "name": "contains:src/broken9.ts",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "taskId": "long-0",
+      "runtime": "v2",
+      "failureClass": "provider_or_tool_error",
+      "checks": [
+        {
+          "name": "test",
+          "passed": true
+        },
+        {
+          "name": "expect:src/counter0.ts",
+          "passed": true
+        },
+        {
+          "name": "expect:src/counter0.test.ts",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "taskId": "long-4",
+      "runtime": "v1",
+      "failureClass": "stuck",
+      "checks": [
+        {
+          "name": "test",
+          "passed": true
+        },
+        {
+          "name": "expect:src/counter4.ts",
+          "passed": true
+        },
+        {
+          "name": "expect:src/counter4.test.ts",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "cost": {
+    "FULL_SUITE_READY": false,
+    "LIVE_TRIALS": 200,
+    "ESTIMATED_INPUT_TOKENS": 1126750,
+    "ESTIMATED_OUTPUT_TOKENS": 63700,
+    "CANARY_GATE": "REVIEW",
+    "perTaskMedians": {
+      "v1": {
+        "input": 6189.5,
+        "output": 257,
+        "ms": 15543.5
+      },
+      "v2": {
+        "input": 5078,
+        "output": 380,
+        "ms": 6719
+      }
+    },
+    "estimatedWallClockMinutes": 37,
+    "note": "Approval required before spending API credits on the full 200-trial run."
+  },
+  "trials": [
+    {
+      "taskId": "qa-0",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2336
+    },
+    {
+      "taskId": "qa-0",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6186,
+      "ms": 8564
+    },
+    {
+      "taskId": "qa-1",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6049,
+      "ms": 8522
+    },
+    {
+      "taskId": "qa-1",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2170
+    },
+    {
+      "taskId": "qa-2",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2259
+    },
+    {
+      "taskId": "qa-2",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6201,
+      "ms": 8015
+    },
+    {
+      "taskId": "qa-3",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6190,
+      "ms": 8275
+    },
+    {
+      "taskId": "qa-3",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2154
+    },
+    {
+      "taskId": "qa-4",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2111
+    },
+    {
+      "taskId": "qa-4",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6338,
+      "ms": 10381
+    },
+    {
+      "taskId": "qa-5",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6177,
+      "ms": 8558
+    },
+    {
+      "taskId": "qa-5",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2492
+    },
+    {
+      "taskId": "qa-6",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2326
+    },
+    {
+      "taskId": "qa-6",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6192,
+      "ms": 8808
+    },
+    {
+      "taskId": "qa-7",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6188,
+      "ms": 8620
+    },
+    {
+      "taskId": "qa-7",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2241
+    },
+    {
+      "taskId": "qa-8",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2072
+    },
+    {
+      "taskId": "qa-8",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6232,
+      "ms": 10054
+    },
+    {
+      "taskId": "qa-9",
+      "category": "qa",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6189,
+      "ms": 7979
+    },
+    {
+      "taskId": "qa-9",
+      "category": "qa",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1666,
+      "ms": 2529
+    },
+    {
+      "taskId": "read-0",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3657,
+      "ms": 5786
+    },
+    {
+      "taskId": "read-0",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5956,
+      "ms": 8120
+    },
+    {
+      "taskId": "read-1",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6023,
+      "ms": 8469
+    },
+    {
+      "taskId": "read-1",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3610,
+      "ms": 5498
+    },
+    {
+      "taskId": "read-2",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1749,
+      "ms": 2859
+    },
+    {
+      "taskId": "read-2",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6165,
+      "ms": 7987
+    },
+    {
+      "taskId": "read-3",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6018,
+      "ms": 7717
+    },
+    {
+      "taskId": "read-3",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 2749,
+      "ms": 4532
+    },
+    {
+      "taskId": "read-4",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3611,
+      "ms": 6070
+    },
+    {
+      "taskId": "read-4",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6066,
+      "ms": 8165
+    },
+    {
+      "taskId": "read-5",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6206,
+      "ms": 14062
+    },
+    {
+      "taskId": "read-5",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1752,
+      "ms": 3150
+    },
+    {
+      "taskId": "read-6",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 2780,
+      "ms": 4812
+    },
+    {
+      "taskId": "read-6",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6049,
+      "ms": 8852
+    },
+    {
+      "taskId": "read-7",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6177,
+      "ms": 11480
+    },
+    {
+      "taskId": "read-7",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 2664,
+      "ms": 3316
+    },
+    {
+      "taskId": "read-8",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1707,
+      "ms": 2907
+    },
+    {
+      "taskId": "read-8",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6056,
+      "ms": 8837
+    },
+    {
+      "taskId": "read-9",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6299,
+      "ms": 9463
+    },
+    {
+      "taskId": "read-9",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3610,
+      "ms": 4852
+    },
+    {
+      "taskId": "read-10",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1695,
+      "ms": 2743
+    },
+    {
+      "taskId": "read-10",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6007,
+      "ms": 7351
+    },
+    {
+      "taskId": "read-11",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6061,
+      "ms": 8229
+    },
+    {
+      "taskId": "read-11",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 2768,
+      "ms": 4223
+    },
+    {
+      "taskId": "read-12",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1755,
+      "ms": 3302
+    },
+    {
+      "taskId": "read-12",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6022,
+      "ms": 7742
+    },
+    {
+      "taskId": "read-13",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6057,
+      "ms": 7948
+    },
+    {
+      "taskId": "read-13",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 2756,
+      "ms": 4244
+    },
+    {
+      "taskId": "read-14",
+      "category": "read_search",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3733,
+      "ms": 5792
+    },
+    {
+      "taskId": "read-14",
+      "category": "read_search",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6010,
+      "ms": 8042
+    },
+    {
+      "taskId": "edit-0",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6179,
+      "ms": 10559
+    },
+    {
+      "taskId": "edit-0",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 12203,
+      "ms": 14435
+    },
+    {
+      "taskId": "edit-1",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3870,
+      "ms": 5948
+    },
+    {
+      "taskId": "edit-1",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6182,
+      "ms": 10631
+    },
+    {
+      "taskId": "edit-2",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6184,
+      "ms": 11447
+    },
+    {
+      "taskId": "edit-2",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 29458,
+      "ms": 25900
+    },
+    {
+      "taskId": "edit-3",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5078,
+      "ms": 6087
+    },
+    {
+      "taskId": "edit-3",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6198,
+      "ms": 11913
+    },
+    {
+      "taskId": "edit-4",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6173,
+      "ms": 10239
+    },
+    {
+      "taskId": "edit-4",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3838,
+      "ms": 4979
+    },
+    {
+      "taskId": "edit-5",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5078,
+      "ms": 7322
+    },
+    {
+      "taskId": "edit-5",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6280,
+      "ms": 11628
+    },
+    {
+      "taskId": "edit-6",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6193,
+      "ms": 11021
+    },
+    {
+      "taskId": "edit-6",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 9528,
+      "ms": 11095
+    },
+    {
+      "taskId": "edit-7",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 12928,
+      "ms": 11878
+    },
+    {
+      "taskId": "edit-7",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6160,
+      "ms": 10535
+    },
+    {
+      "taskId": "edit-8",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6216,
+      "ms": 14103
+    },
+    {
+      "taskId": "edit-8",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5088,
+      "ms": 6402
+    },
+    {
+      "taskId": "edit-9",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3877,
+      "ms": 5883
+    },
+    {
+      "taskId": "edit-9",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6147,
+      "ms": 14499
+    },
+    {
+      "taskId": "edit-10",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6179,
+      "ms": 14428
+    },
+    {
+      "taskId": "edit-10",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5078,
+      "ms": 5644
+    },
+    {
+      "taskId": "edit-11",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 34636,
+      "ms": 24730
+    },
+    {
+      "taskId": "edit-11",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6179,
+      "ms": 13689
+    },
+    {
+      "taskId": "edit-12",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6200,
+      "ms": 16392
+    },
+    {
+      "taskId": "edit-12",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3838,
+      "ms": 5020
+    },
+    {
+      "taskId": "edit-13",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6428,
+      "ms": 6802
+    },
+    {
+      "taskId": "edit-13",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6217,
+      "ms": 14329
+    },
+    {
+      "taskId": "edit-14",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6164,
+      "ms": 14209
+    },
+    {
+      "taskId": "edit-14",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 60934,
+      "ms": 40708
+    },
+    {
+      "taskId": "edit-15",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5126,
+      "ms": 7051
+    },
+    {
+      "taskId": "edit-15",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6178,
+      "ms": 14318
+    },
+    {
+      "taskId": "edit-16",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6174,
+      "ms": 14027
+    },
+    {
+      "taskId": "edit-16",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 11198,
+      "ms": 11805
+    },
+    {
+      "taskId": "edit-17",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3835,
+      "ms": 4809
+    },
+    {
+      "taskId": "edit-17",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6188,
+      "ms": 15460
+    },
+    {
+      "taskId": "edit-18",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6181,
+      "ms": 14872
+    },
+    {
+      "taskId": "edit-18",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3870,
+      "ms": 5362
+    },
+    {
+      "taskId": "edit-19",
+      "category": "single_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5078,
+      "ms": 6203
+    },
+    {
+      "taskId": "edit-19",
+      "category": "single_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6189,
+      "ms": 14893
+    },
+    {
+      "taskId": "multi-0",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6521,
+      "ms": 16511
+    },
+    {
+      "taskId": "multi-0",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6455,
+      "ms": 8164
+    },
+    {
+      "taskId": "multi-1",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 62291,
+      "ms": 35205
+    },
+    {
+      "taskId": "multi-1",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6506,
+      "ms": 23530
+    },
+    {
+      "taskId": "multi-2",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6595,
+      "ms": 23355
+    },
+    {
+      "taskId": "multi-2",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 9769,
+      "ms": 11632
+    },
+    {
+      "taskId": "multi-3",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 11413,
+      "ms": 11966
+    },
+    {
+      "taskId": "multi-3",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6571,
+      "ms": 23434
+    },
+    {
+      "taskId": "multi-4",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6573,
+      "ms": 24135
+    },
+    {
+      "taskId": "multi-4",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 24020,
+      "ms": 28520
+    },
+    {
+      "taskId": "multi-5",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 18922,
+      "ms": 18763
+    },
+    {
+      "taskId": "multi-5",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6577,
+      "ms": 22098
+    },
+    {
+      "taskId": "multi-6",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6622,
+      "ms": 22593
+    },
+    {
+      "taskId": "multi-6",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 13643,
+      "ms": 13553
+    },
+    {
+      "taskId": "multi-7",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 108701,
+      "ms": 50844
+    },
+    {
+      "taskId": "multi-7",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6581,
+      "ms": 23171
+    },
+    {
+      "taskId": "multi-8",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6591,
+      "ms": 22953
+    },
+    {
+      "taskId": "multi-8",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": false,
+      "inputTokens": 132083,
+      "ms": 75236
+    },
+    {
+      "taskId": "multi-9",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 14141,
+      "ms": 14421
+    },
+    {
+      "taskId": "multi-9",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6387,
+      "ms": 22181
+    },
+    {
+      "taskId": "multi-10",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6696,
+      "ms": 22869
+    },
+    {
+      "taskId": "multi-10",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 32871,
+      "ms": 23140
+    },
+    {
+      "taskId": "multi-11",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": false,
+      "completedNormally": false,
+      "inputTokens": 14588,
+      "ms": 18753
+    },
+    {
+      "taskId": "multi-11",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6473,
+      "ms": 21625
+    },
+    {
+      "taskId": "multi-12",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6571,
+      "ms": 21933
+    },
+    {
+      "taskId": "multi-12",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": false,
+      "inputTokens": 151630,
+      "ms": 61636
+    },
+    {
+      "taskId": "multi-13",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 37720,
+      "ms": 27962
+    },
+    {
+      "taskId": "multi-13",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6653,
+      "ms": 18775
+    },
+    {
+      "taskId": "multi-14",
+      "category": "multi_file_edit",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6547,
+      "ms": 14605
+    },
+    {
+      "taskId": "multi-14",
+      "category": "multi_file_edit",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 9613,
+      "ms": 10867
+    },
+    {
+      "taskId": "tsfix-0",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": false,
+      "completedNormally": false,
+      "inputTokens": 52888,
+      "ms": 87448
+    },
+    {
+      "taskId": "tsfix-0",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6622,
+      "ms": 38786
+    },
+    {
+      "taskId": "tsfix-1",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6160,
+      "ms": 19613
+    },
+    {
+      "taskId": "tsfix-1",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 4897,
+      "ms": 6606
+    },
+    {
+      "taskId": "tsfix-2",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 11059,
+      "ms": 20418
+    },
+    {
+      "taskId": "tsfix-2",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6124,
+      "ms": 19710
+    },
+    {
+      "taskId": "tsfix-3",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6194,
+      "ms": 19534
+    },
+    {
+      "taskId": "tsfix-3",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": false,
+      "inputTokens": 7841,
+      "ms": 135459
+    },
+    {
+      "taskId": "tsfix-4",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 4985,
+      "ms": 7965
+    },
+    {
+      "taskId": "tsfix-4",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6181,
+      "ms": 100317
+    },
+    {
+      "taskId": "tsfix-5",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6243,
+      "ms": 17952
+    },
+    {
+      "taskId": "tsfix-5",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 26084,
+      "ms": 43917
+    },
+    {
+      "taskId": "tsfix-6",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 4897,
+      "ms": 7541
+    },
+    {
+      "taskId": "tsfix-6",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6198,
+      "ms": 19838
+    },
+    {
+      "taskId": "tsfix-7",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6193,
+      "ms": 19641
+    },
+    {
+      "taskId": "tsfix-7",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 3760,
+      "ms": 6719
+    },
+    {
+      "taskId": "tsfix-8",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 13769,
+      "ms": 39257
+    },
+    {
+      "taskId": "tsfix-8",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6167,
+      "ms": 20006
+    },
+    {
+      "taskId": "tsfix-9",
+      "category": "typescript_fix",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6168,
+      "ms": 18926
+    },
+    {
+      "taskId": "tsfix-9",
+      "category": "typescript_fix",
+      "runtime": "v2",
+      "objectiveCorrect": false,
+      "completedNormally": false,
+      "inputTokens": 16231,
+      "ms": 45831
+    },
+    {
+      "taskId": "tests-0",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 19931,
+      "ms": 57691
+    },
+    {
+      "taskId": "tests-0",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6575,
+      "ms": 21873
+    },
+    {
+      "taskId": "tests-1",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6840,
+      "ms": 26081
+    },
+    {
+      "taskId": "tests-1",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": false,
+      "inputTokens": 103348,
+      "ms": 72196
+    },
+    {
+      "taskId": "tests-2",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": false,
+      "inputTokens": 104591,
+      "ms": 70820
+    },
+    {
+      "taskId": "tests-2",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6777,
+      "ms": 24851
+    },
+    {
+      "taskId": "tests-3",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6827,
+      "ms": 21411
+    },
+    {
+      "taskId": "tests-3",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5327,
+      "ms": 8083
+    },
+    {
+      "taskId": "tests-4",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6451,
+      "ms": 9626
+    },
+    {
+      "taskId": "tests-4",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6751,
+      "ms": 23113
+    },
+    {
+      "taskId": "tests-5",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6566,
+      "ms": 24826
+    },
+    {
+      "taskId": "tests-5",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 11950,
+      "ms": 13945
+    },
+    {
+      "taskId": "tests-6",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5327,
+      "ms": 7438
+    },
+    {
+      "taskId": "tests-6",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6379,
+      "ms": 21509
+    },
+    {
+      "taskId": "tests-7",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6804,
+      "ms": 25371
+    },
+    {
+      "taskId": "tests-7",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5160,
+      "ms": 7678
+    },
+    {
+      "taskId": "tests-8",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5220,
+      "ms": 7228
+    },
+    {
+      "taskId": "tests-8",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6653,
+      "ms": 22226
+    },
+    {
+      "taskId": "tests-9",
+      "category": "tests_diagnose",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 6696,
+      "ms": 24804
+    },
+    {
+      "taskId": "tests-9",
+      "category": "tests_diagnose",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": false,
+      "inputTokens": 100796,
+      "ms": 73408
+    },
+    {
+      "taskId": "git-0",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 3100
+    },
+    {
+      "taskId": "git-0",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5941,
+      "ms": 15400
+    },
+    {
+      "taskId": "git-1",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5945,
+      "ms": 16275
+    },
+    {
+      "taskId": "git-1",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 2675
+    },
+    {
+      "taskId": "git-2",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 2879
+    },
+    {
+      "taskId": "git-2",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5949,
+      "ms": 15739
+    },
+    {
+      "taskId": "git-3",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5941,
+      "ms": 15544
+    },
+    {
+      "taskId": "git-3",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 3146
+    },
+    {
+      "taskId": "git-4",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5384,
+      "ms": 9911
+    },
+    {
+      "taskId": "git-4",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5945,
+      "ms": 15546
+    },
+    {
+      "taskId": "git-5",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5945,
+      "ms": 15543
+    },
+    {
+      "taskId": "git-5",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 2889
+    },
+    {
+      "taskId": "git-6",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 3114
+    },
+    {
+      "taskId": "git-6",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5941,
+      "ms": 15573
+    },
+    {
+      "taskId": "git-7",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5953,
+      "ms": 15926
+    },
+    {
+      "taskId": "git-7",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 2774
+    },
+    {
+      "taskId": "git-8",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 2988
+    },
+    {
+      "taskId": "git-8",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5941,
+      "ms": 16409
+    },
+    {
+      "taskId": "git-9",
+      "category": "git_analysis",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 5945,
+      "ms": 15783
+    },
+    {
+      "taskId": "git-9",
+      "category": "git_analysis",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 1662,
+      "ms": 3518
+    },
+    {
+      "taskId": "long-0",
+      "category": "long_multi_tool",
+      "runtime": "v2",
+      "objectiveCorrect": false,
+      "completedNormally": false,
+      "inputTokens": 82368,
+      "ms": 122094
+    },
+    {
+      "taskId": "long-0",
+      "category": "long_multi_tool",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 7292,
+      "ms": 84987
+    },
+    {
+      "taskId": "long-1",
+      "category": "long_multi_tool",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 8069,
+      "ms": 151395
+    },
+    {
+      "taskId": "long-1",
+      "category": "long_multi_tool",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 26765,
+      "ms": 61261
+    },
+    {
+      "taskId": "long-2",
+      "category": "long_multi_tool",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 38766,
+      "ms": 56623
+    },
+    {
+      "taskId": "long-2",
+      "category": "long_multi_tool",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 14854,
+      "ms": 104124
+    },
+    {
+      "taskId": "long-3",
+      "category": "long_multi_tool",
+      "runtime": "v1",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 7065,
+      "ms": 77305
+    },
+    {
+      "taskId": "long-3",
+      "category": "long_multi_tool",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": false,
+      "inputTokens": 426699,
+      "ms": 182951
+    },
+    {
+      "taskId": "long-4",
+      "category": "long_multi_tool",
+      "runtime": "v2",
+      "objectiveCorrect": true,
+      "completedNormally": true,
+      "inputTokens": 93171,
+      "ms": 82873
+    },
+    {
+      "taskId": "long-4",
+      "category": "long_multi_tool",
+      "runtime": "v1",
+      "objectiveCorrect": false,
+      "completedNormally": false,
+      "inputTokens": 8652,
+      "ms": 240558
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "strategy": "deterministic hostile-input corpus",
+  "targets": [
+    "crates/abdo-contracts/tests/strict_mutations.rs",
+    "bins/abdo-tool-worker/tests/worker_gate.rs"
+  ],
+  "rule": "Malformed and oversized frames must be refused, never repaired."
+}

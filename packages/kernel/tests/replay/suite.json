@@ -1,0 +1,8 @@
+{
+  "suite": "replay",
+  "targets": [
+    "crates/abdo-kernel/tests/determinism_1k.rs",
+    "crates/abdo-journal/tests/recovery_integrity.rs",
+    "crates/abdo-runtime/tests/reconcile_sweep.rs"
+  ]
+}

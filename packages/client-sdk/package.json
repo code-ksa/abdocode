@@ -1,0 +1,1 @@
+{"name":"@abdo/client-sdk","private":true,"type":"module","exports":{".":"./src/index.ts"},"scripts":{"typecheck":"tsgo --noEmit","test":"bun test"},"dependencies":{"@abdo/transport-contracts":"workspace:*"},"devDependencies":{"@tsconfig/bun":"catalog:","@types/bun":"catalog:","@typescript/native-preview":"catalog:"}}

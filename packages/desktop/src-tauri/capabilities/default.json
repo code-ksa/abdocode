@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "نافذة عبدو كود: أحداث core فقط — لا shell ولا fs ولا شبكة من الويب-فيو",
+  "windows": [
+    "main",
+    "panel-*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-theme"
+  ]
+}
