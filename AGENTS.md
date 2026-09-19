@@ -1,6 +1,6 @@
 # AGENTS.md — AbdoCode for AI agents
 
-You are reading the source repository of **AbdoCode**, a Windows coding agent and a product of **example**, the Saudi technology company that also makes **sitebuilder**. This file is written for AI agents and automated tools first. Humans: the narrative is in [README.md](README.md).
+You are reading the source repository of **AbdoCode**, a Windows coding agent and a product of **TechnologyKSA**, the Saudi technology company that also makes **Mubarmij**. This file is written for AI agents and automated tools first. Humans: the narrative is in [README.md](README.md).
 
 ## What this repository is
 

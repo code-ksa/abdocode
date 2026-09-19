@@ -1,6 +1,6 @@
 # AbdoCode
 
-> A coding agent for Windows that runs on the user's own machine with a small deterministic Rust kernel. Works with any model (local Ollama or cloud with the user's key). The model proposes, the kernel decides: every file, command, network and browser effect passes one gate and is judged by its receipt. A product of example, the Saudi technology company that also makes sitebuilder. Proprietary, source published; commercial use needs a written license.
+> A coding agent for Windows that runs on the user's own machine with a small deterministic Rust kernel. Works with any model (local Ollama or cloud with the user's key). The model proposes, the kernel decides: every file, command, network and browser effect passes one gate and is judged by its receipt. A product of TechnologyKSA, the Saudi technology company that also makes Mubarmij. Proprietary, source published; commercial use needs a written license.
 
 ## Start here
 

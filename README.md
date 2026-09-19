@@ -18,7 +18,7 @@
 
 ## Why we built it
 
-AbdoCode is a product of **example** ([example.com](https://example.com)), the Saudi technology company behind **sitebuilder** ([sitebuilder-ksa.com](https://sitebuilder-ksa.com)). We wanted an agent that lives on the machine, keeps the keys in the machine, and treats the model as an advisor rather than an owner.
+AbdoCode is a product of **TechnologyKSA** ([technologyksa.com](https://technologyksa.com)), the Saudi technology company behind **Mubarmij** ([moparmeg-ksa.com](https://moparmeg-ksa.com)). We wanted an agent that lives on the machine, keeps the keys in the machine, and treats the model as an advisor rather than an owner.
 
 The idea is simple: **the model proposes, the kernel decides.** Every effect on your machine goes through one gate, is checked against the mode you chose, and is judged by its receipt, not by what the model says about it. Small models get stricter rails, strong models get thinner ones, automatically.
 
@@ -69,6 +69,6 @@ Contact: technoksaweb@gmail.com
 
 **عبدو كود** وكيل برمجة يعمل على جهازك بويندوز، بنواة Rust صغيرة وحتميّة، ويشتغل مع أيّ نموذج: محلّيّ عبر Ollama أو سحابيّ بمفتاحك. النموذج يقترح والنواة تحكم: كلّ أثر على جهازك يمرّ من بوّابة واحدة ويُقاس بإيصاله لا بكلام النموذج.
 
-منتَجٌ من **تكنولوجيا السعودية** ([example.com](https://example.com))، صانعة **منصّةُ المواقع**. نزّل المثبّت من صفحة [الإصدارات](https://github.com/code-ksa/abdocode/releases/latest). المصدر منشور للاطّلاع والبناء المحلّيّ، والاستخدام التجاريّ يحتاج ترخيصاً كتابيّاً (انظر `LICENSE`).
+منتَجٌ من **تكنولوجيا السعودية** ([technologyksa.com](https://technologyksa.com))، صانعة **مبرمج**. نزّل المثبّت من صفحة [الإصدارات](https://github.com/code-ksa/abdocode/releases/latest). المصدر منشور للاطّلاع والبناء المحلّيّ، والاستخدام التجاريّ يحتاج ترخيصاً كتابيّاً (انظر `LICENSE`).
 
 </details>

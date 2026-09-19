@@ -39,4 +39,4 @@ Classes are closed: `playbook`, `package_pattern`, `env_trap`. The engine promot
 ## 5. Communication
 
 - Issues and pull requests on GitHub.
-- Email: technoksaweb@gmail.com (example).
+- Email: technoksaweb@gmail.com (TechnologyKSA).
