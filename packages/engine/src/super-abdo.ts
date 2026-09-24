@@ -79,7 +79,21 @@ export interface SuperAbdoEvidence {
   readonly passed: boolean
 }
 
-const VERIFICATION = /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:(?:run\s+)?(?:test|build|typecheck|check|lint)|exec\s+(?:playwright\s+test|vitest(?:\s+run)?))|bun\s+(?:test|run\s+(?:test|build|typecheck|check|lint))|cargo\s+(?:test|check|build|clippy)|(?:npx\s+)?(?:tsc\s+--noEmit|playwright\s+test|vitest(?:\s+run)?)|(?:python(?:3)?\s+-m\s+)?(?:pytest|unittest)|dotnet\s+(?:test|build)|go\s+test|mvn\s+(?:test|verify)|(?:\.\/)?gradlew\s+(?:test|check)|ctest)(?:\s|$)/iu
+/**
+ * ما يُعَدُّ إيصالَ تحقّق.
+ *
+ * 🔴 **وفيها عدّاءون لا يحتاجون مانيفستاً** (أُضيفوا 2026-09-24 بعد قياسٍ حيّ): حارسُ مديرِ
+ * الحزم يرفض — بحقٍّ — `npm/bun/pnpm test` في مجلَّدٍ بلا `package.json`، لأنّ مديرَ الحزم
+ * يصعد شجرةَ المجلّدات فينفّذ سكربتاتِ مستودعٍ أعلى. وكانت كلُّ صيغةٍ في هذه القائمة تمرّ
+ * بمديرِ حزمٍ أو بإطارٍ يُستدعى عبره — فمشروعٌ بلا مانيفست **لا يستطيع الحصولَ على إيصال
+ * تحقّقٍ أبداً**: الحارسُ يرفض، والبوّابةُ لا تعرف بديلاً، فيبقى الدورُ «مرصوداً» إلى الأبد.
+ * حارسٌ صائبٌ وبوّابةٌ بلا مخرجٍ = منتَجٌ مسدود.
+ *
+ * فأُضيف ما يشغّل الاختبارَ **بلا مانيفست** وهو ما توصي به رسالةُ الرفض نفسُها:
+ * `node --test` (عدّاءُ نود المدمج)، و`deno test`، و`bun <ملفّ>.test.*` مباشرةً.
+ * وكلُّها عدّاءو اختبارٍ حقيقيّون — لا يتّسع المقبولُ لأمرٍ لا يفحص شيئاً.
+ */
+const VERIFICATION = /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:(?:run\s+)?(?:test|build|typecheck|check|lint)|exec\s+(?:playwright\s+test|vitest(?:\s+run)?))|bun\s+(?:test|run\s+(?:test|build|typecheck|check|lint))|bun\s+\S*\.test\.[cm]?[jt]sx?(?:\s|$)|node\s+(?:--test|--experimental-test-coverage)|deno\s+test|cargo\s+(?:test|check|build|clippy)|(?:npx\s+)?(?:tsc\s+--noEmit|playwright\s+test|vitest(?:\s+run)?)|(?:python(?:3)?\s+-m\s+)?(?:pytest|unittest)|dotnet\s+(?:test|build)|go\s+test|mvn\s+(?:test|verify)|(?:\.\/)?gradlew\s+(?:test|check)|ctest)(?:\s|$)/iu
 
 const normalizedCommand = (command: string): string => command.trim().replace(/\s+/gu, " ")
 
