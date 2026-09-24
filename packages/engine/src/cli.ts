@@ -44,7 +44,11 @@ import { shotRoute, shotFitsModel, tilePlan } from "./vision-fallback"
 import { MAX_IMAGE_BASE64 } from "@abdo/model-gateway"
 import { Shell } from "./shells/shell"
 import { Database } from "bun:sqlite"
-import { readFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, statSync } from "node:fs"
+import { readFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, statSync, renameSync, rmSync } from "node:fs"
+import { companionFiles, ledgerUnreadable, quarantineName, quarantineNotice } from "./ledger-quarantine"
+import { fabricatedImage, looksLikeShot } from "./fabricated-artifact-guard"
+import { lineEndingViolation } from "./line-ending-guard"
+import { negativeOnlySuite } from "./negative-only-suite"
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { createHash, timingSafeEqual } from "node:crypto"
 import { stackStatus } from "./stack"
@@ -2229,10 +2233,31 @@ const runServeShell = async (): Promise<void> => {
   }
   if (lock.note !== undefined) bootEmit({ kind: "event", turnId: "serve", payload: `⚠ ${lock.note}` })
   process.on("exit", () => releaseStateDirLock(STATE_ROOT))
-  const serveJournal = await openServeJournal({
-    database: join(STATE_ROOT, "abdocode-events.sqlite"),
-    legacyRows,
-  })
+  // 🔴 دفترُ الأحداث **سجلٌّ لا حارس**: تلفُه يُعزل ويُقال، ولا يمنع المحرّكَ من الإقلاع.
+  //
+  // مقيسٌ حيّاً على تثبيتٍ قائم: نافذةُ التطبيق مفتوحةٌ **بلا محرّكٍ خلفها**،
+  // لأنّ أوّلَ قراءةٍ سقطت بـSQLITE_CORRUPT؛ ثمّ سقطت ثانيةً بفجوةِ تسلسلٍ بعد إنقاذٍ جزئيّ.
+  // والحكمانِ صائبانِ في موضعهما — التسلسلُ لا يُخمَّن والصفُّ التالفُ لا يُقرأ — لكنّ
+  // **موضعَ الحكم خطأ**: أن يُعاقَب الحاضرُ بذنب ماضٍ. والعزلُ لا يحذف: الملفُّ يبقى مؤرَّخاً.
+  const ledgerPath = join(STATE_ROOT, "abdocode-events.sqlite")
+  let serveJournal
+  try {
+    serveJournal = await openServeJournal({ database: ledgerPath, legacyRows })
+  } catch (error) {
+    const why = ledgerUnreadable(error)
+    if (why === undefined) throw error   // عطلٌ غيرُ معروفٍ يُرفع كما هو — لا يُبتلع باسم العزل
+    const moved = quarantineName(ledgerPath, new Date())
+    try {
+      renameSync(ledgerPath, moved)
+      for (const mate of companionFiles(ledgerPath)) { try { if (existsSync(mate)) rmSync(mate, { force: true }) } catch { /* مصاحبٌ عنيد */ } }
+    } catch (moveError) {
+      bootEmit({ kind: "event", turnId: "serve", payload: `⚠ تعذّر عزلُ دفتر الأحداث: ${String((moveError as Error).message).slice(0, 120)}` })
+      throw error
+    }
+    bootEmit({ kind: "event", turnId: "serve", payload: quarantineNotice(moved, why) })
+    process.stderr.write(`ledger quarantined: ${moved} (${why})\n`)
+    serveJournal = await openServeJournal({ database: ledgerPath, legacyRows })
+  }
   const durableMemory = new SqliteFactStore(MEMORY_DB_PATH)
   // S13.4 — الاتّصال نفسه يخدم الاسترجاع وأمرَ الطبقات: اتّصالٌ ثانٍ على
   // الملفّ نفسه وسط كتابةٍ جارية يعود SQLITE_BUSY فيكذب الاسترجاع بالغياب.
@@ -3011,9 +3036,24 @@ const runServeShell = async (): Promise<void> => {
     try { checkpoints.record(currentSession, turnId, PROJECT_DIR, checked.abs) } catch (error) { process.stderr.write(`checkpoint: ${String(error).slice(0, 120)}\n`) }
     const r = await runAdapterV("write", "write_file", { path: checked.abs, content: after }, `write_${turnId}_${nextToolSeq()}`, _hooks.signal)
     if (r.verdict?.ok === true) { turnReadPaths.add(turnScopeKey(normalizedTarget)); if (!targetExists) turnCreatedPaths.add(turnScopeKey(normalizedTarget)) }
+    // 🔴 سويتةٌ سلبيّةٌ كلُّها لا تحرس شيئاً (مقيسٌ حيّاً: أربعةُ اختباراتٍ بقيت خضراءَ
+    // والحارسُ معطَّلٌ بالكامل). يُقال **في إيصال الكتابة نفسِه** فيصل النموذجَ في الحال —
+    // ولا يُمنع: كتابةُ اختبارٍ ليست فعلاً هدّاماً، وحارسٌ يرفض ملفَّ اختبارٍ يُعطِب المنتَج.
+    const suiteWarning = r.verdict?.ok === true && /[.\-_](?:test|spec)\.[cm]?[jt]sx?$/iu.test(normalizedTarget) ? negativeOnlySuite(target, after) : undefined
+    // 🔴 وسطرٌ واحدٌ بنهايةٍ خاطئة يجعل فرقَ Git بحجم الملفّ ويكسر كلَّ مسمارٍ يُرسي على
+    // نهاية سطر. الشجرةُ مختلطةٌ بالضرورة، فالحكمُ يقارن ما كان بما صار: يمنع **الخلط**
+    // لا اختيارَ النهاية.
+    const eolWarning = r.verdict?.ok === true ? lineEndingViolation(target, after, before) : undefined
+    // 🔴 وصورةٌ تُكتب بأبعادٍ تافهةٍ إيهامٌ بمُسلَّم: مقيسٌ حرفيّاً أنّ الوكيل — بعد أن رُفض
+    // المضيفُ في حارس الخروج، ورُفض التقاطُ الصفحة بلا سطح — كتب PNG بحجم 1×1 من base64
+    // مكانَ لقطةٍ مطلوبة. كلُّ فحصٍ يسأل «هل الملفُّ موجود؟» يمرّ عليها. يُقال ولا يُمنع:
+    // قد يكون البكسلُ مقصوداً، والمنعُ في الادّعاء لا في الملفّ.
+    const fabWarning = r.verdict?.ok === true && /\.(?:png|jpe?g|gif|webp)$/iu.test(normalizedTarget)
+      ? fabricatedImage(target, new Uint8Array(Buffer.from(after, "binary")), looksLikeShot(normalizedTarget))
+      : undefined
     // startsWith يقرّر شكل البادئة وحده كما كان؛ الحكم من المحوّل لا من النصّ.
     return {
-      output: r.output.startsWith("رُفض") ? r.output : `✍ ${target} — كتابة ذرّية عبر السياسة وعامل Rust.\n${r.output}`,
+      output: r.output.startsWith("رُفض") ? r.output : `✍ ${target} — كتابة ذرّية عبر السياسة وعامل Rust.\n${r.output}` + (suiteWarning === undefined ? "" : `\n${suiteWarning}`) + (eolWarning === undefined ? "" : `\n${eolWarning}`) + (fabWarning === undefined ? "" : `\n${fabWarning}`),
       verdict: r.verdict,
       idempotencyKey: r.idempotencyKey,
       ...(r.unmapped ? { unmapped: true as const } : {}),
