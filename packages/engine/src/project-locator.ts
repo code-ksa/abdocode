@@ -46,7 +46,7 @@ export function nameTokens(text: string): string[] {
   return words(text)
 }
 
-/** Consonant skeleton across scripts: rodud → rdd, رودود → rdd, marketplace → msdn, السوق → msadn→msdn. */
+/** Consonant skeleton across scripts: rodud → rdd, رودود → rdd, dashboard → dshbrd, دشبورد → dshbrd. */
 export function skeleton(token: string): string {
   const latin = [...token].map((ch) => ARABIC_LATIN[ch] ?? ch).join("")
   return latin.replace(/[^a-z0-9]/gu, "").replace(/[aeiouwy]/gu, "")

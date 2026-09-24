@@ -100,3 +100,27 @@ describe("S11 — الحجبُ يسمّي الإيصالَ الناقص ويقف
     expect(stamp).toBeLessThan(cliSource.indexOf("if (superRepairPasses >= repairRounds) break"))
   })
 })
+
+describe("🔴 مشروعٌ بلا مانيفست يجب أن يستطيع التحقّق — حارسٌ صائبٌ وبوّابةٌ بلا مخرجٍ منتَجٌ مسدود", () => {
+  const enabled = { enabled: true, verifyResults: true, reviewResults: false } as const
+  const write = { command: "write src/guard.js", mutated: true, passed: true }
+
+  test("عدّاءو الاختبار بلا مديرِ حزمٍ يُعَدّون تحقّقاً", () => {
+    // مقيس 2026-09-24: حارسُ مديرِ الحزم يرفض — بحقٍّ — `bun test` في مجلَّدٍ بلا
+    // `package.json` (مديرُ الحزم يصعد فينفّذ سكربتاتِ مستودعٍ أعلى). وكانت كلُّ صيغةٍ
+    // مقبولةٍ تمرّ بمديرِ حزمٍ أو إطارٍ يُستدعى عبره، فكان الدورُ يبقى «مرصوداً» أبداً.
+    for (const command of ["run node --test", "run node --test test/", "run deno test", "run bun src/guard.test.ts"]) {
+      expect(superAbdoVerificationProblem(enabled, [write, { command, passed: true }]), `«${command}» لم يُعَدّ تحقّقاً`).toBeUndefined()
+    }
+  })
+
+  test("والفاشلُ منها يُوقف الإتمام كنظيره — القبولُ ليس تساهلاً", () => {
+    expect(superAbdoVerificationProblem(enabled, [write, { command: "run node --test", passed: false }])).toContain("failed")
+  })
+
+  test("🔴 ولا يتّسع المقبولُ لأمرٍ لا يفحص شيئاً", () => {
+    for (const command of ["run node app.js", "run node --version", "run deno run main.ts", "run bun install", "run echo done", "run bun src/guard.js"]) {
+      expect(superAbdoVerificationProblem(enabled, [write, { command, passed: true }]), `«${command}» مرّ تحقّقاً وهو ليس فحصاً`).toContain("No verification")
+    }
+  })
+})

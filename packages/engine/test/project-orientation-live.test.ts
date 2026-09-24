@@ -16,7 +16,7 @@ import { classifyModelLane } from "@abdo/providers"
 const ROOT = resolve(import.meta.dir, "../../..")
 
 test("naming a project to continue or open routes to the agent lane", () => {
-  for (const text of ["استكمل مشروع رودود", "اكمل مشروع الفواتير من حيث توقفنا", "افتح مشروع crm", "continue project rodud", "open the eagle project", "pick up the repo marketplace"]) expect(classifyModelLane(text)).toBe("agent")
+  for (const text of ["استكمل مشروع رودود", "اكمل مشروع الفواتير من حيث توقفنا", "افتح مشروع crm", "continue project rodud", "open the atlas project", "pick up the repo marketplace"]) expect(classifyModelLane(text)).toBe("agent")
   for (const text of ["ما هو المشروع؟", "شرح كلمة project", "open"]) expect(classifyModelLane(text)).toBe("chat")
 })
 
