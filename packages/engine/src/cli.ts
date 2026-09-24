@@ -112,7 +112,7 @@ import { packageIdentityViolation, parallelApiRouteViolation, projectDomainViola
 import { projectPathProblem, createProjectFolder, projectBootstrapInstruction, resolveNewProjectTarget } from "./project-bootstrap"
 import {findTemplates, downloadTemplate, materializeTemplate} from './project-templates'
 import {inspectProjectStack,projectOrientationBrief} from './project-stack'
-import { defaultProjectRoots, locateProjects } from "./project-locator"
+import { defaultProjectRoots, locateProjects, projectPrecedence } from "./project-locator"
 import { INFER_OUTPUT_TOKENS, buildInferSystem, condenseForInfer, describeFrame, interpretInferTurn, semanticFrame, type Inferred, type SemanticFrame } from "@abdo/semantic"
 import { orientProject, orientationBrief, type OrientationMemory, type Orientation } from "./project-orientation"
 import { detectImplicitCorrection, inferredValue } from "./implicit-correction"
@@ -4932,7 +4932,11 @@ const runServeShell = async (): Promise<void> => {
       if (parsed) { ASK_PROVIDER = parsed.provider; ASK_MODEL = parsed.model }
     }
     if (s.mode === "read-only" || s.mode === "auto" || s.mode === "full-access") currentMode = s.mode
-    if (typeof s.project === "string" && projectPathProblem(s.project, blockedProjectRoots) === undefined) { PROJECT_DIR = resolve(s.project); projectSelected = true }
+    if (typeof s.project === "string" && projectPathProblem(s.project, blockedProjectRoots) === undefined) {
+      const chosen = projectPrecedence({ ...(explicitProject === undefined ? {} : { explicit: explicitProject }), stored: s.project })
+      if (chosen.project !== undefined) { PROJECT_DIR = resolve(chosen.project); projectSelected = true }
+      if (chosen.notice !== undefined) bootEmit({ kind: "event", turnId: "serve", payload: `⚠ ${chosen.notice}` })
+    }
   }
 
   // Desktop launches one private child pipe and gives it a per-process secret.

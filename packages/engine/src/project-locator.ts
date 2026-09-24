@@ -94,6 +94,22 @@ function childDirs(root: string): string[] {
 }
 
 /** Roots worth scanning for this user: explicit roots, Documents, the selected project's parent. */
+/**
+ * أيُّهما المشروع: ما بُدئ به المحرّكُ الآن، أم ما حُفظ في الإعدادات من قبل؟
+ *
+ * **قيس حيّاً**: أُطلق المحرّكُ بمشروعٍ صريح فتجاهله **صامتاً** وفتح المحفوظ —
+ * مستودعاً آخرَ فيه ثمانيةَ عشرَ كوميتاً غيرَ مدفوع، والمهمّةُ تحمل «وادفع الجاهز».
+ *
+ * القاعدة: الصريحُ **نيّةُ المشغّل الآن** فيعلو؛ والمحفوظُ تفضيلٌ قديم. والاختلافُ
+ * **يُقال ولا يُبتلع** — تجاهلٌ صامتٌ هو ما جعل العطلَ خطِراً، لا الترتيبُ نفسُه.
+ */
+export function projectPrecedence(input: { readonly explicit?: string; readonly stored?: string }): { readonly project?: string; readonly notice?: string } {
+  const explicit = input.explicit?.trim() || undefined
+  const stored = input.stored?.trim() || undefined
+  if (explicit === undefined) return stored === undefined ? {} : { project: stored }
+  if (stored === undefined || resolve(stored).toLowerCase() === resolve(explicit).toLowerCase()) return { project: explicit }
+  return { project: explicit, notice: `المشروعُ من البيئة (${resolve(explicit)}) يعلو على المحفوظ في الإعدادات (${resolve(stored)}).` }
+}
 export function defaultProjectRoots(input: { documents?: string; configured?: readonly string[]; selectedProject?: string }): string[] {
   const roots: string[] = []
   const push = (value: string | undefined) => { if (value && isAbsolute(value)) { const r = resolve(value); if (!roots.includes(r)) roots.push(r) } }
