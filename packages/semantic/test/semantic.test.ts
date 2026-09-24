@@ -220,18 +220,18 @@ type OpsRow = {
 const FLAVOR_TARGETS: readonly KnownTarget[] = [
   { id: "example", forms: ["تكنولوجيا سعودية", "تكنولوجيا السعودية", "example", "technology ksa"] },
   // المعرّفُ عربيٌّ عمداً: حارسُ الحدّ العامّ يرفض الاسمَ اللاتينيّ للمنتَج في أيّ ملفٍّ تحت الحزم — والاختبارُ لا يُستثنى.
-  { id: "منصّةُ المواقع", forms: ["منصّةُ المواقع"] },
-  { id: "eagle", forms: ["غرفةُ الأخبار", "غرفةُ الأخبار", "eagle"] },
+  { id: "مرصد", forms: ["مرصد"] },
+  { id: "atlas", forms: ["أطلس", "اطلس", "atlas"] },
   { id: "marketplace", forms: ["السوق", "marketplace"] },
-  { id: "suq", forms: ["سوق الالسوق"] },
+  { id: "suq", forms: ["سوق العطور"] },
   { id: "search-ksa", forms: ["search-ksa", "search ksa"] },
   { id: "controlpanel", forms: ["أوبن عبد", "اوبن عبد", "controlpanel", "open abd"] },
 ]
 
 const OPS_GOLDEN: readonly OpsRow[] = [
   // site — واجهاتُنا البصريّة (09-17): فتحُ داشبورد/لوحة تحكّم عمليّةٌ تُوجَّه إلى دليل الواجهات لا تخمينُ رابط.
-  { text: "افتح لي داشبورد منصّةُ المواقع وخذ لقطة", action: "site" },
-  { text: "ادخل على لوحة تحكم غرفةُ الأخبار", action: "site" },
+  { text: "افتح لي داشبورد مرصد وخذ لقطة", action: "site" },
+  { text: "ادخل على لوحة تحكم أطلس", action: "site" },
   { text: "open the marketplace admin panel", action: "site" },
   { text: "افتح الموقع", action: "site" },
 
@@ -297,7 +297,7 @@ const OPS_GOLDEN: readonly OpsRow[] = [
   { text: "السيرفر شغال ولا لا؟", action: "health", target: "السيرفر", targetId: "server", question: true },
   { text: "الأسرار في الخزنة ولا لا؟", action: "secrets", question: true },
   { text: "الموقع واقع؟", action: "health", target: "الموقع", targetId: "site", question: true },
-  { text: "افحص سوق الالسوق", action: "health", target: "سوق الالسوق", targetId: "suq" },
+  { text: "افحص سوق العطور", action: "health", target: "سوق العطور", targetId: "suq" },
   { text: "افحص السيرفر ثم ورني اللوج", action: "health", sequence: ["health", "logs"], target: "السيرفر", targetId: "server" },
   { text: "ادفع تغييرات السوق", action: "push", target: "السوق", targetId: "marketplace" },
   // ── فصحى ──
@@ -323,7 +323,7 @@ const OPS_GOLDEN: readonly OpsRow[] = [
   { text: "ابني «الإضافة» ثم ثبّتها", action: "build", sequence: ["build", "install"], target: "الإضافة", targetId: "app" },
   { text: "انشر تكنولوجيا سعودية", action: "publish", target: "تكنولوجيا سعودية", targetId: "example" },
   { text: "انشر السوق على الانتاج", action: "publish", target: "السوق", targetId: "marketplace" },
-  { text: "انشر المقال على غرفةُ الأخبار", action: "publish", target: "غرفةُ الأخبار", targetId: "eagle" },
+  { text: "انشر المقال على أطلس", action: "publish", target: "أطلس", targetId: "atlas" },
   { text: "ثبّت أوبن عبد على السيرفر", action: "install", target: "أوبن عبد", targetId: "controlpanel" },
   { text: "ابني أوبن عبد", action: "build", target: "أوبن عبد", targetId: "controlpanel" },
   { text: "ما يشتغل التطبيق على لينكس", action: "fix", target: "التطبيق", targetId: "app" },
@@ -343,7 +343,7 @@ const OPS_GOLDEN: readonly OpsRow[] = [
   { text: "commit, push, deploy", action: "commit", sequence: ["commit", "push", "publish"] },
   { text: "build the installer and then publish it", action: "build", sequence: ["build", "publish"], target: "installer", targetId: "app" },
   { text: "run the tests then commit", action: "test", sequence: ["test", "commit"] },
-  { text: "deploy eagle to production", action: "publish", target: "eagle", targetId: "eagle" },
+  { text: "deploy atlas to production", action: "publish", target: "atlas", targetId: "atlas" },
   { text: "go live on the site", action: "publish", target: "site", targetId: "site" },
   { text: "install the extension on windows", action: "install", target: "extension", targetId: "app" },
   { text: "cleanup old releases on the server", action: "cleanup", target: "server", targetId: "server" },
@@ -362,10 +362,10 @@ const OPS_GOLDEN: readonly OpsRow[] = [
   { text: "اعمل build للمثبت ثم ارفعه على الدرايف", action: "build", sequence: ["build", "push"], target: "المثبت", targetId: "app" },
   { text: "ورني لوجات nginx", action: "logs", target: "nginx", targetId: "service" },
   { text: "انشر على search-ksa", action: "publish", target: "search-ksa", targetId: "search-ksa" },
-  { text: "اعمل ريستارت لغرفةُ الأخبار", action: "restart", target: "غرفةُ الأخبار", targetId: "eagle" },
-  { text: "اعمل ديبلوي لمنصّةُ المواقع", action: "publish", target: "منصّةُ المواقع", targetId: "منصّةُ المواقع" },
-  { text: "اعمل كوميت لمنصّةُ المواقع", action: "commit", target: "منصّةُ المواقع", targetId: "منصّةُ المواقع" },
-  { text: "شغل الاختبارات على منصّةُ المواقع", action: "test", target: "منصّةُ المواقع", targetId: "منصّةُ المواقع" },
+  { text: "اعمل ريستارت لأطلس", action: "restart", target: "أطلس", targetId: "atlas" },
+  { text: "اعمل ديبلوي لمرصد", action: "publish", target: "مرصد", targetId: "مرصد" },
+  { text: "اعمل كوميت لمرصد", action: "commit", target: "مرصد", targetId: "مرصد" },
+  { text: "شغل الاختبارات على مرصد", action: "test", target: "مرصد", targetId: "مرصد" },
   { text: "ادفع التعديلات على جيت هب", action: "push", target: "جيت هب", targetId: "repo" },
   // ── عربيّةٌ بحروفٍ لاتينية (عربيزي) ──
   { text: "e3mel commit w ba3den push", action: "commit", sequence: ["commit", "push"] },

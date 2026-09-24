@@ -10,7 +10,7 @@ function fixture() {
   for (const dir of [
     join(documents, "rodud"), join(documents, "crm-board", ".git"), join(documents, "marketplace-work"),
     join(documents, "node_modules", "rodud-fake"), join(documents, ".hidden-rodud"),
-    join(projects, "newsroom"), join(projects, "rodud-mobile"), join(projects, "unified-business-os"),
+    join(projects, "newsroom"), join(projects, "rodud-mobile"), join(projects, "ledger-suite"),
     join(home, "elsewhere", "rodud-copy"),
   ]) mkdirSync(dir, { recursive: true })
   writeFileSync(join(documents, "rodud", "package.json"), "{}")
@@ -26,7 +26,10 @@ describe("project locator", () => {
     expect(nameTokens("مؤسسة الرياض")).toEqual(nameTokens("موسسه الرياض"))
     expect(nameTokens("مشروع ٢٠٢٦")).toEqual(["مشروع", "2026"])
     expect(skeleton("رودود")).toBe(skeleton("rodud"))
-    expect(skeleton("السوق")).toBe(skeleton("marketplace"))
+    // 🔴 الطيُّ يطوي **الرسمَ** لا المعنى: زوجٌ منقولٌ صوتيّاً يتشارك الهيكل (dshbrd)،
+    // وزوجٌ **مترجَمٌ** لا يتشاركه ولا يمكن أن يتشاركه — كلمتان مختلفتان أصلاً.
+    expect(skeleton("دشبورد")).toBe(skeleton("dashboard"))
+    expect(skeleton("السوق")).not.toBe(skeleton("marketplace"))
     expect(skeleton("نسر")).toBe(skeleton("nsr"))
   })
 
@@ -51,9 +54,10 @@ describe("project locator", () => {
     try {
       const roots = [f.documents, join(f.home, "workspace")]
       expect(locateProjects("crm", roots).candidates[0]).toMatchObject({ name: "crm-board", signals: { git: true } })
-      expect(locateProjects("eagle project", roots).candidates.map((c) => c.name)).toEqual(["newsroom"])
+      // والاستعلامُ يطابق التجهيزةَ — «مشروع» و«project» كلمتا توقّفٍ فلا تُطابقان شيئاً.
+    expect(locateProjects("newsroom project", roots).candidates.map((c) => c.name)).toEqual(["newsroom"])
       expect(locateProjects("the project", roots).candidates).toEqual([])
-      expect(locateProjects("business os", roots).candidates.map((c) => c.name)).toEqual(["unified-business-os"])
+      expect(locateProjects("ledger suite", roots).candidates.map((c) => c.name)).toEqual(["ledger-suite"])
     } finally { f.cleanup() }
   })
 
