@@ -7549,7 +7549,7 @@ function backgroundLogs(id: string, lines: number): string {
   const run = backgroundRuns.get(id)
   if (run === undefined) return `لا تشغيلَ خلفيّاً بالمعرّف «${id.slice(0, 16)}» في هذه الجلسة — المعرّفات: ${[...backgroundRuns.keys()].join("، ") || "لا شيء"}`
   let text = ""
-  // PowerShell 5.1 يكتب إعادةَ التوجيه *> بترميز UTF-16LE مع BOM؛ والقراءةُ تكتشف الترميز بدل أن تفترضه (قيس: «t i …»).
+  // PowerShell 5.1 يكتب إعادةَ التوجيه *> بترميز UTF-16LE مع BOM؛ والقراءةُ تكتشف الترميز بدل أن تفترضه (قيس: «t\x00i\x00…»).
   try { const buf = readFileSync(run.log); text = buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe ? buf.toString("utf16le").slice(1) : buf.toString("utf-8").replace(/^﻿/, "") } catch { text = "" }
   const tail = text.split(/\r?\n/).filter((l, i, a) => !(i === a.length - 1 && l === "")).slice(-lines)
   const state = run.exitCode === undefined ? `جارٍ منذ ${Math.round((Date.now() - run.startedAt) / 1000)} ث` : run.stopped ? `أُوقف` : `انتهى برمز ${run.exitCode}`
