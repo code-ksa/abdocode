@@ -47,3 +47,47 @@ export function exposureLine(exposed: number, total: number, families: ReadonlyS
   const open = [...families]
   return `🧰 أدوات معروضة: ${exposed}/${total}${open.length > 0 ? ` (+${open.join("، ")})` : " (الأساسيّة)"}`
 }
+
+/**
+ * 🔴 **النيّةُ قد تكون في ما يُقرأ لا في ما كُتب في الطلب.**
+ *
+ * قِيس حيّاً: مهمّةٌ نصُّها «اقرأ `TASK.md` ونفّذ المراحلَ الأربعَ فيه» — وفي الملفّ
+ * مرحلةٌ تطلب لقطةً من موقعٍ مرجعيّ. ولا كلمةَ متصفّحٍ في الطلب، فبقيت عائلةُ المتصفّح
+ * مغلقةً **طوال الدور**: لم يرَ النموذجُ أداةً واحدةً منها، ولم يحاول، وسقطت ثلاثةُ بنودٍ
+ * في الحَكَم على لقطةٍ لم تُلتقط. والقدرةُ كانت حاضرةً — لكنّ **ما لا يُعرض لا يُطلَب**.
+ *
+ * فالمسحُ يمتدّ إلى **الملفّات الآمرة** وحدها (TASK/README/SPEC…) وإلى ما يُجلب من
+ * الشبكة — لا إلى كلّ قراءة: كلماتٌ مثل «صفحة» و«تصميم» و`ui` تملأ الشيفرةَ العاديّة،
+ * فمسحُها كلِّها يفتح كلَّ عائلةٍ دائماً ويُبطل توفيرَ التوكنات الذي وُضع الإظهارُ لأجله.
+ */
+const INSTRUCTION_FILE = /(?:^|[\\/])(?:TASK|README|SPEC|INSTRUCTIONS?|AGENTS|BRIEF|PLAN)[^\\/]*\.(?:md|markdown|txt|rst)$/iu
+
+/** سقفُ المسح: أوّلُ عشرين ألفَ محرفٍ — النيّةُ تُعلن في صدر الملفّ لا في ذيله. */
+export const RESULT_SCAN_LIMIT = 20_000
+
+/** هل نتيجةُ هذه الأداة **آمرةٌ** فتُمسح نيّتُها؟ */
+export function resultCarriesIntent(toolName: string, body: string): boolean {
+  if (toolName === "fetch") return true
+  if (toolName !== "read") return false
+  // **الجسمُ يصلُ والكلمةُ أمامَه**: المُوزِّعُ يمرّر `read TASK.md` لا `TASK.md` وحدها.
+  // قِيس حيّاً بمسبارٍ يكتب في stderr: `word=read bodyHead=read TASK.md`. ومسمارٌ كُتب
+  // على الشكل المُتخيَّل مرّ أخضرَ والدالّةُ لا تعمل — التوقيعُ يُقرأ من المصدر لا يُفترض.
+  const tokens = String(body).trim().split(/\s+/u).filter((t) => t.length > 0)
+  const path = tokens[0] === toolName ? tokens[1] : tokens[0]
+  return INSTRUCTION_FILE.test(path ?? "")
+}
+
+/**
+ * يوسّع العائلاتِ من نتيجةِ أداةٍ آمرة، ويعيد ما أُضيف (فارغٌ = لا جديد).
+ * يعدّل `families` في مكانها كما يفعل `noteToolUse` — نقطةُ حقيقةٍ واحدة للعائلات.
+ */
+export function familiesFromResult(toolName: string, body: string, output: string, families: Set<string>): string[] {
+  if (!resultCarriesIntent(toolName, body)) return []
+  const added: string[] = []
+  for (const family of familiesFor(String(output ?? "").slice(0, RESULT_SCAN_LIMIT))) {
+    if (families.has(family)) continue
+    families.add(family)
+    added.push(family)
+  }
+  return added
+}
