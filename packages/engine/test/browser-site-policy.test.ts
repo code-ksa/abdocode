@@ -63,7 +63,12 @@ test("docked navigation and popup handlers keep the existing saved policy as the
   const launch=surface.slice(surface.indexOf("const browserPid ="))
   expect(launch).toContain('"--new-window", "about:blank"')
   expect(launch.indexOf("await browser.navigate(url)")).toBeGreaterThan(launch.indexOf("await browser.attach("))
-  expect(surface.match(/new CdpBrowser\(port, /gu)).toHaveLength(2)
+  // ثلاثة الآن: المرساةُ الملكيّة، والمُطلَقُ منّا، و**القائمُ على منفذِنا المشغول**.
+  // والعددُ ليس المقصودَ بذاتِه: المقصودُ أنّ **كلّ متصفّحٍ يحمل سياسةَ المواقع المحفوظة**،
+  // فلا يتسلّل واحدٌ بلا حارس. فيُفحص الوصفُ لا العدُّ وحده.
+  const browsers = [...surface.matchAll(/new CdpBrowser\(port, ([^,]+),/gu)].map((m) => m[1])
+  expect(browsers).toHaveLength(3)
+  for (const policy of browsers) expect(policy).toContain("browserSiteAllowed(SETTINGS_FILE")
   expect(surface).toContain('if (!browserSiteAllowed(SETTINGS_FILE, rest)) return "Navigation blocked')
   expect(surface).toContain('if (!browserSiteAllowed(SETTINGS_FILE, url)) return "Navigation blocked')
 })
