@@ -198,8 +198,12 @@ describe("wiring pins — every layer", () => {
     expect(cli.indexOf("if (!browserSiteAllowed(SETTINGS_FILE, target))")).toBeLessThan(restore)
     expect(restore).toBeLessThan(cli.indexOf("const cookies = await surface.importCookies(saved.cookies)"))
     // الهبوطُ بعد كلّ تنقّل: ui (ثلاثة مسارات) وopen وtabs new/switch وback/forward وtap الذي نقل الصفحة
-    expect(cli.match(/const note = await landed\(/gu)?.length).toBe(8)
-    expect(cli.match(/const restored = await restoreBeforeNavigation\(/gu)?.length).toBe(5)
+    // تسعة الآن: أُضيف مسارُ **الوصل بمتصفّحٍ قائمٍ على منفذٍ مشغول**،
+    // وهو هبوطٌ كغيره فيُسجّل في التاريخ. والمسمارُ يعدّ لأنّ **هبوطاً بلا تسجيل**
+    // يُضيّع الجلسةَ بصمت، فكلّما زاد مسارٌ زاد العددُ عمداً ليُراجَع.
+    expect(cli.match(/const note = await landed\(/gu)?.length).toBe(9)
+    // وستّةٌ للاسترجاع للسبب نفسِه: كلُّ مسارٍ يُبحِر يسترجع قبلَه — وإلّا فُقد الدخول.
+    expect(cli.match(/const restored = await restoreBeforeNavigation\(/gu)?.length).toBe(6)
     expect(cli).toContain("if (now.length > 0 && now !== surfaceUrl) { surfaceUrl = now; moved = await landed(now) }")
     // الاستعادةُ مرّةً ثمّ يُسأل المستخدمُ مرّةً: لا حلقةَ على جلسةٍ انتهت؛ الحفظُ والنسيانُ يصفّران المحاولة
     expect(cli).toContain("const sessionRestoreTried = new Set<string>()")
