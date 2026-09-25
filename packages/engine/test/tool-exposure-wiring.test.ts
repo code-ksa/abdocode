@@ -6,7 +6,7 @@ const nl = source.includes("\r\n") ? "\r\n" : "\n"
 
 describe("tool exposure wiring", () => {
   test("families are computed from the effective goal at turn start, expanded at dispatch, and filter the model's tool list", () => {
-    expect(source).toContain('import { exposedByIntent, exposureLine, familiesFor, noteToolUse } from "./tool-exposure"')
+    expect(source).toContain('import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"')
     expect(source).toContain("let turnFamilies = new Set<string>()")
     const set = source.indexOf("turnFamilies = familiesFor(effectiveGoal, turnFamilies)")
     const goal = source.indexOf("currentGoalText = turn.body")
@@ -19,6 +19,12 @@ describe("tool exposure wiring", () => {
     const allow = source.indexOf(".filter((tool) => withinAllowlist(tool.name) && (tool.name !== DELEGATE_TOOL", exposure)
     expect(exposure).toBeGreaterThan(0); expect(allow).toBeGreaterThan(exposure); expect(allow - exposure).toBeLessThan(120)
     expect(source).toContain("await emitEvent(turn.id, exposureLine(callable.filter((t) => exposedByIntent(t.name, turnFamilies)).length, callable.length, turnFamilies))")
+    // 🔴 والتوسيعُ من **نتيجة** أداةٍ آمرة — عند المخرج الواحد لا عند عشرين return.
+    // قِيس: مهمّةٌ تقول «اقرأ TASK.md ونفّذ» وفي الملفّ طلبُ لقطةٍ — فبقيت عائلةُ
+    // المتصفّح مغلقةً طوال الدور، وما لا يُعرَض لا يُطلَب.
+    const raw = source.indexOf("const result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)")
+    const widen = source.indexOf("familiesFromResult(word, body, result.output, turnFamilies)", raw)
+    expect(raw).toBeGreaterThan(0); expect(widen).toBeGreaterThan(raw); expect(widen - raw).toBeLessThan(400)
   })
   test("the goal is no longer reset to empty right after it is set (the manifest guard reads it during the turn)", () => {
     expect(source).not.toContain(`    newProjectPending = undefined${nl}    currentGoalText = ""`)

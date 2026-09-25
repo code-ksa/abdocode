@@ -81,6 +81,13 @@ export function parseDesktopCommand(rest: string): DesktopAction | { readonly er
       const app = arg.replace(/^["'«»“”‘’`]+|["'«»“”‘’`]+$/gu, "").trim()
       if (app.length === 0) return { error: "desk open <اسمُ برنامج (notepad, mspaint, excel) أو مسارُ .exe/ملفّ>" }
       if (/[|&;<>^\r\n]/.test(app)) return { error: "desk open: اسمٌ أو مسارٌ واحد بلا رموز صدفة" }
+      // 🔴 **رابطٌ ليس برنامجاً.** مقيسٌ حيّاً: عجز متصفّحُ الوكيل عن الاتّصال، فجرّب النموذجُ
+      // `desk open https://…` — فأُقلعت **PowerShell** ورُبطت نافذتُها، وعاد الإيصالُ يقول
+      // «أُقلعت ورُبطت… التالي: desk ui». أداةٌ تقبل شكلاً خاطئاً وتُقلع شيئاً آخرَ **وتُعلن
+      // النجاح** أسوأُ من أداةٍ ترفض: الوكيلُ بنى عليها ثلاثَ خطواتٍ ثمّ اختلق اللقطة.
+      if (/^(?:https?|file|ftp):\/\//iu.test(app)) {
+        return { error: `desk open يُقلع **برنامجاً** لا رابطاً (${app.slice(0, 60)}…). للتصفّح استعمل «open <رابط>»؛ ولو أردت متصفّحاً على سطح المكتب فسمِّ البرنامج: desk open chrome` }
+      }
       return { kind: "open", app: app.slice(0, 260) }
     }
     case "focus": {
