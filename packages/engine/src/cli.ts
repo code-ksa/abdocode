@@ -4270,8 +4270,32 @@ const runServeShell = async (): Promise<void> => {
       const port = 9333
       // S6 — ملفٌّ دائم تحت دليل حالة المحرّك (لا مؤقّتٌ ولا شجرةُ المنتَج): الدخولُ يبقى بعد إعادة التشغيل.
       const profile = join(STATE_ROOT, PROFILE_DIR)
+      // 🔴 **منفذٌ مشغولٌ سؤالٌ لا حكم.** كان انشغالُ منفذ التحكّم رفضاً نهائيّاً — وشاغلُه
+      // في الغالب **متصفّحُ المحرّك نفسِه من دورٍ سابق**: أطلقه المحرّكُ، ثمّ رفض أن يكلّمه.
+      //
+      // مقيسٌ حيّاً: مهمّةٌ تطلب لقطةَ مرجعٍ ردّت مرّتين «Browser control port is in use»،
+      // فلجأ الوكيلُ إلى توليد HTML ثمّ **كتب PNG بحجم 1×1 (69 بايتاً)** مكانَ اللقطة.
+      // الرفضُ لم يمنع الاختلاق — أنتجه.
+      //
+      // فنسأل المنفذَ أوّلاً: إن ردّ CDP وسلّمنا صفحةً قابلةً للقيادة فهو متصفّحُنا ونكمل
+      // عليه؛ وإن لم يردّ فالرفضُ يبقى **ويحمل سببَه** بدل أن يخمّن المُشغِّلُ ما يُغلق.
       let lease
-      try { lease = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response("") }) } catch { return "Browser control port is in use; close the app-owned browser before retrying" }
+      try { lease = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response("") }) } catch {
+        const existing = new CdpBrowser(port, target => browserSiteAllowed(SETTINGS_FILE, target), () => true)
+        try {
+          await existing.attach()
+          surface = existing
+          const restored = await restoreBeforeNavigation(url)
+          await existing.navigate(url)
+          surfaceGeneration += 1
+          surfaceRefs = []
+          surfaceUrl = url
+          const note = await landed(url)
+          return `وُصل بمتصفّحٍ قائمٍ على ${port} وفُتحت الواجهة — «${await untilTitled(existing)}» (${url}). استعمل page لقراءتها.${restored}${note}`
+        } catch (error) {
+          return `منفذُ التحكّم ${port} مشغولٌ ولم يردّ CDP (${error instanceof Error ? error.message : String(error)}) — أغلق المتصفّحَ الذي يشغله ثمّ أعد المحاولة.`
+        }
+      }
       lease.stop(true)
       const browserPid = launchBrowserProcess(edge, [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--new-window", "about:blank"])
       // 🔴 **مِلكيّةٌ تُثبَت بالإطلاق لا بنبض المُطلِق.** كان الإثباتُ `process.kill(pid, 0)`
