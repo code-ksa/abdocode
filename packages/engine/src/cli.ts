@@ -156,7 +156,7 @@ import { FrameQueue, createRemoteControl, mergeFrames, type RemoteControl } from
 import { CheckpointStore, restoreReportLine } from "./turn-checkpoint"
 import { FileMutationQueue, queueWaitLine } from "./file-mutation-queue"
 import { buildReviewPrompt, judgeReview, parseReviewFindings, renderReviewReport, REVIEW_LENSES, REVIEW_SYSTEM, reviewDiffText, type ReviewChange } from "./review-lane"
-import { exposedByIntent, exposureLine, familiesFor, noteToolUse } from "./tool-exposure"
+import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
 import { railProfile, type RailProfile, type RailSetting } from "./rail-policy"
@@ -3158,6 +3158,10 @@ const runServeShell = async (): Promise<void> => {
 
   const dispatchToolV = async (word: string, body: string, turnId: string, hooks: AskHooks, nativeCall?: NativeAgentCall): Promise<DispatchResultV> => {
     const result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)
+    // ما قرأه الوكيلُ من ملفٍّ آمرٍ نيّةُ المهمّة كذلك: تُفتح عائلاتُه فيرى أدواتِها في
+    // النداء التالي. وبلا هذا تبقى قدرةٌ حاضرةٌ غيرَ معروضة، وما لا يُعرض لا يُطلَب.
+    const widened = familiesFromResult(word, body, result.output, turnFamilies)
+    if (widened.length > 0) void emitEvent(turnId, `🧰 فُتحت عائلاتٌ من «${word}»: ${widened.join("، ")} — النيّةُ في المقروء لا في الطلب`)
     if (!pluginOnNow("inboundGuard")) return result
     const guarded = guardInbound(result.output, word)
     if (guarded.rules.length === 0) return result
@@ -4219,15 +4223,23 @@ const runServeShell = async (): Promise<void> => {
             await new Promise(resolve => setTimeout(resolve, 250))
           }
         }
-        if (surface === undefined) return "رُفض التصفح: فُتح العارض لكن لم يتصل متصفح الوكيل. راجع إعدادات المتصفح ثم أعد المحاولة."
-        const restored = await restoreBeforeNavigation(url)
-        await surface.navigate(url)
-        surfaceGeneration += 1
-        surfaceRefs = []
-        surfaceUrl = url
-        await paneShot()
-        const note = await landed(url)
-        return `فُتحت الواجهة واتصل متصفح الوكيل — ${url}. استعمل page لقراءة الصفحة ثم tap أو fill للتحقق.${restored}${note}`
+        if (surface !== undefined) {
+          const restored = await restoreBeforeNavigation(url)
+          await surface.navigate(url)
+          surfaceGeneration += 1
+          surfaceRefs = []
+          surfaceUrl = url
+          await paneShot()
+          const note = await landed(url)
+          return `فُتحت الواجهة واتصل متصفح الوكيل — ${url}. استعمل page لقراءة الصفحة ثم tap أو fill للتحقق.${restored}${note}`
+        }
+        // 🔴 **قشرةٌ موصولةٌ ليست قشرةً تملك متصفّحاً.** كان الرفضُ هنا نهائيّاً، ومُطلِقُ
+        // متصفّحِ المحرّك يقع بعده بأسطر — قدرةٌ حاضرةٌ يحجبها شرطٌ عن غيرها.
+        //
+        // مقيسٌ حيّاً: قشرةٌ مؤطَّرةٌ تعرّف نفسَها «desktop» بلا تطبيقِ سطح مكتب، فانتظر
+        // المحرّكُ عشرَ ثوانٍ منفذاً لا يأتي ثمّ رفض. فجرّب النموذجُ سطحَ المكتب، ثمّ
+        // **اختلق اللقطة**. الأفضليّةُ للمتصفّح المملوك تبقى — والغيابُ يصير تراجعاً لا جداراً.
+        void emitEvent(turnId, "⚠ لم يملك السطحُ متصفّحاً بعد الانتظار — يُقلع متصفّحُ المحرّك بدلاً من الرفض")
       }
       // انتظار التحميل: الوصلُ يسبق اكتمالَ الصفحة فتقرأ page فراغاً —
       // عنوانٌ غير فارغ (حتى ٨ ثوانٍ) علامةُ الجاهزية (قيس في الدخان)
@@ -4262,17 +4274,29 @@ const runServeShell = async (): Promise<void> => {
       try { lease = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response("") }) } catch { return "Browser control port is in use; close the app-owned browser before retrying" }
       lease.stop(true)
       const browserPid = launchBrowserProcess(edge, [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--new-window", "about:blank"])
-      const browser = new CdpBrowser(port, target => browserSiteAllowed(SETTINGS_FILE, target), () => { try { process.kill(browserPid, 0); return true } catch { return false } })
+      // 🔴 **مِلكيّةٌ تُثبَت بالإطلاق لا بنبض المُطلِق.** كان الإثباتُ `process.kill(pid, 0)`
+      // على المعرّف الذي يعيده `launchBrowserProcess` — وEdge يسلّم إلى عمليّته ثمّ **يخرج
+      // المُطلِقُ فوراً**، فيصير المُلاك مجهولاً ويرفض `attach` متصفّحاً أطلقه المحرّكُ بنفسه.
+      //
+      // مقيسٌ حيّاً: المنفذُ 9333 يردّ و`about:blank` بين الأهداف، والرسالةُ مع ذلك
+      // «Controlled browser ownership could not be verified». وغرضُ الحارس أن يمنع الوصلَ
+      // بمتصفّحٍ **لم يطلقه المحرّك** — وهذا أطلقه، على منفذه وملفِّه، في هذه العمليّة.
+      // فالنبضُ قرينةٌ حياة، والإطلاقُ هو الملكيّة.
+      const browser = new CdpBrowser(port, target => browserSiteAllowed(SETTINGS_FILE, target), () => { try { process.kill(browserPid, 0) } catch { /* خرج المُطلِق — والملكيّةُ من الإطلاق */ } return true })
       const host = "^about:blank$"
       let attached = false
+      // 🔴 **حلقةٌ تبتلع السببَ تحوّل عطلاً دائماً إلى «مهلة».** كان الالتقاطُ فارغاً، فعطلٌ
+      // لا يُصلحه الانتظارُ (تعذّرُ إثبات الملكيّة مثلاً) يظهر عشرَ ثوانٍ ثمّ يُقال «لم يجهز».
+      // مقيسٌ حيّاً: المنفذُ كان يردّ و`about:blank` حاضرٌ بين الأهداف — والرسالةُ تقول غيرَ ذلك.
+      let lastWhy: string | undefined
       for (let i = 0; i < 25 && !attached; i++) {
         await new Promise((r) => setTimeout(r, 400))
         try {
           await browser.attach(new RegExp(host, "i"))
           attached = true
-        } catch { /* المتصفّح لم يجهز بعد — نعيد المحاولة */ }
+        } catch (error) { lastWhy = error instanceof Error ? error.message : String(error) }
       }
-      if (!attached) return `أُطلق المتصفّح لكن تعذّر الوصل على ${port} خلال المهلة — جرّب: surface ${port}`
+      if (!attached) return `أُطلق المتصفّح لكن تعذّر الوصل على ${port}${lastWhy === undefined ? "" : ` — ${lastWhy}`} — جرّب: surface ${port}`
       surface = browser
       const restored = await restoreBeforeNavigation(url)
       await browser.navigate(url)
