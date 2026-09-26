@@ -4,6 +4,21 @@ import { $ } from "bun"
 import { cp, readdir, rm } from "node:fs/promises"
 import path from "node:path"
 
+/**
+ * 🔴 **حمولةُ سطح المكتب حزمةُ ويندوز، و`prepare` يعمل مع كلّ `bun install`.**
+ *
+ * مقيس 2026-09-26 على أوّل تشغيلٍ لـCI (أوبونتو): السكربتُ بنى النواةَ بنجاح ثمّ سقط
+ * بـ`ENOENT` على `abdo-kernel.exe` — فكارجو على لينكس لا يضع لاحقةَ `.exe`. والحمولةُ
+ * كلُّها لمُنصِّب NSIS على ويندوز: لا شيءَ يُرحَّل منها على لينكس.
+ *
+ * فيُتخطّى **بالسبب منطوقاً** لا صامتاً، ولا يُخفى العطلُ على ويندوز: هناك يبقى
+ * السقوطُ سقوطاً. وتخطٍّ صامتٌ هنا كان سيجعل بناءَ سطح المكتب على لينكس «ينجح» بلا حمولة.
+ */
+if (process.platform !== "win32") {
+  console.error(`⏭ prepare: حمولةُ سطح المكتب حزمةُ ويندوز (مُنصِّب NSIS) — لا شيءَ يُرحَّل على ${process.platform}. تُخطّى بالسبب.`)
+  process.exit(0)
+}
+
 const desktop = path.resolve(import.meta.dir, "..")
 const root = path.resolve(desktop, "../..")
 const payload = path.join(desktop, "src-tauri", "payload")
