@@ -100,6 +100,20 @@ def active():
     try: return int(sh("xdotool", "getactivewindow"))
     except Exception: return 0
 
+def no_wm():
+    # لا مديرَ نوافذ على هذه الشاشة ⇒ لا خاصيّة _NET_ACTIVE_WINDOW ⇒ **التنشيطُ لا
+    # يُثبَت أصلاً**. مقيس على WSLg (2026-09-26): النافذةُ تُعرض ويجدها xdotool،
+    # والحقنُ الموجَّه بالمعرّف ينجح، لكن getactivewindow يردّ
+    # «XGetWindowProperty[_NET_ACTIVE_WINDOW] failed» فيعود التنشيطُ صفراً.
+    # لا نقول «فعّلتُ» ما لا نثبته — لكن نسمّي السبب: رفضٌ عامٌّ بلا سببٍ أضاع
+    # ليلةً في هذا الخطّ نفسِه، والحلقةُ التي تبتلع السببَ تحوّل عطلاً دائماً
+    # إلى «مهلة».
+    try:
+        r = subprocess.run(["xdotool", "getactivewindow"], capture_output=True, text=True, timeout=5)
+    except Exception:
+        return False
+    return r.returncode != 0 and "_NET_ACTIVE_WINDOW" in (r.stderr or "")
+
 def activate(wid):
     subprocess.run(["xdotool", "windowactivate", "--sync", str(wid)], capture_output=True, timeout=5)
     time.sleep(0.15)
@@ -111,6 +125,10 @@ def guard():
     if active() != want:
         activate(want)
         if active() != want:
+            # «انتقل التركيز» يكذب حين لا تركيزَ في الشاشة أصلاً: بلا مدير نوافذ
+            # يعود active() صفراً دائماً، فيبدو كلُّ حقنٍ مرفوضاً لسببٍ لم يحدث.
+            if no_wm():
+                out({"ok": False, "error": "no window manager on this display: _NET_ACTIVE_WINDOW is absent, so the bound window cannot be proven to be in front. No injection without that proof.", "wm": False})
             out({"ok": False, "error": "focus moved", "foreground": wtitle(active())})
     x, y, w, h = geometry(want)
     if w <= 0 or h <= 0: out({"ok": False, "error": "window gone"})
@@ -269,6 +287,8 @@ elif k == "focus":
     if hit is None:
         out({"ok": False, "error": "no window matches", "count": len(ws), "windows": [{"title": w["title"], "pid": w["pid"]} for w in ws[:15]]})
     if not activate(hit["hwnd"]):
+        if no_wm():
+            out({"ok": False, "error": "no window manager on this display: _NET_ACTIVE_WINDOW is absent, so being in front cannot be proven (measured under WSLg). The window exists (id " + str(hit["hwnd"]) + ", title " + hit["title"] + ") — start a window manager on this display, or drive it from a session that has one.", "wm": False, "hwnd": hit["hwnd"], "title": hit["title"]})
         out({"ok": False, "error": "could not bring the window to the front", "foreground": wtitle(active())})
     x, y, w, h = geometry(hit["hwnd"])
     out({"ok": True, "hwnd": hit["hwnd"], "title": hit["title"], "pid": hit["pid"], "left": x, "top": y, "right": x + w, "bottom": y + h})

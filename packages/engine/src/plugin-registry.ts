@@ -77,6 +77,21 @@ export interface PluginDescriptor {
   readonly site: ReaderSite
   /** false = مُعلَنٌ بلا قارئ: «غير موصول بعد». */
   readonly wired: boolean
+  /**
+   * الشرطُ الذي يقع عنده القارئ، بنصٍّ للمشغّل — حضورُه يعني أنّ `reads: 0`
+   * قد يكون «لم تقع حالتُه في هذا الدور» لا «لا قارئَ له».
+   *
+   * العطلُ الذي يعالجه: الجرد كان يعدّ القراءات وحدها، فمفتاحٌ قارئُه في
+   * مسار سؤال الموافقة (`unattendedDeny`) أو في جسر MCP (`mcpClient`) أو في
+   * إدخال سرّ (`secretIntake`) يظهر في دورٍ لم يقع فيه شيءٌ من ذلك بـ
+   * `reads: 0`، فيقوله السطرُ «مُعلَن ولم يُقرأ» — وهو كذبٌ في اتجاه «لم
+   * يُنفَّذ»، وهو عيبٌ كالكذب في الاتجاه الآخر (سابقةُ `activity`).
+   *
+   * والشرطُ **مقيسٌ من موضع القراءة** في الشجرة ويُذكر سطرُه في تعليقٍ عنده،
+   * لا يُؤلَّف من الوصف. ولا يحملُه مفتاحٌ `wired: false`: مفتاحٌ بلا قارئٍ
+   * لا شرطَ له، وادّعاءُ شرطٍ له كذبٌ في الاتجاه المقابل.
+   */
+  readonly readWhen?: string
   /** مقابض الخزنة التي تحتاجها الإضافة — حضورٌ لا قيمة (لا سرّ في الإعدادات). */
   readonly requiresVault: readonly string[]
   /** مفتاحٌ حاكم: منطقيٌّ فقط، ولا يقبل شرطاً. */
@@ -104,6 +119,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "immediate",
     site: "call",
     wired: true,
+    readWhen: "حين يُرفض الطلبُ نفسُه ثلاثاً",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -114,6 +130,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "immediate",
     site: "call",
     wired: true,
+    readWhen: "حين يُطرح سؤالُ موافقة",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -124,6 +141,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "immediate",
     site: "call",
     wired: true,
+    readWhen: "حين يُطرح سؤالُ موافقة",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -134,6 +152,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "immediate",
     site: "call",
     wired: true,
+    readWhen: "حين تعود نتيجةُ أداة",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -144,6 +163,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "immediate",
     site: "call",
     wired: true,
+    readWhen: "حين تُستدعى أداةٌ بجسر MCP",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -154,6 +174,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "call",
     wired: true,
+    readWhen: "حين يُسأل هل التفويضُ متاح",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -164,6 +185,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "call",
     wired: true,
+    readWhen: "حين يُبنى كتالوجُ الوكلاء للتفويض",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -259,6 +281,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "epoch",
     wired: true,
+    readWhen: "عند حدّ حقبة",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -269,6 +292,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "epoch",
     wired: true,
+    readWhen: "عند حدّ حقبة",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -279,6 +303,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "call",
     wired: true,
+    readWhen: "حين يقع نداءُ نموذج",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -289,6 +314,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "turn",
     wired: true,
+    readWhen: "في غير وضع الدردشة",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -329,6 +355,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "immediate",
     site: "call",
     wired: true,
+    readWhen: "حين يُطرح سؤالُ موافقةٍ أو يُحسم",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -359,6 +386,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "turn",
     wired: true,
+    readWhen: "حين يظهر سرٌّ في المحادثة",
     // حضورٌ لا قيمة: المقبض يُشتقّ من شكل الاعتماد ساعتَه، فلا مقبضَ ثابتٌ
     // يُعلَن هنا — والإعدادات لا تحمل سرّاً أبداً.
     requiresVault: Object.freeze([]),
@@ -411,6 +439,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "turn",
     wired: true,
+    readWhen: "حين ينتج الإطارُ الدلاليُّ قيمة",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -431,6 +460,7 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     applies: "next-turn",
     site: "call",
     wired: true,
+    readWhen: "حين يقع نداءُ نموذج",
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({
@@ -901,6 +931,8 @@ export const catalogFor = (map: unknown, rulesOn: boolean): PluginCatalogRow[] =
 export interface PluginInventoryEntry extends PluginResolution {
   readonly site: ReaderSite
   readonly wired: boolean
+  /** شرطُ القارئ إن كان مشروطاً — يُنقل كما هو من الواصف، فلا يُخمّنه قارئُ الجرد. */
+  readonly readWhen?: string
   readonly reads: number
   readonly readSite?: ReadSite
   readonly epochs?: readonly number[]
@@ -971,6 +1003,7 @@ export class PluginInventory {
         ...resolution,
         site: descriptor.site,
         wired: descriptor.wired,
+        ...(descriptor.readWhen === undefined ? {} : { readWhen: descriptor.readWhen }),
         reads: row?.reads ?? 0,
         ...(row === undefined ? {} : { readSite: row.readSite }),
         ...(row === undefined || row.epochs.length === 0 ? {} : { epochs: row.epochs.slice() }),

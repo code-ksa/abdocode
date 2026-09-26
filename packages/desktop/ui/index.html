@@ -2491,11 +2491,16 @@
     };
 
     const plugSummary = (entries) => {
-      const on = [], off = [], shell = [], unread = [];
+      const on = [], off = [], shell = [], waiting = [], unread = [];
       for (const e of entries || []) {
         // قارئُ القشرة يُنسب إلى القشرة صراحةً ولا يُدمج في عدّاد المحرّك:
         // الدمجُ كان سيصنع كذبةً ثانية («قُرئ ×1» ولا قراءةَ في المحرّك).
         if (!e.reads && shellPluginReads.has(e.name)) { shell.push(e.name + (e.wired ? "" : " (غير موصول)")); continue; }
+        // قارئٌ مشروطٌ لم تقع حالتُه ≠ مفتاحٌ بلا قارئ. الأوّلُ يقول «لم يُسأل
+        // عنه في هذا الدور»، والثاني «لا أحدَ يقرؤه أصلاً» — وخلطُهما يجعل
+        // سبعةَ مفاتيحَ حيّةٍ تبدو ميتةً للمشغّل. الشرطُ من سجلّ المحرّك
+        // (`readWhen`) لا من قائمةٍ ثانيةٍ تُصان هنا بيدٍ فتفترق عنه.
+        if (!e.reads && e.readWhen && e.wired) { waiting.push(e.name + " (" + e.readWhen + ")"); continue; }
         if (!e.reads) { unread.push(e.name + (e.wired ? "" : " (غير موصول)")); continue; }
         (e.effective ? on : off).push(e.name + (e.reads > 1 ? "×" + e.reads : ""));
       }
@@ -2503,6 +2508,7 @@
       if (on.length) parts.push("قُرئ مفعَّلاً: " + on.join("، "));
       if (off.length) parts.push("قُرئ معطَّلاً: " + off.join("، "));
       if (shell.length) parts.push("قُرئ في القشرة: " + shell.join("، "));
+      if (waiting.length) parts.push("قارئُه مشروطٌ ولم تقع حالتُه: " + waiting.join("، "));
       if (unread.length) parts.push("مُعلَن ولم يُقرأ: " + unread.join("، "));
       return "🧩 " + parts.join(" · ");
     };

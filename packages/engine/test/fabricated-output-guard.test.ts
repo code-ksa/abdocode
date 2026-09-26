@@ -45,7 +45,7 @@ describe("fabricated output guard", () => {
     // إعادةُ صياغة إيصالٍ حقيقيّ (بدايتُه ٢٤ حرفاً داخل إيصال) ليست اختلاقاً — التوأمُ السلبيّ
     expect(fabricatedOutputSignals("نقرتُ عند الإحداثيّات (285, 385) في النافذة المركّزة.", ["نقرتُ عند الإحداثيّات (285, 385) في النافذة المركّزة — الجيل 8، والمراجعُ القديمة بطلت."])).toEqual([])
     const cli = readFileSync(join(import.meta.dir, "..", "src", "cli.ts"), "utf8")
-    expect(cli).toContain("const invented = fabricatedOutputSignals(loop.answer, receipts.map((receipt) => receipt.output))")
+    expect(cli).toContain("const invented = fabricatedOutputSignals(loop.answer, receipts.map((receipt) => receipt.output), receipts.map((receipt) => receipt.command))")
     // الحكمُ لا يشترط صفرَ أدوات: الاكتمالُ على إيصالٍ مختلَق يُردّ ولو نُفّذت أدواتٌ أخرى
     expect(cli).toContain('if (loop.stopReason === "complete") {\r\n          const invented')
     expect(cli).toContain("if (invented.length > 0 && fabricatedStalls < 2) {")

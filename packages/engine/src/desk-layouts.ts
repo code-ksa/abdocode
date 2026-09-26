@@ -33,7 +33,15 @@ export const EMPTY_STORE: LayoutStore = Object.freeze({ version: 1 as const, lay
 
 export type LayoutCommand = { readonly op: "save"; readonly name?: string } | { readonly op: "list" } | { readonly op: "forget"; readonly name: string }
 
-const NAME_RE = /^[\p{L}\p{N}_.-]{1,40}$/u
+/**
+ * 🔴 اسمٌ يكتبه المستخدمُ بين اقتباسين **فيه مسافة** — والصيغةُ تعد بذلك ضمناً حين
+ * تقبل الاقتباس. فالمسافةُ الداخليّةُ مقبولة، والطرفانِ مقصوصان، وما يفصل المسارات
+ * (`/`, `\`) و`..` مرفوضٌ كما كان: الاسمُ مفتاحُ تخزينٍ لا مسار.
+ *
+ * والعلاماتُ العربيّةُ (تشكيلٌ وتطويل) ليست `\p{L}`، فبلا `\p{M}` يُرفض «منصّةُ» وهو
+ * اسمٌ سليمٌ تماماً — ويتّهم الرفضُ صنفَ الحروف فيبحث المستخدمُ عن حرفٍ ممنوعٍ لا وجودَ له.
+ */
+const NAME_RE = /^(?!.*\.\.)[\p{L}\p{M}\p{N}_.-][\p{L}\p{M}\p{N}_. -]{0,39}$/u
 
 /** اسمُ العمليّة مفتاحاً: أحرفٌ صغيرة بلا لاحقة .exe ولا مسار. */
 export const processKey = (process: string): string => process.trim().replace(/^.*[\\/]/u, "").replace(/\.exe$/iu, "").toLowerCase()
@@ -41,9 +49,29 @@ export const processKey = (process: string): string => process.trim().replace(/^
 /** مطابقةُ العنوان بلا حساسيّةٍ للحالة ولا لفراغاتٍ مكرّرة. */
 const foldTitle = (s: string): string => s.toLowerCase().replace(/\s+/gu, " ").trim()
 
+/**
+ * 🔴 **اقتباسٌ يُنزَع بعد التقطيع لا قبله يقصّ الاسمَ عند أوّل مسافة.**
+ *
+ * كان التقطيعُ على المسافات أوّلاً ثمّ نزعُ الاقتباس، فـ`save "منصّةُ المواقع_1"`
+ * يصير `منصّةُ` وحدَها — ويُرفض. والأسوأُ أنّ الرفضَ يتّهم **صنفَ الحروف**
+ * («حروفٌ وأرقامٌ و_ . -») والاسمُ سليمٌ تماماً؛ العيبُ أنّه قُصّ. فيبحث المستخدمُ
+ * عن حرفٍ ممنوعٍ لا وجودَ له.
+ *
+ * فالاسمُ المقتبَسُ يُلتقط **قطعةً واحدة** قبل أيّ تقطيع.
+ */
+const splitVerbAndName = (rest: string): readonly [string, string | undefined] => {
+  const text = rest.trim()
+  const space = text.search(/\s/u)
+  if (space < 0) return [text, undefined]
+  const verb = text.slice(0, space)
+  const tail = text.slice(space + 1).trim()
+  const quoted = /^(["'«»“”‘’`])([\s\S]*?)(["'«»“”‘’`])\s*$/u.exec(tail)
+  if (quoted !== null) return [verb, quoted[2]]
+  return [verb, tail.split(/\s+/u)[0]]
+}
+
 export function parseLayoutCommand(rest: string): LayoutCommand | { readonly error: string } {
-  const words = rest.trim().split(/\s+/u).filter((w) => w.length > 0)
-  const [verb = "", name] = words
+  const [verb = "", name] = splitVerbAndName(rest)
   switch (verb.toLowerCase()) {
     case "save": {
       if (name === undefined) return { op: "save" }

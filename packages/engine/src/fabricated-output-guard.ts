@@ -48,8 +48,22 @@ const TRUNCATION = /(?:…|\.\.\.)$/u
  * التغطية ببصمة السطر كاملاً (09-16): بادئةُ ٨٠ حرفاً كانت تمرّر سطراً مختلَقاً يشارك إيصالاً
  * حقيقيّاً بادئتَه ويخالفه في ذيله. الاستثناءُ الوحيد إيصالٌ مقصوصٌ بعلامة قصّ: بادئتُه تغطّي.
  */
-export function fabricatedOutputSignals(modelText: string, receiptOutputs: readonly string[]): string[] {
+/**
+ * 🔴 **سطرُ الأمر المُنفَّذ ليس اختلاقاً.**
+ *
+ * شكلُ `⚙ <أمر>` يُمنع لسببٍ صحيح (نموذجٌ كتب إيصالاتَ المحرّك بصفر أدوات)،
+ * لكنّ التغطية كانت تُبنى من **خرج** الإيصالات وحدها. وسطرُ الأمر ليس في الخرج،
+ * فإذا ورد `⚙ list .` وقد **نُفّذ list . فعلاً** ُعُدّ اختلاقاً. وقِيس حيّاً:
+ * دورٌ نظيفٌ تماماً أخذ «[تصحيحٌ من النظام]» على سطرٍ كتبه **المحرّك نفسُه**.
+ *
+ * فالأوامرُ المُنفَّذة تُمرَّر الآن فتُغطّي إيصالاتِها. وما لم يُنفَّذ يبقى مرفوضاً كما كان.
+ */
+export function fabricatedOutputSignals(modelText: string, receiptOutputs: readonly string[], executedCommands: readonly string[] = []): string[] {
   const covered = new Set<string>()
+  for (const command of executedCommands) {
+    const digest = lineDigest(`⚙ ${command}`)
+    if (digest.length > 0) covered.add(digest)
+  }
   const truncatedPrefixes: string[] = []
   const receiptText = receiptOutputs.map((o) => lineDigest(o)).join("\n")
   for (const output of receiptOutputs) {

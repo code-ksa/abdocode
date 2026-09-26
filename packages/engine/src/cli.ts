@@ -57,6 +57,7 @@ import type { HarnessToolDefinition, ModelMessage } from "@abdo/harness"
 import { CHAT_SYSTEM, acceptsImages, conversationMode, resolveAttachments, type ConversationMode, type ResolvedAttachments } from './conversation-attachments'
 import { BoundedWireDecoder, classifyModelFailure } from "@abdo/model-gateway"
 import { ModelRequestFailure, modelRequestFailure } from "./model-request-failure"
+import { earlyAttemptBudgetMs } from "./attempt-budget"
 import { loadLocalExtensions, localExtensionServers, localSkillBody, localSkillInstructions, localSkillsBrief, localSkillsCatalogue, SKILL_REF } from "./local-extensions"
 import { isProjectSkillRef, projectSkillBody, projectSkills } from "./project-skills"
 import { CONNECTORS, connectorById, connectorCommand, connectorGrants, connectorHandles, connectorServerId } from "./connectors/registry"
@@ -1667,9 +1668,6 @@ const MODEL_RETRY_ATTEMPTS = MODEL_RETRY_FAST ? 2 : 7
 // فيبقى عددُ المحاولات هو العقدَ المفحوص لا زمنُ الانتظار. لا أثرَ لها في الإنتاج (المتغيّرُ غائب).
 const MODEL_RETRY_BACKOFF_OVERRIDE_MS = Number(process.env.ABDO_MODEL_RETRY_BACKOFF_MS)
 const MODEL_RETRY_BACKOFF_MS: readonly number[] = Number.isFinite(MODEL_RETRY_BACKOFF_OVERRIDE_MS) && MODEL_RETRY_BACKOFF_OVERRIDE_MS >= 0 ? [MODEL_RETRY_BACKOFF_OVERRIDE_MS] : MODEL_RETRY_FAST ? [50] : [1_500, 4_000, 10_000, 25_000, 45_000, 60_000]
-/** مهلةُ المحاولات غير الأخيرة للسحابيّ: تعليقٌ بلا بايت يُكتشف بعد ١٥٠ ث لا ٣٠٠ (مقيس 09-14: NIM تعلّق ~40٪). */
-const CLOUD_EARLY_ATTEMPT_TIMEOUT_MS = 150_000
-
 /**
  * يعيد النداءَ عند العابر فقط (تصنيفُ البوّابة `bounded-backoff`: 5xx/429/408، وانقطاعٌ قبل أيّ بايت حين `retryTransport`)؛
  * ما بدأ بثُّه لا يُعاد، والمُلغى لا يُعاد، والردُّ غيرُ العابر (4xx) يعود كما هو ليحكم عليه المنادي. كلُّ إعادةٍ تُكتب إلى stderr.
@@ -1931,7 +1929,16 @@ const askOnce = async (
   const attemptOnce = async (n: number): Promise<Response> => {
     if (rustOwnedProvider) {
       // المحاولاتُ الأولى بمهلةٍ أقصر كي لا يدفع التعليقُ ٣٠٠ ث كاملةً قبل الإعادة؛ الأخيرةُ بالمهلة الكاملة.
-      const attemptTimeoutMs = n < MODEL_RETRY_ATTEMPTS ? Math.min(timeoutMs, CLOUD_EARLY_ATTEMPT_TIMEOUT_MS) : timeoutMs
+      // 🔴 **مهلةٌ ثابتةٌ لا تعرف طولَ ما طلبناه تقطع نداءً مشروعاً ثمّ تسمّيه انقطاعاً.**
+      //
+      // مقيسٌ حيّاً على هذا المزوّد بلا تدفّق (كما ينادي العامل): 2000 توكنَ إخراجٍ = 26ث،
+      // و4000 = 49ث، و8000 ≈ 100ث. فالزمنُ يتبع **الإخراجَ المطلوب** لا السياق. والقطعُ
+      // عند 150ث ثابتةً كان يقتل نداءاتٍ مشروعةً، ويُصنَّف «فشلَ نقل»، فيُعاد بالسياق
+      // نفسِه فيُقتل ثانيةً — سبعَ مرّات. خمسون «سقطةَ مزوّد» في مسحٍ كامل كانت هذا.
+      //
+      // فالمهلةُ تُبنى على الميزانيّة: أرضيّةٌ ثابتة + سقفُ الإخراج × ضِعفَي المقيس. والأرضيّةُ
+      // تحفظ الغرضَ الأصليّ (تعليقٌ بلا بايت يُكتشف مبكراً، مقيس 09-14 على NIM).
+      const attemptTimeoutMs = n < MODEL_RETRY_ATTEMPTS ? Math.min(timeoutMs, earlyAttemptBudgetMs(body)) : timeoutMs
       const result = await REACH.model({ provider: prov.id, url, body, timeoutMs: attemptTimeoutMs }, hooks.signal)
       return new Response(result.body, { status: result.status, headers: { "content-type": "application/json" } })
     }
@@ -6733,7 +6740,7 @@ const runServeShell = async (): Promise<void> => {
             const text = await ask(askPrompt, callHooks, history, callSel, (native) => { reply = native })
             // م11 — خرجٌ مختلَق (مقيس على omni: ls -la مسرود بلا أداة): يُسمّى للمشغّل ويُصحَّح في النداء التالي، ولا يُرفض الردّ.
             if (reply === undefined && typeof text === "string") {
-              const fabricated = fabricatedOutputSignals(text, allReceipts.map((receipt) => receipt.output))
+              const fabricated = fabricatedOutputSignals(text, allReceipts.map((receipt) => receipt.output), allReceipts.map((receipt) => receipt.command))
               if (fabricated.length > 0) { fabricationNotice = fabricationCorrection(fabricated); await emitEvent(turn.id, `⚠ ${fabricationNoticeLine(fabricated)}`) }
             }
             return reply ?? text
@@ -6922,7 +6929,7 @@ const runServeShell = async (): Promise<void> => {
         // ومقيس 09-16 على 4.0.44: «تم تنفيذ desk click … وإيصاله: نقرتُ عند …» مع أداةٍ أخرى نُفّذت (read) — الاكتمالُ على إيصالٍ مختلَق
         // يُردّ سواءٌ نُفّذت أدواتٌ أخرى أم لا؛ الحكمُ على الردّ الخاتم كلِّه.
         if (loop.stopReason === "complete") {
-          const invented = fabricatedOutputSignals(loop.answer, receipts.map((receipt) => receipt.output))
+          const invented = fabricatedOutputSignals(loop.answer, receipts.map((receipt) => receipt.output), receipts.map((receipt) => receipt.command))
           if (invented.length > 0 && fabricatedStalls < 2) {
             fabricatedStalls += 1
             lastAnswer = loop.answer
