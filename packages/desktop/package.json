@@ -5,7 +5,7 @@
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
-    "typecheck": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "typecheck": "bun ./scripts/typecheck.ts",
     "prepare": "bun ./scripts/prepare.ts",
     "build": "bun ./scripts/build.ts"
   },
