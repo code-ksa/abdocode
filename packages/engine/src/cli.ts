@@ -60,6 +60,7 @@ import { BoundedWireDecoder, classifyModelFailure } from "@abdo/model-gateway"
 import { ModelRequestFailure, modelRequestFailure } from "./model-request-failure"
 import { earlyAttemptBudgetMs } from "./attempt-budget"
 import { globalInstallRefused } from "./global-install-guard"
+import { admitShell, beginShellEffect, settleShellEffect, unknownShellEffect, type ShellAdmission } from "./shell-admission"
 import { INSTALLER_BUNDLE_DIR, installerNameAt } from "./installer-bundle"
 import { loadLocalExtensions, localExtensionServers, localSkillBody, localSkillInstructions, localSkillsBrief, localSkillsCatalogue, SKILL_REF } from "./local-extensions"
 import { isProjectSkillRef, projectSkillBody, projectSkills } from "./project-skills"
@@ -3376,9 +3377,13 @@ const runServeShell = async (): Promise<void> => {
         if (newProjectPending !== undefined && !/^(?:ls|dir|cat|type|head|tail|pwd|echo|node -v|npm -v|bun -v|git (?:status|log|diff|branch|remote)|where|which|Get-ChildItem|Get-Content|Get-Location|tree)\b/iu.test(command.trim())) {
           return denied(`رُفض التنفيذ في المشروع المختار: المستخدمُ طلب مشروعاً جديداً باسم «${newProjectPending}». أنشئه أوّلاً: نفّذ: project-create ${newProjectPending} — ثمّ نفّذ فيه.`, "policy_denied")
         }
+        // أثرُ الشِّلّ تحت سلطة النواة: الإدخالُ **قبل** سؤال المشغّل — لا يُسأل عن أثرٍ لن
+        // يُدخَل. وغيابُ العامل أو رفضُه رفضٌ للتشغيل، لا تشغيلٌ بلا نواة.
+        const shellAdmission = await admitShell(TOOL_WORKER)
+        if (!shellAdmission.admitted) return refused(`⚙ run ${rest}\nرُفض التنفيذ: لم تُدخِله النواة — ${shellAdmission.why}`)
         const ok = await gate(turnId, spec.effect, `تنفيذ${background ? " (خلفيّ)" : ""}: ${command}`)
         if (!ok) return denied(`⚙ run ${rest}\nرُفض التنفيذ — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
-        return runExecV(command, turnId, hooks, background)
+        return runExecV(command, turnId, hooks, background, shellAdmission)
       }
       case "write":
         if (newProjectPending !== undefined) return denied(`رُفضت الكتابة في المشروع المختار: المستخدمُ طلب مشروعاً جديداً باسم «${newProjectPending}». أنشئه أوّلاً: نفّذ: project-create ${newProjectPending} — ثمّ اكتب فيه.`, "policy_denied")
@@ -4752,7 +4757,15 @@ const runServeShell = async (): Promise<void> => {
   const devServerStarting = new Set<string>()
   // سياسة القضبان النافذة — يحدّثها كل دور عند قبوله؛ الافتراض الصارم.
   let currentRails = railProfile("strict", "")
-  const runExecV = async (cmd: string, turnId: string, hooks: AskHooks, background = false): Promise<DispatchResultV> => {
+  // مرّةً في الدور: ما قالته النواةُ عن إنفاذ أثر الشِّلّ. «جزئيّ» يُقال جزئيّاً بثغرته المسمّاة —
+  // لا يُسكَت كي لا يُقرأ الإدخالُ عزلاً، ولا يُكرَّر مع كلّ أمرٍ فيصير ضجيجاً لا يُقرأ.
+  const shellDisclosed = new Set<string>()
+  const discloseShellAdmission = async (turnId: string, admission: ShellAdmission | undefined): Promise<void> => {
+    if (admission === undefined || shellDisclosed.has(turnId)) return
+    shellDisclosed.add(turnId)
+    await emitEvent(turnId, `🛡 أدخلت النواةُ أثرَ الشِّلّ (لا رجعةَ فيه) بإنفاذٍ ${admission.enforcement === "Partial" ? "جزئيّ" : admission.enforcement}${admission.limitations ? ` — ${admission.limitations}` : ""}؛ وكلُّ أمرٍ يُسجَّل في دفترها قبل إقلاعه ويُسوّى بخروجه.`)
+  }
+  const runExecV = async (cmd: string, turnId: string, hooks: AskHooks, background = false, admission?: ShellAdmission): Promise<DispatchResultV> => {
     // م11 — إصلاحٌ حتميّ معلَن (لا تخمين): مسارٌ مقتبس ينتهي بـ.exe في صدر الأمر يحتاج & في PowerShell — أسقطه omni ثمّ super-120b (09-14).
     const callRepair = powershellCallOperatorRepair(cmd)
     if (callRepair !== undefined) { await emitEvent(turnId, `🔧 ${callRepair.note}`); cmd = callRepair.command }
@@ -4848,17 +4861,38 @@ const runServeShell = async (): Promise<void> => {
     if (background) {
       // ذ9ب — بعد الحرّاس كلِّهم، وعبر مُطلِق العزل نفسِه الذي تمرّ به المقدّمة (طَورٌ منفصل:
       // الخطّةُ وفحصُ الانزياح والبوّابةُ ثمّ العودةُ بالمعرّف بلا انتظار). العمرُ للجلسة.
+      await discloseShellAdmission(turnId, admission)
+      let record: Awaited<ReturnType<typeof beginShellEffect>>
+      try {
+        record = await beginShellEffect(ADAPTER_LEDGER, cmd, PROJECT_DIR, true)
+      } catch (error) {
+        // دفترٌ لا يقبل البدء = أثرٌ لا يُستردّ إن انقطع — فلا يُقلع.
+        return refused(`رُفض التشغيلُ الخلفيّ: دفترُ النواة لم يقبل بدءَ الأثر — ${error instanceof Error ? error.message : String(error)}`)
+      }
       let run: Awaited<ReturnType<typeof startBackgroundRun>>
       try {
-        run = await startBackgroundRun(cmd, PROJECT_DIR, join(STATE_ROOT, "bg-runs"), stripChildEnv(process.env).env)
+        run = await startBackgroundRun(cmd, PROJECT_DIR, join(STATE_ROOT, "bg-runs"), stripChildEnv(process.env).env, (exit) => {
+          void settleShellEffect(ADAPTER_LEDGER, record, exit).catch((why) => process.stderr.write(`⚠ تسويةُ أثرِ الشِّلّ الخلفيّ فشلت: ${String(why)}\n`))
+        })
       } catch (error) {
+        const why = error instanceof Error ? error.message : String(error)
+        await unknownShellEffect(ADAPTER_LEDGER, record, why).catch(() => undefined)
         // رفضُ المُطلِق يُقال بنصّه — لا يُقرأ عطلاً في الأداة ولا يُخفى.
-        return refused(`رُفض التشغيلُ الخلفيّ: ${error instanceof Error ? error.message : String(error)}`)
+        return refused(`رُفض التشغيلُ الخلفيّ: ${why}`)
       }
       return okText(`⚙ run --bg ${cmd}\nبدأ التشغيلُ الخلفيّ ${run.id} (pid ${run.pid}) — اقرأ خرجَه بـ«logs ${run.id}» وأوقفه بـ«stop ${run.id}»؛ سقفُه ٣٠ دقيقة، وعمرُه عمرُ الجلسة.`)
     }
+    await discloseShellAdmission(turnId, admission)
+    let shellRecord: Awaited<ReturnType<typeof beginShellEffect>>
+    try {
+      shellRecord = await beginShellEffect(ADAPTER_LEDGER, cmd, PROJECT_DIR, false)
+    } catch (error) {
+      return refused(`رُفض التنفيذ: دفترُ النواة لم يقبل بدءَ الأثر — ${error instanceof Error ? error.message : String(error)}`)
+    }
     let streamedLive = false
-    const result = await runCommandTool(PROJECT_DIR).run({
+    let result: Awaited<ReturnType<ReturnType<typeof runCommandTool>["run"]>>
+    try {
+    result = await runCommandTool(PROJECT_DIR).run({
       executable: "powershell",
       args: ["-NoProfile", "-Command", `$OutputEncoding=[Text.Encoding]::UTF8; ${cmd}`],
       cwd: ".",
@@ -4873,6 +4907,19 @@ const runServeShell = async (): Promise<void> => {
       // قناةُ نتيجة، فلا يُبنى عليه حكمٌ ولا يُكتب في الدفتر.
       ...(hooks.onDelta === undefined ? {} : { onOutput: (chunk: { text: string }) => { streamedLive = true; hooks.onDelta?.(chunk.text) } }),
     })
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error)
+      await unknownShellEffect(ADAPTER_LEDGER, shellRecord, why).catch(() => undefined)
+      throw error
+    }
+    {
+      const out = (result.output ?? {}) as { stdout?: string; stderr?: string; exitCode?: number | null; aborted?: boolean }
+      await settleShellEffect(ADAPTER_LEDGER, shellRecord, {
+        exitCode: out.exitCode ?? null,
+        stopped: out.aborted === true,
+        output: `${out.stdout ?? ""}\n${out.stderr ?? ""}`,
+      }).catch((why) => process.stderr.write(`⚠ تسويةُ أثرِ الشِّلّ فشلت: ${String(why)}\n`))
+    }
     const CAP = 400 // سطراً؛ التجاوز يُعلن لا يُبتلع (S138)
     const output = (result.output ?? {}) as {
       stdout?: string

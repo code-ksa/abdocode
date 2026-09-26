@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
+import { Database } from "bun:sqlite"
 
 // ذ9ب — «علّمه أدواتي» على المحرّك الحقيقيّ: grep بأعلامٍ (-i، --count، --files، -C)، medit بعدّة استبدالاتٍ بموافقةٍ واحدة (وفشلُ
 // حزمةٍ يُسقط الكلّ)، وrun --bg بمعرّفٍ ثمّ logs ثمّ stop. النموذجُ خادمٌ زائف يردّ بالسيناريو، والمشروعُ موثوقٌ في مجلّدٍ مؤقّت.
@@ -68,7 +69,27 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     expect(bad[1]).toContain("الحزمة 2")
     expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("LINE ONE\nline two\nLINE THREE\n")
     // run --bg: معرّفٌ، ثمّ logs يرى الخرج، ثمّ stop يوقف عمليةً ما زالت تعمل
+    // 🔴 **اسأل القرصَ لا الدالّة**: أثرُ الشِّلّ يُدخَل في النواة ويُسجَّل في دفترها قبل إقلاعه
+    // ويُسوّى بخروجه. العدُّ من `journal_effects` في الملفّ الذي تكتبه النواة نفسُها — فدالّةٌ
+    // تُرجع «سُجِّل» ولا تكتب شيئاً تحمرّ هنا ولا تمرّ.
+    const journalRows = (): number => {
+      const path = join(state, "abdocode.sqlite")
+      if (!existsSync(path)) return 0
+      const db = new Database(path, { readonly: true })
+      try { return (db.query("select count(*) as n from journal_effects").get() as { n: number }).n } finally { db.close() }
+    }
+    const beforeForeground = journalRows()
+    const fg = await turn("نفّذ: run Write-Output ledger-probe")
+    expect(fg[0]).toContain("ledger-probe")
+    // أربعُ مراحلَ عند البدء (Prepared ⇦ Cleared ⇦ Authorized ⇦ Dispatching) ثمّ تسويةٌ بالخروج —
+    // مقيسٌ على ملفٍّ مؤقّت بالنواة الحقيقيّة: سبعةُ صفوفٍ في `journal_effects` لأمرٍ واحد.
+    // (وأوّلُ نسخةٍ من هذا الاختبار سألت `journal_events` فوجدت صفراً — الجدولُ الخطأ لا الأثرُ الغائب.)
+    const afterForeground = journalRows()
+    expect(afterForeground - beforeForeground).toBeGreaterThanOrEqual(5)
+    const beforeBackground = journalRows()
     const bg = await turn("نفّذ: run --bg 1..3 | ForEach-Object { \"tick$_\"; Start-Sleep -Milliseconds 400 }; Start-Sleep -Seconds 20")
+    // الخلفيّ يبدأ في الدفتر قبل إقلاعه — مراحلُ البدء الأربعُ موجودةٌ قبل أن يخرج.
+    expect(journalRows() - beforeBackground).toBeGreaterThanOrEqual(4)
     expect(bg[0]).toContain("بدأ التشغيلُ الخلفيّ bg-1")
     // ✅ الفجوةُ أُغلقت (2026-09-27): الخلفيُّ يمرّ بمُطلِق العزل نفسِه في طَورٍ منفصل، فلا
     // تحذيرَ يُقال — والإيصالُ يقول ما بقي صحيحاً: العمرُ عمرُ الجلسة. والمسمارُ يتحرّك
@@ -82,6 +103,10 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     const stopped = await turn("نفّذ: stop bg-1")
     expect(stopped[0]).toContain("أُوقف bg-1")
     await Bun.sleep(600)
+    // والتسويةُ وقعت بخروجه الموقوف: أكثرُ من مراحل البدء وحدها.
+    const deadline = Date.now() + 8_000
+    while (journalRows() - beforeBackground < 5 && Date.now() < deadline) await Bun.sleep(200)
+    expect(journalRows() - beforeBackground).toBeGreaterThanOrEqual(5)
     const after = await turn("نفّذ: logs bg-1")
     expect(after[0]).toMatch(/أُوقف|انتهى برمز/)
     const unknown = await turn("نفّذ: logs bg-9")
@@ -94,6 +119,7 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     expect(logBytes.toString("utf8")).toContain("tick3")
     // 🔴 **التوأمُ الحاكم: `--bg` ليس باباً أوسع.** الحرّاسُ كلُّهم يسبقون فرعَ الخلفيّ،
     // فما يُرفض في المقدّمة يُرفض معه — ولو انزلق الفرعُ فوقهم يوماً لصار العلمُ تجاوزاً.
+    const beforeRefusals = journalRows()
     const linuxBg = await turn("نفّذ: run --bg rm -rf data")
     expect(linuxBg[0]).toContain("رُفض")
     expect(linuxBg[0]).not.toContain("بدأ التشغيلُ الخلفيّ")
@@ -102,6 +128,8 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     expect(globalBg[0]).not.toContain("بدأ التشغيلُ الخلفيّ")
     // ولا سجلَّ يُخلق لما رُفض: الرفضُ قبل الإطلاق لا بعده.
     expect(existsSync(join(state, "bg-runs", "bg-2.log"))).toBe(false)
+    // ولا صفَّ في دفتر النواة: الحرّاسُ تسبق الإدخالَ والبدء، فالمرفوضُ لم يصر أثراً قطّ.
+    expect(journalRows()).toBe(beforeRefusals)
     // ومسمارُ مصدرٍ: التشغيلُ الخلفيُّ يمرّ بالمُطلِق في طَورٍ منفصل — ورجوعٌ إلى `Bun.spawn`
     // هنا يُعيد الفجوةَ صامتاً، فيُمسك بالنصّ لا بالنيّة.
     const module_ = readFileSync(join(ROOT, "packages", "engine", "src", "background-runs.ts"), "utf8")

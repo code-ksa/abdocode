@@ -24,14 +24,18 @@ import {
   type ToolSpec,
 } from "@abdo/kernel"
 
-export type AdapterTool = "write" | "git-read" | "git-change" | "package" | "network"
+export type AdapterTool = "write" | "git-read" | "git-change" | "package" | "network" | "shell"
 
-const ADAPTERS: Record<AdapterTool, { id: bigint; label: string; effect: "read" | "mutate" | "reach" }> = {
+const ADAPTERS: Record<AdapterTool, { id: bigint; label: string; effect: "read" | "mutate" | "reach" | "irreversible" }> = {
   write: { id: 1n, label: "abdo-write-adapter", effect: "mutate" },
   "git-read": { id: 2n, label: "abdo-git-read-adapter", effect: "read" },
   "git-change": { id: 3n, label: "abdo-git-change-adapter", effect: "mutate" },
   package: { id: 4n, label: "abdo-package-adapter", effect: "reach" },
   network: { id: 5n, label: "abdo-network-adapter", effect: "reach" },
+  // الشِّلُّ بصنفه الصادق: سطرُ أمرٍ قد يحذف أو ينشر أو يدفع، ولا عمليّةَ تعويضٍ تُسمّى —
+  // دليلٌ على ما جرى فقط. فالنواةُ ترفضه على مضيفٍ بلا عزلٍ قابلٍ للإنفاذ كما ترفض كلَّ
+  // ما لا رجعةَ فيه، والمنتَجُ يجيب ذلك الرفضَ بقرارٍ صريحٍ من المشغّل لا بخطّةِ تعويضٍ مُدّعاة.
+  shell: { id: 6n, label: "abdo-shell-adapter", effect: "irreversible" },
 }
 
 export function labelDigest(label: string): Digest {
@@ -56,7 +60,9 @@ export function adapterToolSpec(adapter: AdapterTool): ToolSpec {
     ? { tag: "Read", value: {} }
     : item.effect === "mutate"
       ? { tag: "Mutate", value: { recovery: recovery(item.label) } }
-      : { tag: "Reach", value: { recovery: recovery(item.label), endpoint_class_digest: labelDigest(`${item.label}-endpoint`) } }
+      : item.effect === "irreversible"
+        ? { tag: "Irreversible", value: { evidence_operation_digest: labelDigest(`${item.label}-evidence`) } }
+        : { tag: "Reach", value: { recovery: recovery(item.label), endpoint_class_digest: labelDigest(`${item.label}-endpoint`) } }
   return {
     tool_id: item.id as ToolId,
     name_digest: labelDigest(item.label),

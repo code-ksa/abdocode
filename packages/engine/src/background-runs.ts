@@ -64,6 +64,8 @@ export async function startBackgroundRun(
   cwd: string,
   logDir: string,
   env: Record<string, string | undefined>,
+  /** يُنادى مرّةً حين يخرج الطفل (برمزه، أو موقوفاً) — به يُسوّى أثرُه في دفتر النواة. */
+  onExit?: (exit: { readonly exitCode: number | null; readonly stopped: boolean }) => void,
 ): Promise<BackgroundRun> {
   mkdirSync(logDir, { recursive: true })
   const id = `bg-${sequence + 1}`
@@ -102,7 +104,10 @@ export async function startBackgroundRun(
   void drain(launched.stdout, log)
   void drain(launched.stderr, log)
   // وحالةُ الخروج تُراقَب، وإلّا قال السجلُّ «جارٍ» إلى الأبد بعد أن انتهى.
-  void launched.exited.then((code) => { run.exitCode = code ?? undefined })
+  void launched.exited.then((code) => {
+    run.exitCode = code ?? undefined
+    try { onExit?.({ exitCode: code ?? null, stopped: run.stopped === true }) } catch { /* التسويةُ لا تُسقط الجلسة */ }
+  })
   const cap = setTimeout(() => { if (run.exitCode === undefined) { run.stopped = true; run.kill() } }, BACKGROUND_CAP_MS)
   cap.unref?.()
   runs.set(id, run)

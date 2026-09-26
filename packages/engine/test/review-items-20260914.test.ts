@@ -11,7 +11,12 @@ describe("review items 09-14", () => {
   test("#12 — an effectful run while a new project is pending is denied before the gate; read-only commands pass the guard", () => {
     const guard = cli.indexOf("if (newProjectPending !== undefined && !/^(?:ls|dir|cat|type|head|tail|pwd|echo|node -v|npm -v|bun -v|git (?:status|log|diff|branch|remote)|where|which|Get-ChildItem|Get-Content|Get-Location|tree)\\b/iu.test(command.trim())) {")
     const gate = cli.indexOf('const ok = await gate(turnId, spec.effect, `تنفيذ${background ? " (خلفيّ)" : ""}: ${command}`)')
-    expect(guard).toBeGreaterThan(0); expect(gate).toBeGreaterThan(guard); expect(gate - guard).toBeLessThan(700)
+    expect(guard).toBeGreaterThan(0); expect(gate).toBeGreaterThan(guard); expect(gate - guard).toBeLessThan(1200)
+    // 2026-09-27: إدخالُ النواة لأثر الشِّلّ صار بين الحارس والبوّابة — والترتيبُ جزءٌ من الميزة:
+    // الحارسُ أوّلاً (لا يُسأل عن مشروعٍ لم يُنشأ)، ثمّ النواة (لا يُسأل المشغّلُ عن أثرٍ لن يُدخَل)،
+    // ثمّ البوّابة. فالمسافةُ المسموحةُ اتّسعت بقدر الإدخال، والترتيبُ نفسُه مثبَّت لا مفترَض.
+    const admission = cli.indexOf("const shellAdmission = await admitShell(TOOL_WORKER)")
+    expect(admission).toBeGreaterThan(guard); expect(gate).toBeGreaterThan(admission)
     expect(cli).toContain("رُفض التنفيذ في المشروع المختار: المستخدمُ طلب مشروعاً جديداً باسم «${newProjectPending}». أنشئه أوّلاً: نفّذ: project-create ${newProjectPending}")
     const re = /^(?:ls|dir|cat|type|head|tail|pwd|echo|node -v|npm -v|bun -v|git (?:status|log|diff|branch|remote)|where|which|Get-ChildItem|Get-Content|Get-Location|tree)\b/iu
     for (const ok of ["ls", "git status", "Get-ChildItem .", "node -v"]) expect(re.test(ok)).toBe(true)

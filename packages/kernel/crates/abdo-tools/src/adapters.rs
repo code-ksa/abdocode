@@ -13,6 +13,13 @@ pub enum AdapterKind {
     GitChange,
     Package,
     Network,
+    /// Arbitrary shell execution. Its class is `Irreversible`: a command line can
+    /// delete, publish or pay, and there is no compensating operation to name —
+    /// only evidence of what ran. So the catalog refuses it on a host without
+    /// enforceable isolation, exactly as it refuses any irreversible work, and
+    /// the product answers that refusal with an explicit operator decision
+    /// rather than by pretending a recovery plan exists.
+    Shell,
 }
 
 impl AdapterKind {
@@ -24,6 +31,7 @@ impl AdapterKind {
             Self::GitChange => b"abdo-git-change-adapter",
             Self::Package => b"abdo-package-adapter",
             Self::Network => b"abdo-network-adapter",
+            Self::Shell => b"abdo-shell-adapter",
         }
     }
 
@@ -34,6 +42,7 @@ impl AdapterKind {
             (Self::Write | Self::GitChange, EffectClass::Mutate(_))
                 | (Self::GitRead, EffectClass::Read(_))
                 | (Self::Package | Self::Network, EffectClass::Reach(_))
+                | (Self::Shell, EffectClass::Irreversible(_))
         )
     }
 }
@@ -46,6 +55,7 @@ pub fn adapter_kind(spec: &ToolSpec) -> Option<AdapterKind> {
         AdapterKind::GitChange,
         AdapterKind::Package,
         AdapterKind::Network,
+        AdapterKind::Shell,
     ];
     candidates
         .into_iter()
@@ -56,7 +66,8 @@ pub fn adapter_kind(spec: &ToolSpec) -> Option<AdapterKind> {
 mod tests {
     use super::*;
     use abdo_contracts::{
-        Digest, MutatingEffect, ReadEffect, RecoveryPlan, ResourceLimits, ToolId,
+        Digest, IrreversibleEffect, MutatingEffect, ReadEffect, RecoveryPlan, ResourceLimits,
+        ToolId,
     };
 
     fn digest(seed: u8) -> Digest {
@@ -102,5 +113,31 @@ mod tests {
             })),
         );
         assert_eq!(adapter_kind(&mismatch), None);
+    }
+
+    #[test]
+    fn shell_is_admitted_only_as_irreversible() {
+        let honest = spec(
+            AdapterKind::Shell,
+            EffectClass::Irreversible(Box::new(IrreversibleEffect {
+                evidence_operation_digest: digest(7),
+            })),
+        );
+        assert_eq!(adapter_kind(&honest), Some(AdapterKind::Shell));
+        // A recovery plan for an arbitrary command line would be a fiction the
+        // catalog then trusts; the table refuses the shape rather than the claim.
+        let pretends_recoverable = spec(
+            AdapterKind::Shell,
+            EffectClass::Mutate(Box::new(MutatingEffect {
+                recovery: RecoveryPlan {
+                    compensating_operation_digest: digest(5),
+                    evidence_operation_digest: digest(6),
+                    max_attempts: 1,
+                },
+            })),
+        );
+        assert_eq!(adapter_kind(&pretends_recoverable), None);
+        let read = spec(AdapterKind::Shell, EffectClass::Read(Box::new(ReadEffect)));
+        assert_eq!(adapter_kind(&read), None);
     }
 }
