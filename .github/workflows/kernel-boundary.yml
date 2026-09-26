@@ -30,6 +30,8 @@ jobs:
           bun run --cwd packages/kernel test
           bun run --cwd packages/kernel typecheck
       - name: Verify product composition
-        run: bun run structure
+        run: |
+          bun run structure
+          bun run test:root
       - name: Typecheck every package
         run: bun run typecheck

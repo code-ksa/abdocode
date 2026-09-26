@@ -951,13 +951,14 @@ export function assertKernelBoundaryWorkflow(source: string) {
     "bun run --cwd packages/kernel test",
     "bun run --cwd packages/kernel typecheck",
     "bun run structure",
+    "bun run test:root",
     "bun run typecheck",
   ]
   const expectedRunBlocks = [
     "rustup toolchain install 1.94.1 --profile minimal --component clippy,rustfmt",
     "bun install --frozen-lockfile",
     "bun run --cwd packages/kernel test\nbun run --cwd packages/kernel typecheck",
-    "bun run structure",
+    "bun run structure\nbun run test:root",
     "bun run typecheck",
   ]
   const runBlocks = steps

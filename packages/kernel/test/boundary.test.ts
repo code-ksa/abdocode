@@ -1839,8 +1839,8 @@ describe("S104 canonical contract boundary", () => {
     expect(() =>
       assertKernelBoundaryWorkflow(
         workflowSource.replace(
-          "        run: bun run structure",
-          "        run: |\n          exit 0\n          bun run structure",
+          "          bun run structure",
+          "          exit 0\n          bun run structure",
         ),
       ),
     ).toThrow("run blocks drifted")
