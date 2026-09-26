@@ -49,3 +49,7 @@ packages/desktop/ui/trajectory-mount.js text eol=lf
 packages/desktop/ui/turns.js text eol=lf
 packages/desktop/ui/xterm-LICENSE.txt text eol=lf
 packages/desktop/src-tauri/gen/schemas/*.json text eol=lf
+# وملفّا كارجو لسطح المكتب: كارجو يكتبهما LF، والمخزَّنُ كان CRLF — فكان رفعُ سطرِ
+# الإصدار الواحد يحمل فرقاً باثني عشر ألف سطر يُخفي التغييرَ الحقيقيّ (مقيس في 4.0.68).
+packages/desktop/src-tauri/Cargo.lock text eol=lf
+packages/desktop/src-tauri/Cargo.toml text eol=lf
