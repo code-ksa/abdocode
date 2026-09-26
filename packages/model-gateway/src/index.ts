@@ -117,7 +117,21 @@ export function classifyModelFailure(input: {
     if (/provider credential (?:unavailable|rejected)|credential_unavailable|missing[_ ](?:api[_ ]key|credential)/iu.test(message)) {
       return Object.freeze({ kind: "credential", retry: "operator-action", reason: "provider credential unavailable" })
     }
-    return Object.freeze({ kind: "transport", retry: "bounded-backoff", reason: "transport failed before response" })
+    // 🔴 **مِصنَفٌ يبتلع السببَ يحوّل كلَّ الأعطال إلى عطلٍ واحدٍ لا يُشخَّص.**
+    //
+    // كان الرفضُ يعود بعبارةٍ واحدةٍ مهما كان الخطأ: انقطاعُ اسمٍ، أو تفاوضُ TLS، أو
+    // مهلةٌ، أو خروجُ العامل. وقِيس على ليلتَي مسحٍ كاملتَين: ستُّ إلى تسعِ سقطاتٍ في
+    // الجولة الواحدة أبطلت خمسَ جولات — **وفي الوقت نفسِه** نجحت عشرةُ نداءاتٍ
+    // متوازيةٍ بـ`fetch` مباشرةً إلى المزوّد نفسِه (10/10، ~1.5ث لكلٍّ). فالعطلُ في
+    // طريقنا لا في الشبكة، ولم يكن في السجلّ ما يدلّ عليه.
+    //
+    // فالسببُ يُحمَل الآن مقصوصاً. والتصنيفُ لا يتغيّر: يبقى `transport` بتراجعٍ محدود.
+    const detail = (input.error instanceof Error ? input.error.message : String(input.error ?? "")).replace(/\s+/gu, " ").trim().slice(0, 160)
+    return Object.freeze({
+      kind: "transport",
+      retry: "bounded-backoff",
+      reason: detail.length === 0 ? "transport failed before response" : `transport failed before response: ${detail}`,
+    })
   }
   const status = input.status
   if (status === 401 || status === 403) {
