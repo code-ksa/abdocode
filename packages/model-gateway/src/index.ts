@@ -179,6 +179,9 @@ const sessionAffinityValue = (value: string | undefined): string | undefined => 
 }
 const affinityHeader = (value: string | undefined): Record<string, string> => value === undefined ? {} : { "x-session-id": value }
 
+/** نماذجُ الاستدلال تقبل `max_completion_tokens` وحدَه (عقدُ المزوّد المنشور؛ غيرُ مقيسٍ عندنا). */
+const REASONING_OUTPUT_CAP = /^(?:o[1-9](?:[.\-]|$)|gpt-5)/iu
+
 export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
   if (input.model.trim().length === 0) throw new Error("model is required")
   assertMessages(input.messages)
@@ -256,7 +259,14 @@ export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
       // فالمزوّدُ لا يعرف حدّاً، ومهلةُ المحاولة المبنيّةُ على السقف لا تجد رقماً
       // فتبقى على أرضيّتها (مقيس 2026-09-26: «timed out after 150000ms» يتكرّر سبعاً
       // على نداءٍ مشروع). الشكلُ الأنثروبيّ كان يرسله دائماً — فالفرقُ كان صدفةَ شكل.
-      ...(input.maxOutputTokens === undefined ? {} : { max_tokens: input.maxOutputTokens }),
+      // ونماذجُ الاستدلال (o-series، gpt-5) **ترفض** `max_tokens` بـ400 وتطلب
+      // `max_completion_tokens` — من عقد المزوّد المنشور، **غيرُ مقيسٍ هنا** (لا مفتاحَ
+      // لنا عليه في هذه الجلسة). فالحقلُ يُختار بالاسم، وكتالوجُنا يشحن `o3-mini`.
+      ...(input.maxOutputTokens === undefined
+        ? {}
+        : REASONING_OUTPUT_CAP.test(input.model)
+          ? { max_completion_tokens: input.maxOutputTokens }
+          : { max_tokens: input.maxOutputTokens }),
 
       ...(stop === undefined ? {} : { stop }),
       ...(affinityBody === undefined ? {} : { user: affinityBody }),

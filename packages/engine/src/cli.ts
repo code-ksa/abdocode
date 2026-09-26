@@ -6083,7 +6083,7 @@ const runServeShell = async (): Promise<void> => {
             const fact = previous ? durableMemory.supersede(previous.id, input) : durableMemory.record(input)
             emit({ kind: "memory-inferred", id: fact.id, topic: correction.topic, note: input.value.note, confidence: correction.confidence, turnId: turn.id })
             emit(memoryNotesFrame())
-          } catch {}
+          } catch { /* الذاكرة مساعِدة لا حاكمة — والصمتُ هنا مُعلَنٌ لا مُهمَل */ }
         }
       }
       // S14 — تحذير التدوير ثم الطريق الآليّ. الحجب ومنعُ التخزين وقعا فوق،

@@ -58,6 +58,15 @@ describe("the early-attempt deadline follows the output budget the request was b
     // والشكلُ الأنثروبيّ كان يرسله دائماً، ويبقى كما هو.
     const anthropic = encodeChatRequest({ ...base, wire: "anthropic", maxOutputTokens: 8192 })
     expect(JSON.parse(anthropic.body).max_tokens).toBe(8192)
+    // ونموذجُ استدلالٍ يأخذ الحقلَ الآخر: كتالوجُنا يشحن `o3-mini`، وهو يرفض `max_tokens`
+    // بـ400 (عقدُ المزوّد المنشور — غيرُ مقيسٍ عندنا، ومكتوبٌ أنّه غيرُ مقيس).
+    const reasoning = JSON.parse(encodeChatRequest({ ...base, model: "o3-mini", maxOutputTokens: 8192 }).body)
+    expect(reasoning.max_completion_tokens).toBe(8192)
+    expect("max_tokens" in reasoning).toBe(false)
+    // وgpt-4o يبقى على الحقل القياسيّ — الاختيارُ بالاسم لا بالمزوّد.
+    const classic = JSON.parse(encodeChatRequest({ ...base, model: "gpt-4o", maxOutputTokens: 8192 }).body)
+    expect(classic.max_tokens).toBe(8192)
+    expect("max_completion_tokens" in classic).toBe(false)
   })
 
   test("the call site passes the cap it built the request with — not a re-read of the body", () => {
