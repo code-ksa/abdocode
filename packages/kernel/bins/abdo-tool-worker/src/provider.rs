@@ -886,7 +886,10 @@ mod tests {
         assert_eq!(resolved.vault_key, "abdocode-deepseek");
         assert_eq!(resolved.credential, CredentialKind::Bearer);
         assert!(!resolved.anthropic);
-        let spoofed = Request { url: "https://evil.example/chat/completions".into(), ..request };
+        let spoofed = Request {
+            url: "https://evil.example/chat/completions".into(),
+            ..request
+        };
         assert!(binding(&spoofed).is_err());
     }
 
@@ -900,13 +903,26 @@ mod tests {
         let coding = Request {
             provider: "qwen-coding-plan".into(),
             url: "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions".into(),
-            timeout_ms: 30_000, body: token.body.clone(),
+            timeout_ms: 30_000,
+            body: token.body.clone(),
         };
-        assert_eq!(binding(&token).unwrap().vault_key, "abdocode-qwen-token-plan");
-        assert_eq!(binding(&coding).unwrap().vault_key, "abdocode-qwen-coding-plan");
-        let cross_plan = Request { url: coding.url.clone(), ..token };
+        assert_eq!(
+            binding(&token).unwrap().vault_key,
+            "abdocode-qwen-token-plan"
+        );
+        assert_eq!(
+            binding(&coding).unwrap().vault_key,
+            "abdocode-qwen-coding-plan"
+        );
+        let cross_plan = Request {
+            url: coding.url.clone(),
+            ..token
+        };
         assert!(binding(&cross_plan).is_err());
-        let payg = Request { url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions".into(), ..coding };
+        let payg = Request {
+            url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions".into(),
+            ..coding
+        };
         assert!(binding(&payg).is_err());
     }
 
@@ -915,10 +931,25 @@ mod tests {
         let entries: Vec<String> = (0..64).map(|index| format!(
             "provider-{index}|https://provider-{index}.example/v1/chat/completions|custom-provider-{index}"
         )).collect();
-        assert_eq!(parse_custom_bindings(&entries.join(";")).expect("64 owner bindings").len(), 64);
-        assert!(parse_custom_bindings(&format!("{};overflow|https://overflow.example/v1/chat/completions|custom-overflow", entries.join(";"))).is_err());
-        assert!(parse_custom_bindings("provider|https://user:password@api.example/v1/chat/completions|custom-provider").is_err());
-        assert!(parse_custom_bindings("provider|https://api.example/v1?secret=x/chat/completions|custom-provider").is_err());
+        assert_eq!(
+            parse_custom_bindings(&entries.join(";"))
+                .expect("64 owner bindings")
+                .len(),
+            64
+        );
+        assert!(parse_custom_bindings(&format!(
+            "{};overflow|https://overflow.example/v1/chat/completions|custom-overflow",
+            entries.join(";")
+        ))
+        .is_err());
+        assert!(parse_custom_bindings(
+            "provider|https://user:password@api.example/v1/chat/completions|custom-provider"
+        )
+        .is_err());
+        assert!(parse_custom_bindings(
+            "provider|https://api.example/v1?secret=x/chat/completions|custom-provider"
+        )
+        .is_err());
     }
 
     #[test]

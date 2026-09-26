@@ -1863,8 +1863,8 @@ describe("S104 canonical contract boundary", () => {
     expect(() =>
       assertKernelBoundaryWorkflow(
         workflowSource.replace(
-          "bun test --timeout 120000 packages/kernel",
-          "cargo fetch --locked\n          bun test --timeout 120000 packages/kernel",
+          "bun run --cwd packages/kernel test",
+          "cargo fetch --locked\n          bun run --cwd packages/kernel test",
         ),
       ),
     ).toThrow("run blocks drifted")

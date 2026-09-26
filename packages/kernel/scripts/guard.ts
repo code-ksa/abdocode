@@ -937,9 +937,18 @@ export function assertKernelBoundaryWorkflow(source: string) {
     throw new Error("S105 Bun action input drifted")
   }
 
+  // 🔴 **العقدُ كان يثبّت السويتةَ العارية، وهي تعتمد على مخزنِ كارجو المحيط.**
+  //
+  // مقيس 2026-09-26 على أوّل تشغيلٍ لـCI: `cargo metadata --locked --offline` سقط
+  // بـ«no matching package named sha2» على مضيفٍ نظيف — ومرّ على جهاز التطوير لأنّ
+  // مخزنَه ممتلئٌ من بناءاتٍ سابقة: أخضرُ يشتري صحّتَه من قذارة الجهاز.
+  //
+  // ومدخلُ الحزمة (`bun run --cwd packages/kernel test`) يحقّق التصميمَ المكتوب:
+  // `prepareCargoContext` ينشئ CARGO_HOME جديداً، **يجلب مرّةً واحدة**، ثمّ يشغّل
+  // البوّاباتِ كلَّها بلا شبكة — ويشمل السويتةَ نفسَها وزيادةً عليها.
   const requiredCommands = [
     "bun install --frozen-lockfile",
-    "bun test --timeout 120000 packages/kernel",
+    "bun run --cwd packages/kernel test",
     "bun run --cwd packages/kernel typecheck",
     "bun run structure",
     "bun run typecheck",
@@ -947,7 +956,7 @@ export function assertKernelBoundaryWorkflow(source: string) {
   const expectedRunBlocks = [
     "rustup toolchain install 1.94.1 --profile minimal --component clippy,rustfmt",
     "bun install --frozen-lockfile",
-    "bun test --timeout 120000 packages/kernel\nbun run --cwd packages/kernel typecheck",
+    "bun run --cwd packages/kernel test\nbun run --cwd packages/kernel typecheck",
     "bun run structure",
     "bun run typecheck",
   ]
