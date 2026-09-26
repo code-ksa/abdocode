@@ -21,16 +21,23 @@ export const CLOUD_EARLY_ATTEMPT_TIMEOUT_MS = 150_000
 /** ما يكلّفه توكنُ إخراجٍ واحد — ضِعفا المقيس (12–13ms) هامشاً للنماذج الأبطأ. */
 export const OUTPUT_MS_PER_TOKEN = 25
 
+/** حدُّ ما نبني عليه مهلةً — سقفٌ أكبرُ لا يُمنح مهلةً بلا نهاية (والقصُّ النهائيُّ على سقف عامل Rust يبقى عند المُنادي). */
+export const MAX_BUDGETED_OUTPUT_TOKENS = 32_768
+
 /**
  * ميزانيّةُ المحاولة المبكّرة: أرضيّةٌ ثابتة + سقفُ الإخراج المطلوب.
  *
- * `max_tokens` يُقرأ من الجسم المُرسَل نفسِه — فالمهلةُ تتبع **ما طُلب فعلاً**، ولا
- * تُنسَخ قيمةٌ تفترق عنه غداً. وغيابُ الحقل يُبقي الأرضيّةَ وحدها: **الغياب رفضٌ لا
+ * السقفُ يُمرَّر **من الرقم الذي بُني به الطلب** (`requestOutputCap`) لا بتفتيشِ نصِّ الجسم:
+ * أوّلُ نسخةٍ من هذا الإصلاح فتّشت الجسمَ عن `max_tokens` فلم تجده — لأنّ الجسمَ المتوافق
+ * مع OpenAI كان **لا يرسله أصلاً** — فمرّت الإصلاحاتُ خضراءَ والمهلةُ كما كانت 150ث في
+ * القياس الحيّ. مسمارٌ على شكلٍ متخيَّل يمرّ ولا يعمل؛ والرقمُ يُؤخذ من مصدره الواحد. ولا
+ * يُقبل رقمٌ مشوَّهٌ ولا سالبٌ ولا ضخمٌ بلا حدّ: الغيابُ والتشوّهُ يُبقيان الأرضيّةَ — **الغياب رفضٌ لا
  * إذن**، فلا يمنح طلبٌ بلا سقفٍ نفسَه مهلةً مفتوحة. والقصُّ النهائيُّ على سقف الطلب
  * يقع عند المُنادي، فلا يتجاوز هذا الرقمُ حدَّ عامل Rust المستورَد.
  */
-export function earlyAttemptBudgetMs(body: string): number {
-  const matched = /"max_tokens"\s*:\s*(\d{1,7})/u.exec(body)
-  const maxOutput = matched === null ? 0 : Number(matched[1])
-  return CLOUD_EARLY_ATTEMPT_TIMEOUT_MS + maxOutput * OUTPUT_MS_PER_TOKEN
+export function earlyAttemptBudgetMs(maxOutputTokens: number | undefined): number {
+  const capped = typeof maxOutputTokens === "number" && Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0
+    ? Math.min(maxOutputTokens, MAX_BUDGETED_OUTPUT_TOKENS)
+    : 0
+  return CLOUD_EARLY_ATTEMPT_TIMEOUT_MS + capped * OUTPUT_MS_PER_TOKEN
 }

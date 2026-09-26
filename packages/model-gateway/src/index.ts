@@ -251,6 +251,13 @@ export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
       stream: input.stream,
       temperature: 0,
       presence_penalty: 0,
+      // 🔴 **سقفُ الإخراج كان يُحسب ولا يُرسل.** المحرّك يحجز ثمانيةَ آلافٍ للحقبة
+      // ويحاسب عليها، والجسمُ المتوافق مع OpenAI كان يخرج **بلا `max_tokens`** —
+      // فالمزوّدُ لا يعرف حدّاً، ومهلةُ المحاولة المبنيّةُ على السقف لا تجد رقماً
+      // فتبقى على أرضيّتها (مقيس 2026-09-26: «timed out after 150000ms» يتكرّر سبعاً
+      // على نداءٍ مشروع). الشكلُ الأنثروبيّ كان يرسله دائماً — فالفرقُ كان صدفةَ شكل.
+      ...(input.maxOutputTokens === undefined ? {} : { max_tokens: input.maxOutputTokens }),
+
       ...(stop === undefined ? {} : { stop }),
       ...(affinityBody === undefined ? {} : { user: affinityBody }),
       messages: input.messages.map(({images,...message}) => images?.length ? {...message,content:[{type:'text',text:message.content},...images.map(image=>({type:'image_url',image_url:{url:`data:${image.mime};base64,${image.data}`}}))]} : message),

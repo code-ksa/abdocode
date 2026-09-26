@@ -31,6 +31,7 @@ import {
 import { readBoundObjectTool } from "@abdo/kernel-tools"
 import { createEnforcedToolRunner, ProductTools as Tools, ToolRegistry, type ToolOutcome } from "@abdo/tools"
 import { grantableEnvName, stripChildEnv } from "@abdo/tools/env-strip"
+import { backgroundLogs, backgroundRuns, startBackgroundRun, stopAllBackgroundRuns } from "./background-runs"
 import { guardInbound } from "./inbound-guard"
 import { StandingGrants } from "./standing-grants"
 import { DenialBreaker } from "./denial-breaker"
@@ -58,6 +59,7 @@ import { CHAT_SYSTEM, acceptsImages, conversationMode, resolveAttachments, type 
 import { BoundedWireDecoder, classifyModelFailure } from "@abdo/model-gateway"
 import { ModelRequestFailure, modelRequestFailure } from "./model-request-failure"
 import { earlyAttemptBudgetMs } from "./attempt-budget"
+import { INSTALLER_BUNDLE_DIR, installerNameAt } from "./installer-bundle"
 import { loadLocalExtensions, localExtensionServers, localSkillBody, localSkillInstructions, localSkillsBrief, localSkillsCatalogue, SKILL_REF } from "./local-extensions"
 import { isProjectSkillRef, projectSkillBody, projectSkills } from "./project-skills"
 import { CONNECTORS, connectorById, connectorCommand, connectorGrants, connectorHandles, connectorServerId } from "./connectors/registry"
@@ -456,15 +458,19 @@ const git = async (args: string | undefined): Promise<string> => {
 // gate — public workspace gates only
 // ---------------------------------------------------------------------------
 
-const INSTALLER_RELATIVE = join("packages", "desktop", "src-tauri", "target", "release", "bundle", "nsis", "AbdoCode_4.0.0_x64-setup.exe")
+/**
+ * حزمةُ التثبيت: الاسمُ يُشتقّ من إعدادِ سطح المكتب في `./installer-bundle` — لا يُكتب
+ * هنا بيدٍ فيتقادم فتردّ البوّابةُ «لا حزمةَ مبنيّة» إلى الأبد (مقيس 2026-09-26).
+ */
 const INSTALLER_DESKTOP = join(process.env["USERPROFILE"] ?? process.cwd(), "Desktop", "عبدو كود - التثبيت.exe")
 const installerGate = (): string => {
   let installerBundle: string | undefined
   for (const start of [PROJECT_DIR, process.cwd(), ROOT]) {
     let directory = resolve(start)
     for (let depth = 0; depth <= 5; depth += 1) {
-      const candidate = join(directory, INSTALLER_RELATIVE)
-      if (existsSync(candidate)) {
+      const named = installerNameAt(directory)
+      const candidate = named === undefined ? undefined : join(directory, INSTALLER_BUNDLE_DIR, named)
+      if (candidate !== undefined && existsSync(candidate)) {
         installerBundle = candidate
         break
       }
@@ -1938,7 +1944,7 @@ const askOnce = async (
       //
       // فالمهلةُ تُبنى على الميزانيّة: أرضيّةٌ ثابتة + سقفُ الإخراج × ضِعفَي المقيس. والأرضيّةُ
       // تحفظ الغرضَ الأصليّ (تعليقٌ بلا بايت يُكتشف مبكراً، مقيس 09-14 على NIM).
-      const attemptTimeoutMs = n < MODEL_RETRY_ATTEMPTS ? Math.min(timeoutMs, earlyAttemptBudgetMs(body)) : timeoutMs
+      const attemptTimeoutMs = n < MODEL_RETRY_ATTEMPTS ? Math.min(timeoutMs, earlyAttemptBudgetMs(requestOutputCap)) : timeoutMs
       const result = await REACH.model({ provider: prov.id, url, body, timeoutMs: attemptTimeoutMs }, hooks.signal)
       return new Response(result.body, { status: result.status, headers: { "content-type": "application/json" } })
     }
@@ -4840,7 +4846,7 @@ const runServeShell = async (): Promise<void> => {
     }
     if (background) {
       // ذ9ب — بعد الحرّاس كلِّهم: العمليّةُ تُطلق بسجلٍّ على قرص المستخدم ومعرّفٍ للنموذج؛ الخادمُ المُدار له طريقُه أعلاه.
-      const run = startBackgroundRun(cmd, PROJECT_DIR, join(STATE_ROOT, "bg-runs"))
+      const run = startBackgroundRun(cmd, PROJECT_DIR, join(STATE_ROOT, "bg-runs"), stripChildEnv(process.env).env)
       return okText(`⚙ run --bg ${cmd}\nبدأ التشغيلُ الخلفيّ ${run.id} (pid ${run.pid}) — اقرأ خرجَه بـ«logs ${run.id}» وأوقفه بـ«stop ${run.id}»؛ سقفُه ٣٠ دقيقة.`)
     }
     let streamedLive = false
@@ -7636,43 +7642,15 @@ const imageRefusalMessage = (ref: string, visionConfigured: boolean): string => 
   ? `نموذجُ الرؤية المضبوط (${ref}) لم يُثبِت قبولَ الصور: المزوّد لا يعلنه في imageModels وأولاما لم يُجب بقدرة vision. اختر نموذجَ رؤيةٍ آخر من الإعدادات ← النماذج ← «نموذج الرؤية (الصور)» أو تأكّد أنّ أولاما يعمل — أو أزل الصور المرفقة. (image input not verified for ${ref})`
   : `هذا النموذج (${ref}) لا يقبل الصور. اضبط نموذجَ رؤيةٍ من الإعدادات ← النماذج ← «نموذج الرؤية (الصور)» — مثل ollama/qwen2.5vl — أو أزل الصور المرفقة. (This model has no verified image input; set a vision model in Settings ← Models.)`
 
-/** ذ9ب — التشغيلاتُ الخلفيّة لهذه الجلسة: معرّفٌ ⇦ عمليّةٌ وسجلٌّ على قرص المستخدم؛ سقفُها ٣٠ دقيقة، وإيقافُها بشجرة العمليّات. */
-interface BackgroundRun { readonly id: string; readonly cmd: string; readonly log: string; readonly startedAt: number; readonly pid: number; exitCode?: number; stopped?: boolean; kill: () => void }
-const backgroundRuns = new Map<string, BackgroundRun>()
-let backgroundSeq = 0
-const BACKGROUND_CAP_MS = 30 * 60_000
-function startBackgroundRun(cmd: string, cwd: string, logDir: string): BackgroundRun {
-  mkdirSync(logDir, { recursive: true })
-  const id = `bg-${++backgroundSeq}`
-  const log = join(logDir, `${id}.log`)
-  // البيئةُ تُنزع أسرارُها كما في مسارَي التشغيل الأخوين: عمليّةٌ خلفيّةٌ ترث `ABDO_SHELL_TOKEN` ومفاتيحَ المزوّدين
-  // تسلّمها لكلّ ما تشغّله — والحدُّ الذي يملك خلقَ العمليّة يملك تجريدَ بيئتها.
-  const child = Bun.spawn(["powershell", "-NoProfile", "-Command", `$OutputEncoding=[Text.Encoding]::UTF8; & { ${cmd} } *> '${log.replace(/'/g, "''")}'`], { cwd, stdin: "ignore", stdout: "ignore", stderr: "ignore", windowsHide: true, env: stripChildEnv(process.env).env })
-  const run: BackgroundRun = { id, cmd, log, startedAt: Date.now(), pid: child.pid, kill: () => { try { Bun.spawnSync(["taskkill", "/T", "/F", "/PID", String(child.pid)], { stdout: "ignore", stderr: "ignore" }) } catch { /* لا شجرة */ } try { child.kill() } catch { /* انتهى */ } } }
-  void child.exited.then((code) => { run.exitCode = code })
-  const cap = setTimeout(() => { if (run.exitCode === undefined) { run.stopped = true; run.kill() } }, BACKGROUND_CAP_MS)
-  cap.unref?.()
-  backgroundRuns.set(id, run)
-  return run
-}
-/** ب10 — الجلسةُ التي خلقت العمليّة تقتلها: كانت تبقى بعد إغلاق التطبيق تكتب في سجلٍّ لا يقرؤه أحد. */
-function stopAllBackgroundRuns(): void {
-  for (const run of backgroundRuns.values()) {
-    if (run.exitCode === undefined) { run.stopped = true; try { run.kill() } catch { /* انتهت */ } }
-  }
-}
+/**
+ * ذ9ب — التشغيلاتُ الخلفيّةُ لهذه الجلسة: مالكُها `./background-runs`.
+ *
+ * نُقلت من هنا لأنّ بوّابةَ التركيب تعدّ خلقَ العمليّة المباشرَ في `cli.ts` تنفيذاً موازياً
+ * (وعلامتُها نصٌّ يُطابَق حرفاً، فلا تُكتب هنا حتى في تعليق — وإلّا بقي الملفُّ أحمرَ بوصفِ ما نُقل منه)،
+ * والتسجيلُ ممنوع: «انقُل الملكيّةَ إلى الحزمة المالكة». والبيئةُ تُمرَّر **مجرَّدةً**
+ * من هنا — الحدُّ الذي يملك خلقَ العمليّة يملك تجريدَ بيئتها.
+ */
 process.on("exit", stopAllBackgroundRuns)
-
-function backgroundLogs(id: string, lines: number): string {
-  const run = backgroundRuns.get(id)
-  if (run === undefined) return `لا تشغيلَ خلفيّاً بالمعرّف «${id.slice(0, 16)}» في هذه الجلسة — المعرّفات: ${[...backgroundRuns.keys()].join("، ") || "لا شيء"}`
-  let text = ""
-  // PowerShell 5.1 يكتب إعادةَ التوجيه *> بترميز UTF-16LE مع BOM؛ والقراءةُ تكتشف الترميز بدل أن تفترضه (قيس: «t\x00i\x00…»).
-  try { const buf = readFileSync(run.log); text = buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe ? buf.toString("utf16le").slice(1) : buf.toString("utf-8").replace(/^﻿/, "") } catch { text = "" }
-  const tail = text.split(/\r?\n/).filter((l, i, a) => !(i === a.length - 1 && l === "")).slice(-lines)
-  const state = run.exitCode === undefined ? `جارٍ منذ ${Math.round((Date.now() - run.startedAt) / 1000)} ث` : run.stopped ? `أُوقف` : `انتهى برمز ${run.exitCode}`
-  return `${run.id} · ${state} · ${run.cmd.slice(0, 120)}\n${tail.length ? tail.join("\n") : "(لا خرجَ بعد)"}`
-}
 
 /** ذ9د — لوحُ الخطّة للجلسة: خطواتٌ بحالاتها؛ المُخفِّضُ mind/planner (validate/replan) يحكم الشكل، والنشرُ إطارُ `plan` القائم. اللوحُ ملكُ مشروعه. */
 type PlanStep = import("./mind/planner").Step

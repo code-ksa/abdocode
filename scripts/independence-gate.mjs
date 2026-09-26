@@ -63,13 +63,21 @@ denyFirst && defaultDeny && noAutonomousInternet ? ok("egress is forbidden-first
 // المرئيُّ — إنجليزيٌّ بطلب المالك (2026-09-06، `serve-wiring.test.ts`؛ العربيّةُ هويّةُ المساعد داخل البروتوكول) ومسارُ المُنصِّب،
 // لأنّ NSIS يشتقّ اسم الملفّ من productName بينما cli.ts يكتبه بيده.
 const desktop = JSON.parse(readFileSync("packages/desktop/src-tauri/tauri.conf.json", "utf8"))
-const installerName = `"${desktop.productName}_${desktop.version}_x64-setup.exe"`
+// الاسمُ يُشتقّ في المحرّك من هذا الإعداد نفسِه، فالفحصُ صار **أقوى** من مطابقةِ نصٍّ واحد:
+// لا يبقى في `cli.ts` اسمُ مُنصِّبٍ يحمل إصداراً (كان 4.0.0 والحيُّ 4.0.67 فلم تجد البوّابةُ
+// حزمةً أبداً)، ويُشترط أن يقرأ الاسمَ من الإعداد. ردّةُ الاسم القديم تبقى مكشوفةً بحقول أدناه.
+const installerOwner = readFileSync("packages/engine/src/installer-bundle.ts", "utf8")
+// لا اسمَ مُنصِّبٍ يحمل إصداراً في المحرّك ولا في وحدته المالكة — لا في شيفرةٍ ولا في تعليق:
+// هذه البوّابةُ تطابق **نصَّ الملفّ** فلا تفرّق بينهما (وقعنا فيها مرّتين في جلسةٍ واحدة).
+const HARDCODED_INSTALLER = /[A-Za-z]+_\d+\.\d+\.\d+_x64-setup\.exe/
+const hardcodedInstaller = HARDCODED_INSTALLER.test(engine) || HARDCODED_INSTALLER.test(installerOwner)
+const derivesInstaller = engine.includes("installerNameAt") && installerOwner.includes("tauri.conf.json") && !hardcodedInstaller
 desktop.productName === "AbdoCode" &&
 desktop.identifier === "io.abdocode.desktop" &&
 desktop.app.windows[0].title === "AbdoCode" &&
-engine.includes(installerName)
+derivesInstaller
   ? ok("desktop identity belongs to AbdoCode", `${desktop.productName} · ${desktop.app.windows[0].title}`)
-  : bad("desktop identity belongs to AbdoCode", `${desktop.productName} · ${desktop.identifier} · ${desktop.app.windows[0].title} · installer ${installerName}`)
+  : bad("desktop identity belongs to AbdoCode", `${desktop.productName} · ${desktop.identifier} · ${desktop.app.windows[0].title} · installer ${derivesInstaller ? "derived" : hardcodedInstaller ? "a version is hardcoded in the engine or its installer module" : "not derived from tauri.conf.json"}`)
 
 const updateOrShare = files.filter((file) => /(?:auto.?update|share-next|session.?share)/i.test(path.basename(file)))
 updateOrShare.length === 0 ? ok("no updater or session-sharing implementation") : bad("no updater or session-sharing implementation", updateOrShare.join(", "))

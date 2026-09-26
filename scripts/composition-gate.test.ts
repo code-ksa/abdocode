@@ -25,13 +25,13 @@ function expectGateFailure(input: CompositionManifest, message: string): void {
 }
 
 describe("AK-R2 composition gate", () => {
-  test("the real tree classifies all 52 packages", () => {
+  test("the real tree classifies all 54 packages", () => {
     const report = validateComposition(manifest(), snapshot, REPO)
-    expect(report.packageCount).toBe(52)
-    expect(report.manifestDesktopClosure.length).toBe(47)
-    expect(report.productionEngineClosure.length).toBe(46)
-    expect(report.outsideDesktop.length).toBe(5)
-    expect(report.productClosure.length).toBe(52)
+    expect(report.packageCount).toBe(54)
+    expect(report.manifestDesktopClosure.length).toBe(48)
+    expect(report.productionEngineClosure.length).toBe(47)
+    expect(report.outsideDesktop.length).toBe(6)
+    expect(report.productClosure.length).toBe(54)
     expect(report.outsideProduct).toEqual([])
     expect(report.registeredParallelImplementations).toBe(0)
   })

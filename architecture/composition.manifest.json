@@ -75,6 +75,13 @@
       "argv": [],
       "reachability": "production-imports"
     },
+    "browser-extension": {
+      "package": "@abdo/browser-bridge",
+      "kind": "ui",
+      "entry": "packages/browser-bridge/extension/manifest.json",
+      "argv": [],
+      "reachability": "manifest"
+    },
     "release-tools": {
       "package": "@abdo/script",
       "kind": "command",
@@ -1300,6 +1307,39 @@
         }
       ]
     },
+    "@abdo/semantic": {
+      "path": "packages/semantic",
+      "role": "runtime",
+      "owner": "engine",
+      "status": "connected",
+      "runtimeRoots": [
+        "engine-serve"
+      ],
+      "capabilities": [
+        "semantic-frame",
+        "intent-inference",
+        "arabic-normalization"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "none"
+      },
+      "proofs": [
+        {
+          "id": "semantic-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/semantic test",
+          "asserts": [
+            "semantic frame, intent, dialect and normalization tests pass"
+          ]
+        }
+      ]
+    },
     "@abdo/session-runtime": {
       "path": "packages/session-runtime",
       "role": "runtime",
@@ -1591,6 +1631,38 @@
         "targetConsumer": "@abdo/engine",
         "completionCondition": "Production paths consume the package without a parallel implementation"
       }
+    },
+    "@abdo/browser-bridge": {
+      "path": "packages/browser-bridge",
+      "role": "ui",
+      "owner": "platform",
+      "status": "standalone",
+      "runtimeRoots": [
+        "browser-extension"
+      ],
+      "capabilities": [
+        "browser-extension-surface",
+        "store-packaging"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "local-only"
+      },
+      "proofs": [
+        {
+          "id": "browser-bridge-pack",
+          "kind": "static",
+          "command": "bun --cwd packages/browser-bridge check",
+          "asserts": [
+            "the extension package and its store metadata pass the packing check"
+          ]
+        }
+      ]
     },
     "@abdo/browser-router": {
       "path": "packages/browser-router",
