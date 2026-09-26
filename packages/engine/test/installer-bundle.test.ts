@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DESKTOP_CONF_RELATIVE, INSTALLER_BUNDLE_DIR, installerNameAt } from "../src/installer-bundle"
@@ -41,6 +41,16 @@ describe("the installer name follows the desktop config, so it cannot go stale",
     expect(installerNameAt(make({ productName: "", version: "4.0.67" }))).toBeUndefined()
     expect(installerNameAt(make({ productName: "AbdoCode", version: 4.067 }))).toBeUndefined()
     expect(installerNameAt(join(tmpdir(), "abdo-no-such-tree-" + Date.now()))).toBeUndefined()
+  })
+
+  test("the two places that hold the desktop version agree", () => {
+    // 🔴 قِيس 2026-09-27: `tauri.conf.json` على 4.0.67 و`package.json` على 4.0.55 — انحرافُ
+    // اثنتَي عشرةَ نسخة. والقفلُ يقرأ الثانيَ، فكان `bun.lock` يحمل رقماً لا وجودَ له.
+    // مصدرُ الإصدار للبنية هو إعدادُ tauri، وهذا الفحصُ يمنع الثاني من الانزلاق عنه.
+    const repo = join(import.meta.dir, "..", "..", "..")
+    const conf = JSON.parse(readFileSync(join(repo, DESKTOP_CONF_RELATIVE), "utf8")) as { version: string }
+    const pkg = JSON.parse(readFileSync(join(repo, "packages", "desktop", "package.json"), "utf8")) as { version: string }
+    expect(`${pkg.version} == ${conf.version}`).toBe(`${conf.version} == ${conf.version}`)
   })
 
   test("the live repo config is readable and names this product", () => {

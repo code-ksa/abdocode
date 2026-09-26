@@ -29,3 +29,23 @@ packages/kernel/src/generated/** text eol=lf
 # `bun install --frozen-lockfile` **يفشل حتماً** على أيّ مضيفٍ غيرِ ويندوز —
 # ولم يظهر حتى أوّل تشغيلٍ لـCI (2026-09-26).
 bun.lock text eol=lf
+# 🔴 حِزَمُ القشرة المولَّدة (‏`bun build` في `packages/desktop/scripts/prepare.ts`)
+# ومخطّطاتُ tauri المولَّدة تُكتب بـLF، فتُقلب إلى CRLF في نسخة العمل مع كلّ بناءٍ على
+# ويندوز — فيصير كلُّ ملفٍّ منها فرقاً بحجمه في `git status`، ويُخفي التغييرَ الحقيقيّ.
+# مقيس 2026-09-27: واحدٌ وعشرون ملفاً هكذا، وفيها سطران حقيقيّان فقط لكلّ ملفّ.
+packages/desktop/ui/approval-mount.js text eol=lf
+packages/desktop/ui/deliverables-mount.js text eol=lf
+packages/desktop/ui/mcp-catalogue.js text eol=lf
+packages/desktop/ui/native-terminal.css text eol=lf
+packages/desktop/ui/native-terminal.js text eol=lf
+packages/desktop/ui/panels.js text eol=lf
+packages/desktop/ui/providers.js text eol=lf
+packages/desktop/ui/servers-panel.js text eol=lf
+packages/desktop/ui/shell.js text eol=lf
+packages/desktop/ui/slot-host.js text eol=lf
+packages/desktop/ui/tasks-panel.js text eol=lf
+packages/desktop/ui/terminal-panel.js text eol=lf
+packages/desktop/ui/trajectory-mount.js text eol=lf
+packages/desktop/ui/turns.js text eol=lf
+packages/desktop/ui/xterm-LICENSE.txt text eol=lf
+packages/desktop/src-tauri/gen/schemas/*.json text eol=lf
