@@ -21,3 +21,7 @@ work/ export-ignore
 # لوحةُ قياس التحكّم (ن10) هارنسُ الصانع: تعتمد على مسبار CDP للمثبَّت ومسارات جهازه — لا تشحن في اللقطة العامّة
 scripts/control-board.mjs export-ignore
 scripts/control-board-tasks.json export-ignore
+# 🔴 المُولَّدُ من مُرمِّز Rust يُقارَن **بايتاً ببايت** بخرج المولِّد (وهو LF)، فقلبُه إلى
+# CRLF في نسخة العمل (core.autocrlf=true) يُحمِّر بوّابةَ العقود على كلّ جهاز ويندوز — وقد
+# أحمرّها فعلاً: 1276 سطراً مختلفاً، والمحتوى **متطابقٌ حرفاً** بعد نزع CR (مقيس 2026-09-26).
+packages/kernel/src/generated/** text eol=lf

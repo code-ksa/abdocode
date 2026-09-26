@@ -46,7 +46,8 @@
   "scripts": {
     "model:empero:gpu": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-empero-gpu.ps1",
     "typecheck": "bun turbo typecheck",
-    "structure:blueprint": "bun scripts/original-blueprint-readiness.mjs",
+    "structure": "bun scripts/composition-gate.ts && bun scripts/provenance-surface-gate.mjs && bun scripts/original-rust-structure-gate.mjs",
+  "structure:blueprint": "bun scripts/original-blueprint-readiness.mjs",
     "structure:test": "bun test scripts/composition-gate.test.ts scripts/provenance-surface-gate.test.ts",
     "independence": "bun scripts/independence-gate.mjs && bun run structure"
   },
