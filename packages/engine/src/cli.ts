@@ -59,6 +59,7 @@ import { CHAT_SYSTEM, acceptsImages, conversationMode, resolveAttachments, type 
 import { BoundedWireDecoder, classifyModelFailure } from "@abdo/model-gateway"
 import { ModelRequestFailure, modelRequestFailure } from "./model-request-failure"
 import { earlyAttemptBudgetMs } from "./attempt-budget"
+import { globalInstallRefused } from "./global-install-guard"
 import { INSTALLER_BUNDLE_DIR, installerNameAt } from "./installer-bundle"
 import { loadLocalExtensions, localExtensionServers, localSkillBody, localSkillInstructions, localSkillsBrief, localSkillsCatalogue, SKILL_REF } from "./local-extensions"
 import { isProjectSkillRef, projectSkillBody, projectSkills } from "./project-skills"
@@ -4838,7 +4839,7 @@ const runServeShell = async (): Promise<void> => {
     const depCommandProblem = dependencyCommandViolation(cmd, PROJECT_DIR)
     if (depCommandProblem !== undefined) return refused(depCommandProblem)
     // 7.6/global: التثبيت العالمي يلوّث الجهاز لا المشروع.
-    if (/\b(?:npm|pnpm)\s+(?:install|add|i)\s+.*(?:\s-g\b|--global\b)/iu.test(cmd)) {
+    if (globalInstallRefused(cmd)) {
       return refused("رُفض التثبيت العالمي (-g): يلوّث الجهاز ولا يُثبّت في المشروع. ثبّتها تبعيةً محليةً واستدعها عبر npx أو node_modules/.bin.")
     }
     if (/(?:^|[;&|]\s*)(?:rm\s+-rf\b|ls\s+-la\b|mkdir\s+-p\b)/iu.test(cmd)) {
@@ -4847,7 +4848,8 @@ const runServeShell = async (): Promise<void> => {
     if (background) {
       // ذ9ب — بعد الحرّاس كلِّهم: العمليّةُ تُطلق بسجلٍّ على قرص المستخدم ومعرّفٍ للنموذج؛ الخادمُ المُدار له طريقُه أعلاه.
       const run = startBackgroundRun(cmd, PROJECT_DIR, join(STATE_ROOT, "bg-runs"), stripChildEnv(process.env).env)
-      return okText(`⚙ run --bg ${cmd}\nبدأ التشغيلُ الخلفيّ ${run.id} (pid ${run.pid}) — اقرأ خرجَه بـ«logs ${run.id}» وأوقفه بـ«stop ${run.id}»؛ سقفُه ٣٠ دقيقة.`)
+      return okText(`⚙ run --bg ${cmd}\nبدأ التشغيلُ الخلفيّ ${run.id} (pid ${run.pid}) — اقرأ خرجَه بـ«logs ${run.id}» وأوقفه بـ«stop ${run.id}»؛ سقفُه ٣٠ دقيقة.
+⚠ يعمل خارج مُطلِق العزل: بلا احتواءِ شجرةٍ ببنائه وبلا إيصالِ إطلاق — والأمرُ بلا «--bg» يمرّ به.`)
     }
     let streamedLive = false
     const result = await runCommandTool(PROJECT_DIR).run({
