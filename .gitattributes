@@ -25,3 +25,7 @@ scripts/control-board-tasks.json export-ignore
 # CRLF في نسخة العمل (core.autocrlf=true) يُحمِّر بوّابةَ العقود على كلّ جهاز ويندوز — وقد
 # أحمرّها فعلاً: 1276 سطراً مختلفاً، والمحتوى **متطابقٌ حرفاً** بعد نزع CR (مقيس 2026-09-26).
 packages/kernel/src/generated/** text eol=lf
+# 🔴 قفلُ Bun يُقارَن بما يعيد كتابتَه bun (وهو LF). أُودع بـCRLF، فكان
+# `bun install --frozen-lockfile` **يفشل حتماً** على أيّ مضيفٍ غيرِ ويندوز —
+# ولم يظهر حتى أوّل تشغيلٍ لـCI (2026-09-26).
+bun.lock text eol=lf

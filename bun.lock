@@ -42,6 +42,10 @@
         "@typescript/native-preview": "catalog:",
       },
     },
+    "packages/browser-bridge": {
+      "name": "@abdo/browser-bridge",
+      "version": "0.2.0",
+    },
     "packages/browser-router": {
       "name": "@abdo/browser-router",
       "devDependencies": {
@@ -147,7 +151,7 @@
     },
     "packages/desktop": {
       "name": "@abdo/desktop",
-      "version": "4.0.0",
+      "version": "4.0.55",
       "dependencies": {
         "@abdo/engine": "workspace:*",
         "@abdo/kernel": "workspace:*",
@@ -694,6 +698,8 @@
     "@abdo/benchmark": ["@abdo/benchmark@workspace:packages/benchmark"],
 
     "@abdo/browser": ["@abdo/browser@workspace:packages/browser"],
+
+    "@abdo/browser-bridge": ["@abdo/browser-bridge@workspace:packages/browser-bridge"],
 
     "@abdo/browser-router": ["@abdo/browser-router@workspace:packages/browser-router"],
 
