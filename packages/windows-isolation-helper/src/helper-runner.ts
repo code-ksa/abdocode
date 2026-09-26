@@ -129,6 +129,16 @@ const helperCwd = () => process.env.SystemRoot ?? "C:\\Windows"
 
 /** stdout/stderr/exit code of one helper run. The ONLY holder of the spawn primitive. */
 function spawnHelper(helperPath: string, argv: readonly string[], timeoutMs: number): { stdout: string; stderr: string; exitCode: number | null } {
+  // A missing artefact used to surface as Bun's bare `Executable not found in
+  // $PATH`, and thirteen live tests failed with it on a fresh checkout — the
+  // message named the path but not the remedy, so it read like a broken test
+  // rather than an unbuilt binary. The absence is stated with the one command
+  // that ends it. (Measured 2026-09-26: with the binary built, 541 pass, 0 fail.)
+  if (!existsSync(helperPath)) {
+    throw new Error(
+      `abdo-winiso is not built at ${helperPath} — build it first: bun run --cwd packages/windows-isolation-helper build`,
+    )
+  }
   // [CL-00A:ALLOW windows_helper_process_port]
   const p = Bun.spawnSync([helperPath, ...argv], {
     stdout: "pipe",
