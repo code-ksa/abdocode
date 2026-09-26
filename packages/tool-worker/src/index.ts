@@ -1,3 +1,4 @@
+import { workerExitReason } from "./exit-reason"
 export * from "./provider"
 
 export interface ToolWorkerRequest { readonly version: 1; readonly requestId: string; readonly tool: string; readonly argv: readonly string[]; readonly timeoutMs: number }
@@ -95,7 +96,7 @@ export class ToolAdmissionWorker {
       new Response(child.stderr).text(),
     ]).finally(() => clearTimeout(timeout))
     const bytes = new Uint8Array(stdout)
-    if (exitCode !== 0) throw new Error(`tool_worker_refused: ${stderr.trim().slice(0, 512) || `exit ${exitCode}`}`)
+    if (exitCode !== 0) throw new Error(`tool_worker_refused: ${workerExitReason(exitCode, stderr)}`)
     if (bytes.byteLength === 0 || bytes.byteLength > 65_536) throw new Error("tool_worker_invalid_output")
     let report: EnforcementReport
     try { report = decodeEnforcementReport(bytes) } catch (error) {

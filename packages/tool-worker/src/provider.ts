@@ -1,3 +1,4 @@
+import { workerExitReason } from "./exit-reason"
 const REQUEST_MAGIC = new TextEncoder().encode("ABPM1")
 // ABGS2: بايتُ «نوع البحث» (0 ويب، 1 صور) بعد safe — الإصدارُ يُرفع لا يُمدَّد بصمت، فعاملٌ قديم يرفض الإطارَ الجديد بدل أن يقرأه مقلوباً.
 const SEARCH_MAGIC = new TextEncoder().encode("ABGS2")
@@ -144,7 +145,7 @@ export class ModelProviderWorker {
       signal?.removeEventListener("abort", abort)
     })
     if (signal?.aborted) throw new Error("provider_worker_aborted")
-    if (exitCode !== 0) throw new Error(`provider_worker_refused: ${stderr.trim().slice(0, 512) || `exit ${exitCode}`}`)
+    if (exitCode !== 0) throw new Error(`provider_worker_refused: ${workerExitReason(exitCode, stderr)}`)
     return decodeModelProviderWorkerResponse(new Uint8Array(stdout))
   }
 
@@ -158,7 +159,11 @@ export class ModelProviderWorker {
       child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
     ]).finally(() => clearTimeout(timeout))
     if (exitCode !== 0 || (stdout !== "0" && stdout !== "1")) {
-      throw new Error(`provider_worker_refused: ${stderr.trim().slice(0, 512) || `exit ${exitCode}`}`)
+      // خروجٌ سليمٌ بجوابٍ غيرِ مفهوم ليس «رمزَ خروجٍ» — يُقال بما هو، فلا يُنسب عطلٌ إلى رمزٍ صفر.
+      const why = exitCode === 0
+        ? `أجاب بما ليس «0» ولا «1»: «${stdout.trim().slice(0, 40)}»`
+        : workerExitReason(exitCode, stderr)
+      throw new Error(`provider_worker_refused: ${why}`)
     }
     return stdout === "1"
   }
@@ -181,7 +186,7 @@ export class ModelProviderWorker {
       signal?.removeEventListener("abort", abort)
     })
     if (signal?.aborted) throw new Error("provider_worker_aborted")
-    if (exitCode !== 0) throw new Error(`provider_worker_refused: ${stderr.trim().slice(0, 512) || `exit ${exitCode}`}`)
+    if (exitCode !== 0) throw new Error(`provider_worker_refused: ${workerExitReason(exitCode, stderr)}`)
     return decodeModelProviderWorkerResponse(new Uint8Array(stdout))
   }
 }
