@@ -388,6 +388,23 @@ const fencedJsonWrite = (text: string): string | undefined => {
 /** حرفُ «ذ» يصل أحياناً U+FFFD من المزوّد (مقيس 09-14) — علامةٌ مكسورة في صدر السطر تُشفى إلى «نفّذ:»؛ لا يُمسّ غيرُ صدر السطر. */
 export const healCallMarker = (text: string): string => text.replace(/^([ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})?\s*)نفّ?\uFFFD\s*:/gmu, "$1نفّذ:")
 
+/**
+ * 🔴 **مسافةٌ واحدةٌ قبل «نفّذ:» كانت تُلغي الدورَ كلَّه.**
+ *
+ * مقيسٌ 2026-09-26 في جولةِ قياسٍ كاملة: النموذجُ كتب
+ * `…I'll also check the project structure. \n\n نفّذ: read TASK.md` — بمسافةٍ واحدةٍ قبل
+ * العلامة. فلم يطابق `^نفّذ:` شيئاً، فصار الردُّ «بلا أداة»، فانتهى الدورُ عند الحقبة
+ * الأولى بـ**صفر أدوات** و«التوقف: complete». درجةُ المهمّة 9/28 بدل 26/28، وإحدى عشرةَ
+ * ثانيةً بدل أربعين دقيقة — **والمهمّةُ ماتت وهي «مكتملة»**.
+ *
+ * وهي السابقةُ نفسُها التي كلّفت 09-13 بغلاف `**`: ما يحيط بالعلامةِ زخرفةٌ لا حدُّ
+ * تنفيذ. فالمسافةُ الأفقيّة وعلاماتُ الاتجاه وصفرُ العرض تُنزع من **صدر السطر وحده**
+ * وحين تلي العلامةَ مباشرةً (lookahead): فسطرٌ مثل `  - نفّذ:` يبقى لـ`unwrapMarkdownCall`،
+ * وسطرٌ جديدٌ لا يُمسّ أبداً، وحمولةُ كتابةٍ لا يُزاح منها إلا ما كان سيُزاح أصلاً.
+ */
+const CALL_MARKER_INDENT = /^[ \t\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\u200E\u200F\u061C\uFEFF]+(?=نفّ?ذ\s*:)/gmu
+export const trimCallMarkerIndent = (text: string): string => text.replace(CALL_MARKER_INDENT, "")
+
 const unwrapMarkdownCall = (text: string): string =>
   text
     .replace(/^[ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})\s*(نفّ?ذ\s*:[^\n]*?)\s*(?:\*\*|__|`{1,3})[ \t]*$/gmu, "$1")
@@ -407,7 +424,7 @@ const parseCommand = (text: string, verifiedEffect = false): CommandParse => {
   // Arabic diacritics are optional orthography, not an execution boundary.
   // Normalize only an exact line-leading imperative plus colon; all ordinary
   // multi-call, payload and registered-tool checks still run afterwards.
-  const stripped = unwrapMarkdownCall(stripMeasure(healCallMarker(text))).replace(/^نفّ?ذ\s*:\s*/gmu, "نفّذ: ")
+  const stripped = unwrapMarkdownCall(trimCallMarkerIndent(stripMeasure(healCallMarker(text)))).replace(/^نفّ?ذ\s*:\s*/gmu, "نفّذ: ")
   if (stripped.startsWith("رُفض إخراج النموذج:")) return Object.freeze({ kind: "invalid", why: stripped })
   const fencedCommand = stripped.match(/^```(?:text)?\s*\r?\n(نفّذ:[\s\S]*?)\r?\n```$/iu)?.[1]
   // Some Qwen completions use a textual XML tool envelope even on the
@@ -663,6 +680,8 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     for (const command of options.priorCommands ?? []) seenCommandKeys.add(`${workspaceGeneration}:${command}`)
   }
   let stopReason: TextAgentLoopResult["stopReason"] = "complete"
+  // تُسأل مرّةً واحدةً لا أكثر: نداءٌ بشكلٍ مجهولٍ لا يستحقّ دوراناً.
+  let markerNudged = false
   const trail: TextAgentMessage[] = [...options.history, { role: "user", content: options.input }]
   const recordAssistant = () => trail.push(nativeReply === undefined
     ? { role: "assistant", content: withoutSummary(stripMeasure(current)) }
@@ -803,6 +822,22 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
         recordAssistant()
         current = await followUp(
           `رُفض الأمر العاري «${bareTool}». اكتب الاستدعاء نفسه مسبوقاً حرفياً بـ«نفّذ:»، وأخرج أداةً واحدة فقط بلا شرح.`,
+        )
+        responseGeneration += 1
+        answer = current
+        continue
+      }
+      // مقيسٌ مرّتين: غلافُ `**` (09-13) ومسافةٌ واحدةٌ قبل العلامة (09-26، م9). في
+      // الحالتين حمل الردُّ العلامةَ ولم تُطابق بادئتُها، فقُرئ «اكتمالاً» فمات الدورُ
+      // بصفرِ أدوات و«التوقف: complete» — مرّةً بصفرِ أدواتٍ في دورين، ومرّةً بـ9/28 بدل
+      // 26/28. الشكلُ المعروفُ يُشفى قبل المطابقة، وهذه شبكةُ الشكل **المجهول**: يُسأل
+      // مرّةً بنصّ القاعدة بدل أن يُصدَّق اكتماله — فثمنُ الشكل الجديد نداءٌ واحد لا مهمّةٌ كاملة.
+      if (!markerNudged && commands.length === 0 && /نفّ?ذ\s*:/u.test(bodyOf(current))) {
+        markerNudged = true
+        stopReason = "invalid-command"
+        recordAssistant()
+        current = await followUp(
+          "ردّك يحمل «نفّذ:» ولم يُقرأ استدعاءً — الشكلُ غيرُ مقبول. أعِد النداءَ وحدَه في أوّلِ سطرٍ يبدأ بـ«نفّذ:» بلا غلافٍ (لا نجمتَين، لا backticks، لا نقطةَ قائمة)، أداةً واحدةً فقط ولا شيءَ بعدها.",
         )
         responseGeneration += 1
         answer = current
