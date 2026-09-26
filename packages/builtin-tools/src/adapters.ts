@@ -62,6 +62,12 @@ async function controlled(
     timeoutMs,
     evidence: grant,
   })
+  // انفصالٌ لم يطلبه هذا المحوّل: يُقتل الطفلُ (لا مالكَ لعمره هنا) ويُقال بالاسم —
+  // وقراءةُ `detail` من حالةٍ لا تحمله كانت ستقرأ `undefined` وتسمّيه سبباً.
+  if (result.outcome === "detached") {
+    result.kill()
+    return { ok: false, error: "detached_not_requested: المُطلِقُ أعاد انفصالاً لم يُطلب — قُتل الطفل", resultFingerprint: sha256("detached:not-requested") }
+  }
   if (result.outcome !== "ran") {
     return { ok: false, error: `${result.reasonCode}: ${result.detail}`, resultFingerprint: sha256(`${result.outcome}:${result.detail}`) }
   }

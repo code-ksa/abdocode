@@ -194,6 +194,24 @@ export function runCommandTool(workspace: string): ToolDefinition {
         }
       }
 
+      // العقدُ الرابع: انفصالٌ لم تطلبه هذه الأداة. لا يُفترض أنّه لا يقع — يُقال،
+      // ويُقتل الطفلُ لأنّ لا مالكَ لعمره في هذا المسار (تركُه تسريبُ عمليّة).
+      if (res.outcome === "detached") {
+        res.kill()
+        const output: RunCommandOutput = {
+          display,
+          argv,
+          exitCode: null,
+          stdout: "",
+          stderr: "",
+          timedOut: false,
+          aborted: false,
+          durationMs: res.durationMs,
+          failureClass: "detached_not_requested",
+          diagnostic: "المُطلِقُ أعاد انفصالاً لم يُطلب — قُتل الطفلُ ولم يُحتسب خرجٌ.",
+        }
+        return { ok: false, error: output.diagnostic!, output, resultFingerprint: sha256(`detached:${display}`) }
+      }
       const output: RunCommandOutput = {
         display,
         argv,

@@ -50,6 +50,8 @@ export type ShellFailureClass =
   | "timeout"
   | "aborted"
   | "isolation_refused" // CL-16A2-B: the launcher refused BEFORE starting anything
+  // انفصالٌ لم تطلبه هذه الأداة: عقدٌ مكسورٌ يُقال بصنفه لا يُفترض أنّه لا يقع.
+  | "detached_not_requested"
 
 export interface ShellOutput {
   readonly command: string
@@ -87,6 +89,8 @@ function diagnose(cls: ShellFailureClass, exitCode: number | null, timeoutMs: nu
       return "The shell process itself failed to start."
     case "isolation_refused":
       return "The required execution isolation could not be delivered; nothing was executed."
+    case "detached_not_requested":
+      return "The launcher returned a detached child this tool never asked for; it was killed and no output was counted."
   }
 }
 
@@ -194,6 +198,23 @@ export function shellTool(workspace: string): ToolDefinition {
         return { ok: false, error: output.diagnostic!, output, resultFingerprint: fingerprint(command, cwdRel, { ...base, failureClass: "process_spawn_failed" }) }
       }
 
+      // العقدُ الرابع: انفصالٌ لم تطلبه هذه الأداة. لا يُفترض أنّه لا يقع — يُقال،
+      // ويُقتل الطفلُ لأنّ لا مالكَ لعمره في هذا المسار (تركُه تسريبُ عمليّة).
+      if (res.outcome === "detached") {
+        res.kill()
+        const output: ShellOutput = {
+          command,
+          exitCode: null,
+          stdout: "",
+          stderr: "",
+          timedOut: false,
+          aborted: false,
+          durationMs: res.durationMs,
+          failureClass: "detached_not_requested",
+          diagnostic: "المُطلِقُ أعاد انفصالاً لم يُطلب — قُتل الطفلُ ولم يُحتسب خرجٌ.",
+        }
+        return { ok: false, error: output.diagnostic!, output, resultFingerprint: fingerprint(command, cwdRel, { command, exitCode: null, stdout: "", stderr: "", timedOut: false, aborted: false, failureClass: "detached_not_requested" }) }
+      }
       const { stdout, stderr, exitCode, timedOut, aborted } = res
       const durationMs = Date.now() - t0
       if (exitCode === 0 && !timedOut && !aborted) {

@@ -70,11 +70,11 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     // run --bg: معرّفٌ، ثمّ logs يرى الخرج، ثمّ stop يوقف عمليةً ما زالت تعمل
     const bg = await turn("نفّذ: run --bg 1..3 | ForEach-Object { \"tick$_\"; Start-Sleep -Milliseconds 400 }; Start-Sleep -Seconds 20")
     expect(bg[0]).toContain("بدأ التشغيلُ الخلفيّ bg-1")
-    // 🔴 الإيصالُ يقول الفرقَ المقيس: الخلفيُّ يُطلق خارج مُطلِق العزل (بلا احتواءِ شجرةٍ
-    // ببنائه وبلا إيصالِ إطلاق)، والمقدّمةُ تمرّ به. إيصالٌ يوهم التكافؤ يجعل النموذجَ
-    // يختار `--bg` وهو يظنّه مكافئاً — فالفرقُ يُقال في موضع القرار لا في وثيقةٍ بعيدة.
-    expect(bg[0]).toContain("خارج مُطلِق العزل")
-    expect(bg[0]).toContain("--bg")
+    // ✅ الفجوةُ أُغلقت (2026-09-27): الخلفيُّ يمرّ بمُطلِق العزل نفسِه في طَورٍ منفصل، فلا
+    // تحذيرَ يُقال — والإيصالُ يقول ما بقي صحيحاً: العمرُ عمرُ الجلسة. والمسمارُ يتحرّك
+    // مع الحقيقة: تحذيرٌ باقٍ بعد إغلاقِ سببه كذبٌ في الاتجاه الآخر.
+    expect(bg[0]).toContain("عمرُه عمرُ الجلسة")
+    expect(bg[0]).not.toContain("خارج مُطلِق العزل")
     await Bun.sleep(2500)
     const logs = await turn("نفّذ: logs bg-1 50")
     expect(logs[0]).toContain("bg-1 · جارٍ")
@@ -87,6 +87,11 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     const unknown = await turn("نفّذ: logs bg-9")
     expect(unknown[0]).toContain("لا تشغيلَ خلفيّاً")
     expect(existsSync(join(state, "bg-runs", "bg-1.log"))).toBe(true)
+    // والسجلُّ من تيّارِ الطفل بترميزٍ نملكه: لا BOM ولا UTF-16LE (كان PowerShell يكتب
+    // `*>` بـUTF-16LE مع BOM فتُقرأ بحيلةِ كشفِ ترميز — الحيلةُ باقيةٌ للقديم لا للجديد).
+    const logBytes = readFileSync(join(state, "bg-runs", "bg-1.log"))
+    expect(logBytes[0] === 0xff && logBytes[1] === 0xfe).toBe(false)
+    expect(logBytes.toString("utf8")).toContain("tick3")
     // 🔴 **التوأمُ الحاكم: `--bg` ليس باباً أوسع.** الحرّاسُ كلُّهم يسبقون فرعَ الخلفيّ،
     // فما يُرفض في المقدّمة يُرفض معه — ولو انزلق الفرعُ فوقهم يوماً لصار العلمُ تجاوزاً.
     const linuxBg = await turn("نفّذ: run --bg rm -rf data")
@@ -97,5 +102,11 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     expect(globalBg[0]).not.toContain("بدأ التشغيلُ الخلفيّ")
     // ولا سجلَّ يُخلق لما رُفض: الرفضُ قبل الإطلاق لا بعده.
     expect(existsSync(join(state, "bg-runs", "bg-2.log"))).toBe(false)
+    // ومسمارُ مصدرٍ: التشغيلُ الخلفيُّ يمرّ بالمُطلِق في طَورٍ منفصل — ورجوعٌ إلى `Bun.spawn`
+    // هنا يُعيد الفجوةَ صامتاً، فيُمسك بالنصّ لا بالنيّة.
+    const module_ = readFileSync(join(ROOT, "packages", "engine", "src", "background-runs.ts"), "utf8")
+    expect(module_).toContain("launchControlledProcess({")
+    expect(module_).toContain("detach: true")
+    expect(module_).not.toContain("Bun.spawn(")
   } finally { child.kill(); await child.exited; server.stop(true); await errors; rmSync(base, { recursive: true, force: true }) }
 }, 180_000)

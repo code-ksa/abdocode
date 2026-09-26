@@ -4846,10 +4846,16 @@ const runServeShell = async (): Promise<void> => {
       return refused("رُفض أمر بصيغة Linux: الطرفية Windows PowerShell 5.1. استخدم Remove-Item -Recurse -Force أو Get-ChildItem أو New-Item -ItemType Directory -Force بحسب الحاجة.")
     }
     if (background) {
-      // ذ9ب — بعد الحرّاس كلِّهم: العمليّةُ تُطلق بسجلٍّ على قرص المستخدم ومعرّفٍ للنموذج؛ الخادمُ المُدار له طريقُه أعلاه.
-      const run = startBackgroundRun(cmd, PROJECT_DIR, join(STATE_ROOT, "bg-runs"), stripChildEnv(process.env).env)
-      return okText(`⚙ run --bg ${cmd}\nبدأ التشغيلُ الخلفيّ ${run.id} (pid ${run.pid}) — اقرأ خرجَه بـ«logs ${run.id}» وأوقفه بـ«stop ${run.id}»؛ سقفُه ٣٠ دقيقة.
-⚠ يعمل خارج مُطلِق العزل: بلا احتواءِ شجرةٍ ببنائه وبلا إيصالِ إطلاق — والأمرُ بلا «--bg» يمرّ به.`)
+      // ذ9ب — بعد الحرّاس كلِّهم، وعبر مُطلِق العزل نفسِه الذي تمرّ به المقدّمة (طَورٌ منفصل:
+      // الخطّةُ وفحصُ الانزياح والبوّابةُ ثمّ العودةُ بالمعرّف بلا انتظار). العمرُ للجلسة.
+      let run: Awaited<ReturnType<typeof startBackgroundRun>>
+      try {
+        run = await startBackgroundRun(cmd, PROJECT_DIR, join(STATE_ROOT, "bg-runs"), stripChildEnv(process.env).env)
+      } catch (error) {
+        // رفضُ المُطلِق يُقال بنصّه — لا يُقرأ عطلاً في الأداة ولا يُخفى.
+        return refused(`رُفض التشغيلُ الخلفيّ: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      return okText(`⚙ run --bg ${cmd}\nبدأ التشغيلُ الخلفيّ ${run.id} (pid ${run.pid}) — اقرأ خرجَه بـ«logs ${run.id}» وأوقفه بـ«stop ${run.id}»؛ سقفُه ٣٠ دقيقة، وعمرُه عمرُ الجلسة.`)
     }
     let streamedLive = false
     const result = await runCommandTool(PROJECT_DIR).run({

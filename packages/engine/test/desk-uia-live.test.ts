@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { runDesktop, type DesktopBound, type UiContext } from "../src/desktop-control"
-import { deskSteady } from "./fixtures/desk-front"
+import { FRONT_STOLEN, deskSteady } from "./fixtures/desk-front"
 
 // م6/م6ب — **اللوحُ الحيّ على نافذةٍ نملكها** (WinForms، خلفيّةٌ أرجوانيّة، مؤقّتٌ يكتب الحقيقةَ إلى ملفّ كلَّ ١٥٠ms):
 //   (أ) اللقطةُ صادقة على شاشةٍ مُكبَّرة: بكسلٌ داخل النافذة أرجوانيّ (قبل الوعي بالـDPI كانت الصورةُ منطقةً أخرى — مقيس على 150٪).
@@ -51,7 +51,16 @@ test.skipIf(process.platform !== "win32")("desk on a real window: DPI-true scree
       if (again.ok && again.bound !== undefined) bound = again.bound
       return again.ok ? again.bound : undefined
     }
-    const f = await runDesktop({ kind: "focus", title: "AbdoUiaLive" }, { shotsDir: shots })
+    // والربطُ الأوّلُ يُعاد كغيره: سرقةُ المقدّمة تقع عند أوّل نداءٍ كما تقع وسطَ الاختبار
+    // (قِيس: نافذةُ المالك أخذت المقدّمةَ فسقط الربطُ الأوّل وحده). والإعلانُ على stderr،
+    // فمضيفٌ يسرقها دائماً يُرى ولا يُفسَّر أخضرَ.
+    let f = await runDesktop({ kind: "focus", title: "AbdoUiaLive" }, { shotsDir: shots })
+    for (let n = 1; n <= 2 && !f.ok && FRONT_STOLEN.test(f.text); n += 1) {
+      process.stderr.write(`⚠ «الربط»: سُرقت المقدّمة (${f.text.slice(0, 120)}) — محاولةٌ ${n}/2
+`)
+      await Bun.sleep(700)
+      f = await runDesktop({ kind: "focus", title: "AbdoUiaLive" }, { shotsDir: shots })
+    }
     expect(f.ok, f.text).toBe(true)
     let bound = f.bound as DesktopBound
     const scale = (bound.right - bound.left) / 600 // ١ على شاشة 100٪، ١٫٥ على 150٪ — البكسلاتُ فعليّة بعد الوعي بالـDPI

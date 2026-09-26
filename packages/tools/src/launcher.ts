@@ -360,6 +360,18 @@ export interface ControlledLaunchRequest {
    * إشعارٌ بالتقدّم فقط. من بنى على العائد لا يتغيّر عنده شيء.
    */
   readonly onOutput?: (chunk: { readonly stream: "stdout" | "stderr"; readonly text: string }) => void
+  /**
+   * انفصالٌ: تُبنى الخطّةُ ويُفحص الانزياحُ ويُقلع الطفلُ، ثمّ **يعود المُطلِق بمعرّفه**
+   * بلا انتظار — فتملك الجلسةُ عمرَه. طلبَه تشغيلٌ خلفيٌّ كان يُقلع بـ`Bun.spawn` خارج
+   * هذا المُطلِق، ففاته التحقّقُ من صياغة الأمر وحلُّ `cwd` والخطّةُ وفحصُ الانزياح.
+   *
+   * ولا يغيّر هذا دلالةَ الإنفاذ للمسار القائم: القرارُ نفسُه والفحصُ نفسُه، وما يفترق
+   * هو **من ينتظر**. ومن ثمّ يبقى `LAUNCHER_VERSION` كما هو (والوثيقةُ تقول: يُرفع عند
+   * تغيّرِ دلالةِ الإنفاذ لا عند إضافةِ طَور).
+   *
+   * ⚠ ومع خلفيّةِ عزلٍ يُرفض: عقدُها ينتظر بطبعه، فالانفصالُ عنها وهمٌ لا احتواء.
+   */
+  readonly detach?: true
 }
 
 export type ControlledLaunchResult =
@@ -388,6 +400,20 @@ export type ControlledLaunchResult =
       readonly detail: string
       readonly durationMs: number
       readonly appliedMode: NetworkMode
+    }
+  | {
+      /** أُقلع وتُرك يعمل: العمرُ للمُنادي، والقتلُ بشجرته عبر `killProcessTree`. */
+      readonly outcome: "detached"
+      readonly pid: number
+      readonly durationMs: number
+      readonly appliedMode: NetworkMode
+      readonly spawnedArgv: readonly string[]
+      /** تيّارا الطفل كما هما — من أراد سجلّاً كتبه بنفسه؛ المُطلِقُ لا يجمع ما لا ينتظره. */
+      readonly stdout: ReadableStream
+      readonly stderr: ReadableStream
+      /** خروجُ الطفل حين يخرج — بلا انتظارٍ من المُطلِق، ومَن أراد حالتَه راقبَه. */
+      readonly exited: Promise<number | null>
+      readonly kill: () => void
     }
 
 // ------------------------------------------------------------------ primitives
@@ -807,6 +833,15 @@ export async function launchControlledProcess(req: ControlledLaunchRequest): Pro
     }
   }
 
+  // الانفصالُ عن خلفيّةٍ تنتظر بطبعها وهمٌ: يُرفض باسمه قبل الإقلاع لا بعده.
+  if (req.detach === true && req.evidence.backend !== undefined) {
+    return {
+      outcome: "refused",
+      reasonCode: "detach_requires_planned_launch",
+      detail: `العزلُ عبر «${req.evidence.backend.mechanism}» ينتظر انتهاءَ الطفل بعقده، فلا يُطلب منه انفصال`,
+      durationMs: Date.now() - t0,
+    }
+  }
   // [CL-00A:ALLOW controlled_process_launcher]
   const spawn = hooks?.spawn ?? Bun.spawn
   let proc: Bun.Subprocess
@@ -819,6 +854,22 @@ export async function launchControlledProcess(req: ControlledLaunchRequest): Pro
       detail: e instanceof Error ? e.message : String(e),
       durationMs: Date.now() - t0,
       appliedMode: plan.applied,
+    }
+  }
+
+  if (req.detach === true) {
+    // الطفلُ يعمل، والعمرُ للمُنادي. لا مؤقّتَ هنا ولا انتظار: سقفُ العمرِ وقتلُه من
+    // شأن من طلبه — وهو يملك `kill` بشجرته كما يملكها المسارُ المنتظِر.
+    return {
+      outcome: "detached",
+      pid: proc.pid,
+      durationMs: Date.now() - t0,
+      appliedMode: plan.applied,
+      spawnedArgv: finalArgv,
+      stdout: proc.stdout as ReadableStream,
+      stderr: proc.stderr as ReadableStream,
+      exited: proc.exited,
+      kill: () => killProcessTree(proc as { pid: number; kill: (c?: number) => void }),
     }
   }
 
