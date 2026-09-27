@@ -172,7 +172,7 @@ import { missingReceiptsLine, parseSuperAbdoReview, resolveSuperAbdo, superAbdoI
 import { projectInstructionsFor, validateProjectInstructions, type ProjectInstructions } from "./project-instructions"
 import { PluginInventory, catalogFor, describePlugins, metaOn, neutralPluginContext, pluginContext, resolvePlugin, resolvePlugins, validatePluginsPatch, type PluginName } from "./plugin-registry"
 import { INTAKE_REFUSALS, assistedIntake, classifyInboundSecret, editorArgv, intakeDesktopAbsent, intakeTimeoutMs, rotationWarning, suggestedHandle, vaultHandleRefusal, VAULT_HANDLE_RE } from "./secret-intake"
-import { resolveVaultScript, vaultEnvOverlay, vaultForget, vaultGet, vaultGuard, vaultList, vaultSet } from "./vault"
+import { resolveVaultScript, shippedVaultPresence, vaultEnvOverlay, vaultForget, vaultGet, vaultGuard, vaultList, vaultSet } from "./vault"
 import { createVaultStatusReporter } from "./vault-status"
 import { approvalAskedLine, approvalDecidedLine } from "./approval-ledger"
 import { locationsFromReceipt } from "./tool-locations"
@@ -231,6 +231,17 @@ const explicitProject = process.env.ABDO_PROJECT?.trim() || undefined
 let PROJECT_DIR = resolve(explicitProject ?? (desktopProjectRequired ? join(STATE_ROOT, "no-project") : process.cwd()))
 let projectSelected = !desktopProjectRequired || (explicitProject !== undefined && projectPathProblem(PROJECT_DIR, blockedProjectRoots) === undefined)
 const REACH = new RustReachEffects(TOOL_WORKER, HOST, JOURNAL, () => PROJECT_DIR)
+/**
+ * هل لمزوّدٍ مفتاحٌ في الخزنة؟ الخزنةُ المشحونة تُسأل بملفّها (`shippedVaultPresence`)،
+ * وخزنةُ المالك بعقدها عبر العامل كما كانت. سؤالٌ واحدٌ بجوابٍ واحد لقائمة النماذج
+ * وحالةِ الخزنة وربطِ النموذج — كانت ثلاثتُها تُطلق PowerShell لكلّ مزوّد.
+ */
+const hasProviderKey = async (providerId: string): Promise<boolean> => {
+  const vaultKey = Providers.provider(providerId)?.vaultKey
+  const shipped = vaultKey === undefined ? undefined : shippedVaultPresence([vaultKey], process.env)
+  if (vaultKey !== undefined && shipped !== undefined) return shipped.get(vaultKey) === true
+  return REACH.hasCredential(providerId).catch(() => false)
+}
 
 /** Resolve one target inside the active project; different drives and traversal fail closed. */
 const resolveProjectPath = (target: string): string | undefined => {
@@ -283,17 +294,39 @@ ${envLine}`
 // docs — public product help; no private project indexes are embedded or read
 // ---------------------------------------------------------------------------
 
-const docs = (topic: string | undefined): string => {
-  const entries: Record<string, string> = {
-    project: "اختر مجلد مشروعك من الواجهة. لا يكتشف عبدو كود مشاريع أخرى ولا يقرأ إعداداتها قبل منح الثقة.",
-    // كانت تدّعي قفلاً ثابتاً للشبكة — وهي كذبةُ رسالةِ النظام نفسُها من بابٍ
-    // ثانٍ، ويقرؤها النموذجُ الآن لأن `docs` صارت في كتالوجه الأصيل.
-    // الصادقُ أن يُحال إلى النمط الحاكم بدل ادّعاء افتراضٍ ثابت لا وجود له.
-    safety: "كل أثر يمر عبر السياسة والنواة والدفتر. وما يحتاج موافقةً صريحة يحدّده نمط الجلسة (قراءة فقط · تلقائي · صلاحية كاملة)، لا افتراض ثابت.",
-    packages: "المنتج مركب من 52 حزمة محلية؛ سجل التركيب يحدد المالك والحدود ودليل الاختبار لكل حزمة.",
-  }
-  if (!topic) return `المساعدة العامة: ${Object.keys(entries).join("، ")}`
-  return entries[topic.toLowerCase()] ?? `لا موضوع باسم «${topic}». المتاح: ${Object.keys(entries).join("، ")}`
+// مقيس 2026-09-27 (قائمة «مساعدة ← الوثائق» في واجهةٍ إنجليزيّة): كانت تجيب بسطرٍ عربيٍّ
+// يسرد أسماءَ المواضيع وحدها («المساعدة العامة: project، safety، packages») — لا محتوى ولا
+// لغةَ المستخدم. وسطرُ الحزم كان يدّعي «52 حزمة» والمجلّداتُ 54: رقمٌ مكتوبٌ يشيخ فحُذف.
+const DOCS: Readonly<Record<string, { readonly en: string; readonly ar: string }>> = {
+  project: {
+    en: "Choose your project folder from the interface. AbdoCode does not discover other projects or read their settings before you trust the folder.",
+    ar: "اختر مجلد مشروعك من الواجهة. لا يكتشف عبدو كود مشاريع أخرى ولا يقرأ إعداداتها قبل منح الثقة.",
+  },
+  // كانت تدّعي قفلاً ثابتاً للشبكة — وهي كذبةُ رسالةِ النظام نفسُها من بابٍ
+  // ثانٍ، ويقرؤها النموذجُ الآن لأن `docs` صارت في كتالوجه الأصيل.
+  // الصادقُ أن يُحال إلى النمط الحاكم بدل ادّعاء افتراضٍ ثابت لا وجود له.
+  safety: {
+    en: "Every effect passes through policy, the kernel and the ledger. What needs your explicit approval is set by the session mode (Read-only · Auto · Full access), not by a fixed default.",
+    ar: "كل أثر يمر عبر السياسة والنواة والدفتر. وما يحتاج موافقةً صريحة يحدّده نمط الجلسة (قراءة فقط · تلقائي · صلاحية كاملة)، لا افتراض ثابت.",
+  },
+  providers: {
+    en: "Pick a model from the model chip. In the desktop app, a provider without a key opens Settings → Providers on its own card: paste the key and press Save. The key goes to the local vault, and the model you picked is selected once its key is saved.",
+    ar: "اختر نموذجاً من شريحة النموذج. في تطبيق سطح المكتب يفتح المزوّدُ الذي بلا مفتاح الإعداداتِ ← المزوّدين على بطاقته: ألصق المفتاح واضغط حفظ. يذهب المفتاح إلى الخزنة المحلّية، ويُختار النموذجُ الذي اخترته حين يُحفظ مفتاحه.",
+  },
+  packages: {
+    en: "The product is composed of local packages; the composition registry names each package's owner, limits and test evidence.",
+    ar: "المنتج مركّبٌ من حزمٍ محلّية؛ سجلُّ التركيب يحدّد لكلّ حزمةٍ مالكها وحدودها ودليل اختبارها.",
+  },
+}
+
+/** مساعدةُ المنتج بلغة الإعدادات: بلا موضوعٍ تُعرض المواضيع كلُّها بمحتواها، لا أسماؤها وحدها. */
+const docs = (topic: string | undefined, language: string = loadSettings().language ?? "en"): string => {
+  const lang = language === "ar" ? "ar" : "en"
+  const names = Object.keys(DOCS)
+  if (!topic) return names.map((name) => `${name} — ${DOCS[name]![lang]}`).join("\n")
+  const entry = DOCS[topic.toLowerCase()]
+  if (entry !== undefined) return entry[lang]
+  return lang === "ar" ? `لا موضوع باسم «${topic}». المتاح: ${names.join("، ")}` : `No topic named "${topic}". Available: ${names.join(", ")}`
 }
 
 // ---------------------------------------------------------------------------
@@ -4998,7 +5031,7 @@ const runServeShell = async (): Promise<void> => {
   planPublisher = emit // ذ9د — لوحُ الخطّة يُبثّ على قناة القشرة نفسها منذ تعريفها (الترحيبُ الأوّل يُستهلك في المصادقة قبل الحلقة).
   const vaultStatus = createVaultStatusReporter({
     providers: () => Providers.listProviders().filter(p => p.vaultKey !== undefined).map(p => p.id),
-    hasCredential: provider => REACH.hasCredential(provider),
+    hasCredential: hasProviderKey,
     emit,
   })
   async function* shellInputFrames(): AsyncGenerator<unknown> {
@@ -5411,7 +5444,7 @@ const runServeShell = async (): Promise<void> => {
             models = (data.models ?? []).map((m) => m.name)
           } catch { /* أولاما نائم — نُبقي البذرة */ }
         } else if (p.vaultKey !== undefined) {
-          hasKey = await REACH.hasCredential(p.id).catch(() => false)
+          hasKey = await hasProviderKey(p.id)
         }
         groups.push({ provider: p.id, label: p.label, local: p.local, hasKey, models: models.map((m) => `${p.id}/${m}`) })
       }
@@ -5433,7 +5466,7 @@ const runServeShell = async (): Promise<void> => {
       const parsed = typeof ref === "string" ? Providers.parseRef(ref) : undefined
       if (parsed === undefined) { emit({ kind: "refused", why: "model-set يحتاج مرجعاً «مزوّد/نموذج» معروفاً" }); continue }
       const p = Providers.provider(parsed.provider)!
-      if (!p.local && p.vaultKey !== undefined && !(await REACH.hasCredential(p.id).catch(() => false))) {
+      if (!p.local && p.vaultKey !== undefined && !(await hasProviderKey(p.id))) {
         emit({ kind: "refused", why: `${p.label} يحتاج مفتاحاً في الخزنة — أضفه من الإعدادات قبل الربط` })
         continue
       }

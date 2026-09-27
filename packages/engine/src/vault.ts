@@ -333,6 +333,34 @@ export async function vaultGuard(env: VaultEnv): Promise<{ store: string } | { r
 }
 
 /** المقابض الموجودة — أسماءٌ فقط، ولا قيمةَ تُقرأ ولا تُطبع. */
+/**
+ * حضورُ مقابضَ في الخزنة **المشحونة** — بلا PowerShell.
+ *
+ * العطلُ المقيس (2026-09-27، على المحرّك الحقيقيّ خلف القشرة): فتحُ قائمة النماذج
+ * كان ينتظر **7.5 ثانية**، وحالةُ المفاتيح في الإعدادات مثلها — كلُّ مزوّدٍ يسأل
+ * عاملَ Rust عن حضور مفتاحه، والعاملُ يُطلق `powershell.exe … has` لكلّ مقبض:
+ * ستّةَ عشرَ إطلاقاً متتابعاً (~400ms لكلٍّ منها). والسكربتُ المشحون يجيب `has`
+ * بـ`Test-Path <الجذر>\<المقبض>.sec` لا غير — فالسؤالُ نفسُه يُجاب من الملفّ.
+ *
+ * والجذرُ هو **ما يراه العامل**: `ABDO_VAULT_DIR` إن ضُبط (كما يقرؤه السكربت
+ * حرفاً)، وإلّا جذرُ البيت الذي يعلنه `vaultEnvOverlay` للعامل. وخزنةُ المالك
+ * (`ABDO_VAULT_SCRIPT`) لا يُفترض شكلُها: `undefined` ويسألها المستدعي بعقدها.
+ * لا قيمةَ تُقرأ هنا — وجودُ ملفٍّ وحده.
+ */
+export function shippedVaultPresence(handles: readonly string[], env: VaultEnv): ReadonlyMap<string, boolean> | undefined {
+  const located = resolveVaultScript(env)
+  if ("refusal" in located) return undefined
+  // المحرّكُ نفسُه يُعلن المشحونَ في `ABDO_VAULT_SCRIPT` لعامله (`vaultEnvOverlay`)،
+  // فيبدو «خزنةَ مالك». المالكُ الحقّ سكربتٌ **غيرُ** المشحون — يُقاس بالمسار لا بالمتغيّر.
+  if (located.owner) {
+    const shipped = resolveVaultScript({ ...env, [OWNER_VAULT_ENV]: undefined })
+    if ("refusal" in shipped || resolve(shipped.script).toLowerCase() !== resolve(located.script).toLowerCase()) return undefined
+  }
+  const explicit = env[VAULT_DIR_ENV]
+  const store = explicit !== undefined && explicit.length > 0 ? explicit : located.store
+  return new Map(handles.map((handle) => [handle, VAULT_HANDLE_RE.test(handle) && existsSync(join(store, `${handle}.sec`))]))
+}
+
 export async function vaultList(env: VaultEnv): Promise<{ handles: string[] } | { refusal: VaultRefusal }> {
   const located = ensureShippedVault(env)
   if ("refusal" in located) return located

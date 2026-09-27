@@ -4743,6 +4743,9 @@ function observe() {
 
 function flush() {
   queued = false;
+  // ‏`disconnect()` يُسقط سجلّاتٍ لم تُسلَّم بعد: نصٌّ كُتب في الدورة نفسها (سطرُ «النواة:
+  // غائبة» من identity) بقي عربيّاً في واجهةٍ إنجليزيّة (مقيس 2026-09-27). تُجمع قبل الفصل.
+  if (observer) collect(observer.takeRecords());
   observer?.disconnect();
   const roots = [...pending];
   pending.clear();
@@ -4754,15 +4757,19 @@ function flush() {
 function startObserver() {
   if (observer) return;
   observer = new MutationObserver(records => {
-    for (const record of records) {
-      const element = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
-      if (isProtected(element)) continue;
-      if (record.type === "childList") {
-        for (const node of record.addedNodes) if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE) pending.add(node);
-      } else pending.add(record.target);
-    }
+    collect(records);
     if (pending.size && !queued) { queued = true; queueMicrotask(flush); }
   });
+}
+
+function collect(records) {
+  for (const record of records) {
+    const element = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
+    if (isProtected(element)) continue;
+    if (record.type === "childList") {
+      for (const node of record.addedNodes) if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE) pending.add(node);
+    } else pending.add(record.target);
+  }
 }
 
 /**
@@ -4784,6 +4791,7 @@ export function applyLocale(lang = "en") {
     if (surface.dir !== direction) surface.dir = direction;
   }
   startObserver();
+  observer.takeRecords();
   observer.disconnect();
   pending.clear();
   try { if (document.body) localize(document.body); } finally { observe(); }

@@ -81,6 +81,10 @@ export function mountUsageSettings(api) {
   let error = '';
   let sequence = 0;
   let pendingRequestId = null;
+  // العدّادُ المحلّيّ كان يُسنَد ويُقرأ ولم يُعلَن قطّ: في وحدةٍ صارمةٍ يرمي قراءتُه
+  // `ReferenceError: meter is not defined` — فسقط حفظُ إعدادات الواجهة كلُّه بعد حفظ المحرّك (مقيس
+  // على 4.0.68 المنزَّل من GitHub، 2026-09-27).
+  let meter = null;
   let timeout = null;
   const t = (en, ar) => lang === 'ar' ? ar : en;
   const make = (tag, className = '', text = '') => {

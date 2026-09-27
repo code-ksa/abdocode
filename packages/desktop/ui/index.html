@@ -358,7 +358,8 @@
   #interruptstate { color: var(--muted); font-size: var(--fs-meta); }
   .block .role .stop { margin-inline-start: auto; background: none; border: 1px solid var(--bad); color: var(--bad); border-radius: 5px; font-size: var(--fs-meta); padding: 1px 8px; cursor: pointer; font-family: inherit; }
   .block .body { font-size: var(--fs-body); line-height: 1.85; white-space: pre-wrap; }
-  .block.sysb .body { font-family: Consolas, "Courier New", monospace; font-size: var(--fs-ui); }
+  /* Courier New يحمل حروفاً عربيّةً بعرضٍ ثابت فتنفصل — العربيّةُ تسقط إلى Segoe UI فتتّصل. */
+  .block.sysb .body { font-family: Consolas, "Segoe UI", Cairo, monospace; font-size: var(--fs-ui); }
   .block.sysb.folded .body { display: none; }
   .block.sysb .role { cursor: pointer; user-select: none; }
   .block.sysb .role .chev { transition: transform .15s; }
@@ -388,7 +389,10 @@
   #settings .prov .top b { flex: 1; font-size: var(--fs-lead); }
   #settings .prov .keystate { font-size: var(--fs-chip); color: var(--dim); }
   #settings .prov .row { display: flex; gap: 8px; margin-top: 10px; }
-  #settings .prov input { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; color: var(--fg); font-family: Consolas, monospace; direction: ltr; }
+  #settings .prov input { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; color: var(--fg); font-family: Consolas, monospace; direction: ltr; unicode-bidi: plaintext; }
+  /* خطُّ Consolas بلا حروفٍ عربية: التلميحُ العربيّ كان يُرسم حروفاً منفصلةً بعرضٍ ثابت. */
+  #settings .prov input::placeholder { font-family: "Segoe UI", Cairo, sans-serif; }
+  #settings .prov.prov-focus { border-color: #2f6fed; box-shadow: 0 0 0 3px #2f6fed33; }
   #settings .prov button { background: var(--accent); color: var(--sendfg); border: 0; border-radius: 8px; padding: 0 16px; cursor: pointer; font-family: inherit; }
   #settings .note { font-size: var(--fs-chip); color: var(--dim); margin-top: 6px; }
   #settings .settings-layout { display: grid; grid-template-columns: 170px minmax(0, 720px); gap: 22px; margin-top: 18px; }
@@ -1250,22 +1254,23 @@
     };
 
     const openAnswerBlock = (turnId) => {
-      const node = addBlock("assistant", "عبدو", "");
+      const node = addBlock("assistant", uiText("AbdoCode", "عبدو"), "");
       const state = node.querySelector(".state");
       const started = Date.now();
       const stop = document.createElement("button");
-      stop.className = "stop"; stop.textContent = "⏹ مقاطعة (Esc)";
+      stop.className = "stop"; stop.textContent = uiText("⏹ Interrupt (Esc)", "⏹ مقاطعة (Esc)");
       stop.onclick = () => interruptNow();
       node.querySelector(".role").appendChild(stop);
       const bar = el("interruptbar"); bar.hidden = false; el("interruptbtn").onclick = () => interruptNow();
-      const tick = setInterval(() => { const t = "يعمل · " + Math.round((Date.now() - started) / 1000) + "s"; state.textContent = t; el("interruptstate").textContent = t; }, 500);
+      const tick = setInterval(() => { const t = uiText("Working · ", "يعمل · ") + Math.round((Date.now() - started) / 1000) + "s"; state.textContent = t; el("interruptstate").textContent = t; }, 500);
       const entry = {
         node, bodyEl: node.querySelector(".body"), lines: [], streamed: false,
         finish(interruptedFlag, outcome) {
           clearInterval(tick); stop.remove(); el("interruptbar").hidden = true;
           // مقيس 09-14 على 4.0.14: رفضُ المزوّد كان يُوسم «قوطع بيد المشغّل» — الوسمُ من سبب النهاية لا من «ليست done».
           const ending = interruptedFlag ? "interrupted" : (outcome || "done");
-          state.textContent = ending === "interrupted" ? "قوطع بيد المشغّل" : ending === "refused" ? "لم يكتمل — رُفض أو تعذّر" : ending === "unresolved" ? "لم يكتمل — بلا حسم" : ending === "unreachable" ? "لم يصل المحرّك" : "";
+          // داخل #feed المحميّ من الترجمة الآليّة — فتُترجم هنا بلغة الواجهة.
+          state.textContent = ending === "interrupted" ? uiText("Interrupted by you", "قوطع بيد المشغّل") : ending === "refused" ? uiText("Not completed — refused or failed", "لم يكتمل — رُفض أو تعذّر") : ending === "unresolved" ? uiText("Not completed — unresolved", "لم يكتمل — بلا حسم") : ending === "unreachable" ? uiText("Engine unreachable", "لم يصل المحرّك") : "";
           state.dataset.ending = ending;
           // إشعارُ التوقّف (09-14): حين لا تكون النافذةُ في المقدّمة، وما لم يُطفأ من الإعدادات (turnNotifications).
           // للأدوار الأطول من ٢٠ ثانية وبفاصلٍ ٣٠ ثانية بين إشعارين — لا عاصفةَ toast ولا powershell لكلّ دورٍ قصير (مراجعة 09-14).
@@ -1401,8 +1406,11 @@
     let modelName = "AbdoCode";
     let contextLeft = 1; // من إطار done (المحرّك يحسبها من آخر نداء) — كانت ثابتةً 1
     const renderStatus = () => {
+      // قبل أوّل دورٍ لا إطارَ «model» بعد: كان السطرُ يقول «AbdoCode» مكانَ النموذج بينما الشريحةُ
+      // تسمّيه (مقيس 2026-09-27). الشريحةُ هي المختارُ حتى يسمّي المحرّكُ ما وُجِّه إليه فعلاً.
+      const chipModel = el("modelchip")?.querySelector(".lbl")?.textContent?.trim();
       el("statusline").textContent = Shell.statusLine({
-        model: modelName, mode, directory: rootDir || "…", contextLeft,
+        model: modelName === "AbdoCode" && chipModel ? chipModel : modelName, mode, directory: rootDir || "…", contextLeft,
         working: working ? { startedAtMs: working, nowMs: Date.now() } : undefined,
       });
     };
@@ -1412,6 +1420,15 @@
     let outbox = { kind: "idle" };
     let seen = 0;
     let turnCounter = 0;
+    // آخرُ حالةٍ للخزنة من المحرّك: «حفظ وتطبيق» يعيد بناءَ بطاقات المزوّدين، فكانت كلُّها
+    // تعود «…» ولا يسأل أحدٌ ثانيةً (مقيس 2026-09-27). الحالةُ المعروفة تُرسم على البطاقات الجديدة.
+    let lastVaultStatus = null;
+    const paintVaultStatus = (rows) => {
+      for (const s of rows) {
+        const el2 = document.querySelector('#settings [data-prov="' + s.provider + '"] .keystate');
+        if (el2) el2.textContent = s.hasKey ? "✓ محفوظ" : "لا مفتاح";
+      }
+    };
     let engineUp = false;
     let lastPrompt = "";
     const sendFrame = (frame) => invoke("engine_send", { line: JSON.stringify(frame) });
@@ -1435,7 +1452,7 @@
       window.AbdoDesktopShell?.submitted(turn, submission);
       el("send").disabled = true;
       working = Date.now(); renderStatus();
-      addBlock("user", "أنت", body);
+      addBlock("user", uiText("You", "أنت"), body);
       openAnswerBlock(turn.id);
       // IDEA 8: نصّ الدور تعرفه القشرة وحدها (لا إطار وارد يحمله) فيُسجَّل هنا.
       if (Trajectory !== null) { trajStore = Trajectory.begin(trajStore, turn.id, body); trajTouch(); }
@@ -1944,11 +1961,11 @@
         if (typeof f.session === "string") currentSessionId = f.session;
         clearFeed();
         for (const t of f.turns) {
-          if (t.body) addBlock("user", "أنت", t.body);
+          if (t.body) addBlock("user", uiText("You", "أنت"), t.body);
           const lines = t.lines.filter((l) => !l.startsWith("— المقيس"));
           const meta = t.lines.filter((l) => l.startsWith("— المقيس"));
           if (lines.length > 0) {
-            const node = addBlock("assistant", "عبدو", lines.join("\n"));
+            const node = addBlock("assistant", uiText("AbdoCode", "عبدو"), lines.join("\n"));
             if (meta.length > 0) {
               const m = document.createElement("div");
               m.className = "meta execution-summary"; m.textContent = meta[0];
@@ -1987,10 +2004,8 @@
         return;
       }
       if (f.kind === "vault-status") {
-        for (const s of f.status) {
-          const el2 = document.querySelector('#settings [data-prov="' + s.provider + '"] .keystate');
-          if (el2) el2.textContent = s.hasKey ? "✓ محفوظ" : "لا مفتاح";
-        }
+        lastVaultStatus = Array.isArray(f.status) ? f.status : [];
+        paintVaultStatus(lastVaultStatus);
         return;
       }
       if (f.kind === "settings") {
@@ -2020,7 +2035,7 @@
       }
       if (f.kind === "model") { modelName = f.name; setChipLabel("modelchip", f.name); renderStatus(); notice(""); return; }
       if (f.kind === "model-route") {
-        const lane = f.lane === "agent" ? "برمجة/وكيل" : "محادثة";
+        const lane = f.lane === "agent" ? uiText("Code/agent", "برمجة/وكيل") : uiText("Chat", "محادثة");
         modelName = lane + ": " + f.ref.split("/").slice(1).join("/");
         setChipLabel("modelchip", modelName);
         renderStatus();
@@ -2644,6 +2659,7 @@
               if (await invoke('provider_import_local', {key:p.vaultKey})) {
                 input.value = ''; notice(uiText('Credential imported into the native vault. Choose the model to verify its connection.', 'استُورد الاعتماد إلى الخزنة الأصلية. اختر النموذج للتحقق من اتصاله.'));
                 sendFrame({kind:'vault-status'});
+                bindPendingProviderModel(p.id);
               }
             } catch (error) { notice(String(error)); }
             finally { importButton.disabled = false; }
@@ -2659,6 +2675,7 @@
             card.querySelector(".keystate").textContent = "✓ محفوظ";
             notice(uiText("Saved the key for ", "حُفظ مفتاح ") + p.label + uiText(" in the vault", " في الخزنة"));
             sendFrame({ kind: "vault-status" });
+            bindPendingProviderModel(p.id);
           } catch (err) { notice("تعذّر الحفظ: " + err); }
         };
         box.appendChild(card);
@@ -2687,6 +2704,11 @@
         } catch (err) { notice("تعذّر الحفظ: " + err); }
       };
       box.appendChild(searchCard);
+      if (lastVaultStatus !== null) {
+        const status = lastVaultStatus;
+        paintVaultStatus(status);
+        queueMicrotask(() => window.AbdoDesktopShell?.frame({ kind: "vault-status", status }));
+      }
       Promise.all([
         invoke("vault_has", { key: "abdocode-google-pse-api-key" }),
         invoke("vault_has", { key: "abdocode-google-pse-engine-id" }),
@@ -2713,11 +2735,17 @@
       fillSettingsControls();
       settingsRefresh = null;
       lockSettingsForm(false);
+      focusProviderCard();
     };
     const failSettingsRefresh = (refresh, error) => {
       if (settingsRefresh !== refresh) return;
       refresh.failed = true; clearTimeout(refresh.timer);
       notice(uiText("Settings could not be refreshed. Close and reopen this panel to retry: ", "تعذّر تحديث الإعدادات. أغلق اللوحة وافتحها لإعادة المحاولة: ") + error);
+      // مفاتيحُ المزوّدين تُكتب في الخزنة الأصلية لا في المحرّك: محرّكٌ لم يُجب لا يُخمد
+      // حقلَ المفتاح إلى الأبد. «حفظ وتطبيق» يبقى معطّلاً — اللقطةُ القديمة لا تُكتب فوق الحيّة.
+      for (const panel of document.querySelectorAll("#settings .settings-panel")) panel.inert = false;
+      el("settings").setAttribute("aria-busy", "false");
+      focusProviderCard();
     };
     const requestSettingsSnapshot = () => {
       const refresh = settingsRefresh;
@@ -2725,7 +2753,33 @@
       refresh.requested = true;
       sendFrame({ kind: "settings-get", requestId: refresh.id }).catch(error => failSettingsRefresh(refresh, error));
     };
-    const openSettings = (focusProv) => {
+    // العطلُ المقيس (2026-09-27، بلاغُ المالك): اختيارُ «Qwen Token Plan» من قائمة النماذج
+    // كان يفتح صفحةَ المزوّدين من رأسها، وبطاقتُه في الصفّ الخامس — والتركيزُ عليها كان
+    // يسقط بصمت لأنّ اللوحةَ خامدةٌ (inert) حتى تصل لقطةُ المحرّك. ثمّ بعد حفظ المفتاح
+    // لا يُربط النموذجُ الذي اختاره، فيعود ليختاره ثانيةً. الآن: الهبوطُ على البطاقة بعد
+    // فكّ القفل، والنموذجُ المختار يُربط حين يُحفظ مفتاحُ مزوّده.
+    let providerFocusTarget = null;
+    let pendingProviderModel = null;
+    const focusProviderCard = () => {
+      const id = providerFocusTarget;
+      if (id === null || !el("settings").classList.contains("open")) return;
+      const card = document.querySelector('#settings [data-prov="' + id + '"]');
+      if (!card || card.closest("[inert]")) return;
+      providerFocusTarget = null;
+      for (const other of document.querySelectorAll("#settings .prov.prov-focus")) other.classList.remove("prov-focus");
+      card.classList.add("prov-focus");
+      card.scrollIntoView({ block: "center" });
+      card.querySelector("input")?.focus({ preventScroll: true });
+    };
+    const bindPendingProviderModel = (providerId) => {
+      const ref = pendingProviderModel;
+      if (ref === null || !ref.startsWith(providerId + "/")) return;
+      pendingProviderModel = null;
+      sendFrame({ kind: "model-set", name: ref })
+        .then(() => notice(uiText("Key saved. Switched to ", "حُفظ المفتاح، وانتقلنا إلى ") + ref.slice(providerId.length + 1)))
+        .catch(error => notice(String(error)));
+    };
+    const openSettings = (focusProv, pendingRef) => {
       if (settingsSavePending) return;
       // Switching a settings tab must not reload over unsaved form edits.
       const wasOpen = el("settings").classList.contains("open");
@@ -2746,7 +2800,9 @@
       if (focusProv) {
         sendFrame({ kind: "vault-status" }).catch(error => notice(String(error)));
         document.querySelector('[data-settings-panel="providers"]').click();
-        const c = document.querySelector('#settings [data-prov="' + focusProv + '"] input'); if (c) c.focus();
+        providerFocusTarget = focusProv;
+        pendingProviderModel = typeof pendingRef === "string" && pendingRef.startsWith(focusProv + "/") ? pendingRef : null;
+        setTimeout(focusProviderCard, 0);
       }
     };
     // Credential checks belong to the provider page, not every settings tab.
@@ -3717,7 +3773,7 @@
       }
       const running=out.filter(t=>t.state==="running").length;
       taskActivity.hidden=!out.length;
-      taskActivity.textContent=running ? uiText(`${running} running tasks`,`${running} مهام جارية`) : uiText(`${out.length} tasks in history`,`${out.length} مهام في السجل`);
+      taskActivity.textContent=running ? uiText(`${running} running ${running===1?"task":"tasks"}`,`${running} مهام جارية`) : uiText(`${out.length} ${out.length===1?"task":"tasks"} in history`,`${out.length} مهام في السجل`);
       if(taskRows)TasksPanel.renderTasks(document, taskRows, out, shellSettings.language);
     };
 
@@ -3946,7 +4002,8 @@
       saveShellSettings: async(next)=>{const saved=await invoke('settings_set',{settings:next});applyShellSettings(saved);fillSettingsControls();return saved;},
       providers: Providers, pluginOn,
       snapshot: () => ({ settings: runtimeSettings, shell: shellSettings, pluginRegistry, pluginCatalog, sessionId: currentSessionId, project: rootDir, working: working !== undefined, engineUp }),
-      setModelLabel: (label) => setChipLabel("modelchip", label),
+      // الشريحةُ تُسمّى من الإعدادات والدورُ خامد: السطرُ يتبعها، لا يبقى على نموذجِ دورٍ سابق (مقيس 2026-09-27).
+      setModelLabel: (label) => { setChipLabel("modelchip", label); modelName = "AbdoCode"; renderStatus(); },
       artifacts: () => [...activityOutputs.keys()],
       relocate: (id, target) => slots.relocate(id, target),
       closePanel: (id) => closePanel("panel:" + id, ({terminal:"terminalPanel",tasks:"tasksPanel",servers:"serversPanel",trajectory:"trajectory",deliverables:"deliverables",approvals:"approvalTakeover"})[id]),

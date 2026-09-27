@@ -9,6 +9,10 @@ test("a blocked credential reader does not block real framed settings, usage or 
   const home = mkdtempSync(join(tmpdir(), "abdo-vault-status-live-"))
   const settings = join(home, "settings.json"), released = join(home, "release"), probes = join(home, "probes.jsonl"), preload = join(home, "delay-vault.ts")
   writeFileSync(settings, JSON.stringify({ language: "en", mode: "read-only" }))
+  // خزنةُ مالكٍ (سكربتٌ غيرُ المشحون) تُسأل بعقدها عبر العامل — وهو المسارُ الذي يُعطَّل هنا.
+  // الخزنةُ المشحونة تُجاب من ملفّها ولا تبلغ هذا القارئ أصلاً (vault-presence.test.ts).
+  const ownerVault = join(home, "owner-vault.ps1")
+  writeFileSync(ownerVault, "exit 1\r\n")
   // Replace only the credential-read dependency in this isolated child process.
   // No product test hook, real vault, secret, network call or fake frame handler.
   writeFileSync(preload, `import { RustReachEffects } from ${JSON.stringify(pathToFileURL(resolve(import.meta.dir, "../src/provider-effects.ts")).href)};
@@ -21,7 +25,7 @@ RustReachEffects.prototype.hasCredential=async function(provider){
 };`)
   const child = Bun.spawn([process.execPath, "--preload", preload, "packages/engine/src/cli.ts", "serve"], {
     cwd: resolve(import.meta.dir, "../../.."),
-    env: { ...process.env, ABDO_CODE_SETTINGS: settings, ABDO_CODE_STATE_DIR: join(home, "state"), ABDO_SHELL_TOKEN: "vault-status-test", ABDO_FRAMED_STDIO: "1", ABDO_VAULT_HOME: home, USERPROFILE: home, HOME: home },
+    env: { ...process.env, ABDO_CODE_SETTINGS: settings, ABDO_CODE_STATE_DIR: join(home, "state"), ABDO_SHELL_TOKEN: "vault-status-test", ABDO_FRAMED_STDIO: "1", ABDO_VAULT_HOME: home, ABDO_VAULT_SCRIPT: ownerVault, USERPROFILE: home, HOME: home },
     stdin: "pipe", stdout: "pipe", stderr: "pipe",
   })
   const stderr = new Response(child.stderr).text(), decoder = new LocalJsonFrameDecoder(), frames: Record<string, any>[] = []

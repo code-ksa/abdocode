@@ -103,10 +103,10 @@ test("running task badge updates while panel is closed and opens it without togg
   const turn:any={body:"Build",epochs:[{tools:[{cmd:"run build",glyph:"·"}]}]}
   const ctx:any={modeByTurn:new Map(),agentsByTurn:new Map(),WORK_MODE_LABEL:{basic:"basic"},runtimeSettings:{workMode:"basic"},working:1,pendingSubmissionEnvelope:{turn:{id:"t"}},document:{createElement:()=>({})},el:()=>({after:(n:any)=>chip=n}),TasksPanel:{renderTasks(){}},taskRows:null,Trajectory:{turns:()=>["t"],rows:()=>turn},trajStore:{},uiText:(en:string)=>en,shellSettings:{language:"en"},slots:{has:()=>opened},openTasks:()=>{opened=true;opens++}}
   runInNewContext(code+";globalThis.refresh=renderTaskRows",ctx)
-  ctx.refresh();expect(chip.hidden).toBe(false);expect(chip.textContent).toBe("1 running tasks")
+  ctx.refresh();expect(chip.hidden).toBe(false);expect(chip.textContent).toBe("1 running task")
   chip.onclick();chip.onclick();expect(opens).toBe(1)
-  turn.outcome="completed";ctx.refresh();expect(chip.textContent).toBe("1 tasks in history")
-  delete turn.outcome;ctx.working=undefined;ctx.refresh();expect(chip.textContent).toBe("1 tasks in history")
+  turn.outcome="completed";ctx.refresh();expect(chip.textContent).toBe("1 task in history")
+  delete turn.outcome;ctx.working=undefined;ctx.refresh();expect(chip.textContent).toBe("1 task in history")
 })
 
 test("السربُ ووضعُ العمل يُرسمان من الصفّ وحده: مربّعٌ لكلّ وكيل بحالته، ولا شريطَ بلا وكلاء", () => {
