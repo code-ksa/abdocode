@@ -14,7 +14,7 @@
 export type ToolVerdictReason =
   // ShellFailureClass verbatim — packages/builtin-tools/src/shell.ts
   | "command_not_found" | "process_spawn_failed" | "nonzero_exit" | "empty_failure_output"
-  | "timeout" | "aborted" | "isolation_refused"
+  | "timeout" | "aborted" | "isolation_refused" | "detached_not_requested"
   // contracts classifyFailure codes — packages/contracts/src/failure.ts
   | "policy_denied" | "tool_not_permitted"
   // runner.ts / cli.ts unknown-tool refusals
@@ -39,6 +39,7 @@ const REASON_TABLE: Readonly<Record<ToolVerdictReason, 0>> = {
   timeout: 0,
   aborted: 0,
   isolation_refused: 0,
+  detached_not_requested: 0,
   policy_denied: 0,
   tool_not_permitted: 0,
   unknown_tool: 0,
