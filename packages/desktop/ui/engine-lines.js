@@ -29,6 +29,11 @@ const EXACT = [
     () => "↻ The model replied with nothing — asking once more with a nudge (plugins.emptyGuard)"],
   [/^↻ شرطُ الاختبارات لا ينطبق: لم تُعدَّل شيفرةٌ في هذا الدور والمشروعُ بلا أمرِ اختبار — كلمةُ «test» في الطلب ليست تكليفاً؛ لا يُختلق اختبارٌ لإرضاء البوّابة\.$/u,
     () => "↻ The tests condition does not apply: no code was edited this turn and the project has no test command — the word «test» in the request is not an assignment; no test is invented to satisfy the gate."],
+  // خطّافاتُ المشروع (project-hooks.ts) — الأوامرُ بين «» وملخّصُها يبقيان كما كُتبا.
+  [/^🪝 خطّافاتُ المشروع مفعّلة \((\d+)\): (.+)$/u, (m) => `🪝 Project hooks active (${m[1]}): ${m[2]}`],
+  [/^🪝 (afterEdit|beforeDone) «(.+)»: (نجح|فشل)(?: — (.*))?$/u,
+    (m) => `🪝 ${m[1]} «${m[2]}»: ${m[3] === "نجح" ? "passed" : "failed"}${m[4] === undefined ? "" : ` — ${m[4].replace(/انتهى الأمر برمز (-?\d+)/gu, "exited with code $1")}`}`],
+  [/^⚠ خطّافاتُ الإكمال ما زالت تفشل بعد (\d+) جولات — لا يُعلَن الإكمال\.$/u, (m) => `⚠ The completion hooks still fail after ${m[1]} rounds — the task is not declared complete.`],
   // التحقّقُ بعد التعديل (verify-after-edit.ts) — الأمرُ بين «» يبقى كما هو.
   [/^↻ التحقّق بعد التعديل \(plugins\.verifyAfterEdit\): عُدّلت شيفرةٌ في مشروعٍ له اختبارات، و(لم تُشغَّل بعد|آخرُ تشغيلٍ لها فشل أو سبق التعديلَ الأخير) — يشغّل المضيفُ «(.+)» الآن ويعيد خرجَها\.$/u,
     (m) => `↻ Verify after editing (plugins.verifyAfterEdit): code was edited in a project with tests, and ${m[1] === "لم تُشغَّل بعد" ? "they have not run yet" : "their last run failed or came before the last edit"} — the host runs «${m[2]}» now and returns the output.`],

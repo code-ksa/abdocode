@@ -8,6 +8,7 @@ import { exposureLine } from "../src/tool-exposure"
 import { hiddenToolsLine } from "../src/tool-availability"
 import { contextBreakdownLine, overflowLine } from "../src/context-window"
 import { verifyDemandLine, verifyGaveUpLine } from "../src/verify-after-edit"
+import { hookLine } from "../src/project-hooks"
 import { renderTurnBudgetLine, TurnSpendMeter } from "../src/turn-budget"
 import { describeWorkProfile, workProfile } from "../src/work-mode"
 import { engineLineForDisplay, engineOutputForDisplay, providerLabelsForDisplay, readWhenForDisplay } from "../../desktop/ui/engine-lines.js"
@@ -44,6 +45,10 @@ test("the engine's own generators render fully in English, and unchanged in Arab
     verifyDemandLine("npm test", false),
     verifyDemandLine("python -m pytest -q", true),
     verifyGaveUpLine("cargo test", 3),
+    "🪝 خطّافاتُ المشروع مفعّلة (2): afterEdit (\\.js$): npx prettier --write {file} · beforeDone: npm run lint",
+    hookLine("beforeDone", "npm run lint", false, "src/a.ts: 3 problems / انتهى الأمر برمز 1"),
+    hookLine("afterEdit", "npx prettier --write \"src/a.ts\"", true, ""),
+    "⚠ خطّافاتُ الإكمال ما زالت تفشل بعد 3 جولات — لا يُعلَن الإكمال.",
     "↻ شرطُ الاختبارات لا ينطبق: لم تُعدَّل شيفرةٌ في هذا الدور والمشروعُ بلا أمرِ اختبار — كلمةُ «test» في الطلب ليست تكليفاً؛ لا يُختلق اختبارٌ لإرضاء البوّابة.",
     renderLedgerLine({ calls: 3, inputTokens: 900, cachedInputTokens: 300, outputTokens: 50, effectiveTokens: 700, cacheHitRate: 1 / 3 }, 100_000),
     renderTurnBudgetLine(meter.snapshot(), 1),

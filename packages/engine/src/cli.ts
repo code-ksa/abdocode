@@ -168,6 +168,7 @@ import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./t
 import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
 import { formatKeyless, KEYLESS_HOST, KEYLESS_SOURCE, keylessSearchUrl, parseKeylessResults } from "./mind/keyless-search"
 import { formatResearch, pageTextOf, parseResearchCommand, selectEvidence, type ResearchSource } from "./mind/research"
+import { approvedDigest, commandFor, hookLine, HOOKS_FILE, hooksSummary, readHooks, recordApproval, type ProjectHook } from "./project-hooks"
 import { editsCode, isProjectTestRun, projectTestCommand, VERIFY_AFTER_EDIT_RUNS, verifyDemandLine, verifyGaveUpLine } from "./verify-after-edit"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
@@ -2601,8 +2602,10 @@ const runServeShell = async (): Promise<void> => {
    * **غيابُه يعني أنّ هذا النداء لا يُمنح أبداً** — لا يُشتقّ هدفٌ من نصّ
    * السؤال، فنصٌّ حرٌّ يُشتقّ منه إذنٌ هو أوسعُ الأبواب. الغيابُ رفضٌ لا إذن.
    */
-  const gate = async (turnId: string, kind: import("./shells/shell").RequestKind, what: string, target?: string): Promise<boolean> => {
-    const effect = Shell.decide(currentMode, kind)
+  const gate = async (turnId: string, kind: import("./shells/shell").RequestKind, what: string, target?: string, opts?: { readonly always?: boolean }): Promise<boolean> => {
+    // `always`: سؤالٌ لا يُعفي منه نمطُ الوصول الكامل (موافقةُ خطّافات المشروع) — والممنوعُ في النمط يبقى ممنوعاً.
+    const decided = Shell.decide(currentMode, kind)
+    const effect = opts?.always === true && decided !== "deny" ? "ask" : decided
     if (effect === "allow") return true
     if (effect === "deny") { emit({ kind: "refused", why: `${what}: ممنوعٌ في نمط ${currentMode}` }); return false }
     // فشلٌ مُغلق أمام دورٍ قوطع: الغياب رفضٌ لا إذن. دورٌ أُعلن انقطاعه لا
@@ -3175,6 +3178,9 @@ const runServeShell = async (): Promise<void> => {
     // نهاية سطر. الشجرةُ مختلطةٌ بالضرورة، فالحكمُ يقارن ما كان بما صار: يمنع **الخلط**
     // لا اختيارَ النهاية.
     // خطُّ الأساس من القرص: `before` فارغٌ لـ`write` فكان التحذيرُ يحسب كلَّ استبدالٍ ملفّاً جديداً ويسكت.
+    // الفجوة #3 — afterEdit بعد الكتابة الناجحة، وخرجُه في الإيصال نفسِه فيراه النموذجُ في الحال.
+    const afterEditLines: string[] = []
+    if (r.verdict?.ok === true) for (const hook of hooksOf(turnId)) if (hook.event === "afterEdit" && (hook.match === undefined || hook.match.test(normalizedTarget))) afterEditLines.push((await runHookCommand(hook, turnId, _hooks, normalizedTarget)).line)
     const eolWarning = r.verdict?.ok !== true ? undefined
       : eolKept.style !== undefined ? keptLineEndingsLine(target, eolKept.style, eolKept.converted)
       : lineEndingViolation(target, after, diskBefore)
@@ -3187,7 +3193,7 @@ const runServeShell = async (): Promise<void> => {
       : undefined
     // startsWith يقرّر شكل البادئة وحده كما كان؛ الحكم من المحوّل لا من النصّ.
     return {
-      output: r.output.startsWith("رُفض") ? r.output : `✍ ${target} — كتابة ذرّية عبر السياسة وعامل Rust.\n${r.output}` + (suiteWarning === undefined ? "" : `\n${suiteWarning}`) + (eolWarning === undefined ? "" : `\n${eolWarning}`) + (fabWarning === undefined ? "" : `\n${fabWarning}`),
+      output: r.output.startsWith("رُفض") ? r.output : `✍ ${target} — كتابة ذرّية عبر السياسة وعامل Rust.\n${r.output}` + (suiteWarning === undefined ? "" : `\n${suiteWarning}`) + (eolWarning === undefined ? "" : `\n${eolWarning}`) + (fabWarning === undefined ? "" : `\n${fabWarning}`) + afterEditLines.map((line) => `\n${line}`).join(""),
       verdict: r.verdict,
       idempotencyKey: r.idempotencyKey,
       ...(r.unmapped ? { unmapped: true as const } : {}),
@@ -3288,6 +3294,23 @@ const runServeShell = async (): Promise<void> => {
       const text = `فريقٌ من ${jobs.length} وكلاء (${Math.round((Date.now() - started) / 1000)} ث، وضع «${work.label}»)${unfinished.length > 0 ? ` — لم يكتمل: ${unfinished.join("، ")}` : ""}:\n${rendered.join("\n")}`
       return unfinished.length === 0 ? okText(text) : { output: text, verdict: { ok: false, reason: "tool_failed", denied: false, detail: `لم يكتمل: ${unfinished.join("، ")}`.slice(0, 160) } }
     } finally { delegationDepth -= 1 }
+  }
+
+  // الفجوة #3 — خطّافاتُ المشروع المفعّلة لهذا الدور (الأبناءُ المفوَّضون يحملون معرّفَ الدور نفسَه فيرونها).
+  let activeHooks: { readonly turnId: string; readonly hooks: readonly ProjectHook[] } | undefined
+  const hooksOf = (turnId: string): readonly ProjectHook[] => activeHooks?.turnId === turnId ? activeHooks.hooks : []
+  // كلُّ خطّافٍ من مسار run نفسِه: إدخالُ النواة ثمّ runExecV ودفترُه. الموافقةُ على بصمة الملفّ هي الموافقةُ على أوامره بعينها،
+  // فلا يُسأل عن كلّ تشغيل — لكنّ النمطَ الذي يمنع التنفيذ يمنعه هنا أيضاً.
+  const runHookCommand = async (hook: ProjectHook, turnId: string, hooks: AskHooks, file?: string): Promise<{ readonly ok: boolean; readonly line: string }> => {
+    const command = commandFor(hook, file)
+    if (command === undefined) return { ok: false, line: `🪝 ${hook.event}: لم يُشغَّل — المسارُ «${(file ?? "").slice(0, 80)}» فيه محارفُ لا تُمرَّر إلى الصَّدَفة` }
+    if (Shell.decide(currentMode, "command") === "deny") return { ok: false, line: `🪝 ${hook.event} «${command}»: لم يُشغَّل — التنفيذُ ممنوعٌ في نمط ${currentMode}` }
+    const admission = await admitShell(TOOL_WORKER)
+    if (!admission.admitted) return { ok: false, line: `🪝 ${hook.event} «${command}»: لم يُشغَّل — لم تُدخِله النواة: ${admission.why}` }
+    const result = await runExecV(command, turnId, hooks, false, admission)
+    const ok = exitZero(result.output, result.verdict)
+    const tail = result.output.trim().split("\n").slice(-6).join(" / ").slice(-400)
+    return { ok, line: hookLine(hook.event, command, ok, tail) }
   }
 
   // نتائجُ الويب بلا مفتاح — مالكٌ واحد لأداتَي search وresearch (الفجوتان #1 و#2). DuckDuckGo عبر محوّل النواة، والوجهةُ
@@ -6312,6 +6335,24 @@ const runServeShell = async (): Promise<void> => {
       }
     }
     activeTurn = (async (): Promise<{ answer: string; completed: boolean }> => {
+      // داخلَ جسم الدور المنفصل لا قبله: السؤالُ ينتظر إطارَ «approve» من حلقة القراءة نفسِها — قبله كان يحبسها (مقيس: الدورُ علق).
+      // الفجوة #3 — خطّافاتُ المشروع: تُفعَّل بموافقةٍ على بصمة ملفّها بعينها، بسؤالٍ لا يُعفي منه نمطُ الوصول الكامل،
+      // ثمّ لا تُسأل حتى يتغيّر الملفّ. ملفُّ خطّافاتٍ في مستودعٍ مستنسخ شيفرةٌ تعمل بفتح المشروع — فلا تعمل بلا عينِ المستخدم.
+      activeHooks = undefined
+      if (plugins.read("projectHooks", "turn") && modeAtTurn !== "chat" && process.env.ABDO_AGENT_PHASE !== "planning") {
+        const loaded = readHooks(PROJECT_DIR)
+        if (loaded?.error !== undefined) await emitEvent(turn.id, `🪝 خطّافاتُ المشروع لم تُفعَّل: ${loaded.error}`)
+        else if (loaded?.file !== undefined) {
+          const { digest, hooks: declared } = loaded.file
+          let approved = approvedDigest(STATE_ROOT, PROJECT_DIR) === digest
+          if (!approved) {
+            approved = await gate(turn.id, "command", `تفعيلُ خطّافات المشروع ${HOOKS_FILE} (بصمة ${digest.slice(0, 12)}): ${hooksSummary(declared)} — تعمل بعدها بلا سؤالٍ حتى يتغيّر الملفّ`, undefined, { always: true })
+            if (approved) recordApproval(STATE_ROOT, PROJECT_DIR, digest)
+          }
+          if (approved) { activeHooks = { turnId: turn.id, hooks: declared }; await emitEvent(turn.id, `🪝 خطّافاتُ المشروع مفعّلة (${declared.length}): ${hooksSummary(declared)}`) }
+          else await emitEvent(turn.id, `🪝 خطّافاتُ المشروع لم تُفعَّل: لم تُمنح الموافقة على ${HOOKS_FILE} (بصمة ${digest.slice(0, 12)}).`)
+        }
+      }
       const memoryCommand = turnAttachments.length === 0 ? parseMemoryCommand(turn.body) : undefined
       if (memoryCommand) {
         if (secretScan.carriesSecret) throw Error("Credentials cannot be saved in memory. Use Settings to configure the vault.")
@@ -6733,6 +6774,9 @@ const runServeShell = async (): Promise<void> => {
       // لا كلمةُ «test» في الطلب. الأمرُ من القرص (package.json/pytest/Cargo) لا من النموذج.
       const verifyTestCommand = !planningOnly && plugins.read("verifyAfterEdit", "turn") ? projectTestCommand(PROJECT_DIR) : undefined
       let codeEditedThisTurn = false
+      // الفجوة #3 — beforeDone: نجحت بعد آخر تعديل؟ وكم جولةَ إصلاحٍ طُلبت؟
+      let beforeDoneClean = false
+      let beforeDoneRounds = 0
       // مقيس حيّاً 2026-09-27: «Find the Bun test runner documentation» — بحثٌ بلا تعديل في مشروعٍ بلا اختبارات — أشعل بوّابةَ
       // الاختبارات بكلمة «test» فطالبت بـnpm test ولم يكتمل الدورُ أبداً. الشرطُ ينطبق حين يُمسّ الكودُ أو يعرّف المشروعُ أمرَ اختبار.
       // والطلبُ الذي يكلّف بعملٍ على الاختبارات («اكتب اختبارات»، «run the tests») يبقى شرطاً ولو لم يُكتب شيءٌ بعد — نموذجٌ كسولٌ لا يُعفى.
@@ -6759,7 +6803,7 @@ const runServeShell = async (): Promise<void> => {
       )
       const gateReceiptOf = (gate: "build" | "typecheck" | "tests" | "audit") => currentGateReceipts().find((r) => r.gate === gate) ?? { gate, state: "unverified" as const }
       const invalidateAcceptanceFor = (command: string) => {
-        if (editsCode(command)) codeEditedThisTurn = true
+        if (editsCode(command)) { codeEditedThisTurn = true; beforeDoneClean = false }
         if (/^(?:write|edit|patch)\b/iu.test(command) || /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update)\b/iu.test(command)) {
           successfulTypecheck = false
           successfulBuild = false
@@ -7364,6 +7408,22 @@ const runServeShell = async (): Promise<void> => {
           verifyRuns += 1
           pending = `run ${verifyTestCommand}`
           continue
+        }
+        // الفجوة #3 — beforeDone: أوامرُ المشروع المعتمدة تحكم الإكمالَ بعد مسِّ الشيفرة؛ فشلُها يعود إلى النموذج بخرجه، بحدّ جولتين.
+        const beforeDone = hooksOf(turn.id).filter((hook) => hook.event === "beforeDone")
+        if (loop.stopReason === "complete" && beforeDone.length > 0 && codeEditedThisTurn && !beforeDoneClean) {
+          const results: { readonly ok: boolean; readonly line: string }[] = []
+          for (const hook of beforeDone) results.push(await runHookCommand(hook, turn.id, hooks))
+          for (const result of results) await emitEvent(turn.id, result.line)
+          const failed = results.filter((result) => !result.ok)
+          if (failed.length === 0) beforeDoneClean = true
+          else {
+            lastStop = "acceptance-pending"
+            if (beforeDoneRounds >= 2) { await emitEvent(turn.id, `⚠ خطّافاتُ الإكمال ما زالت تفشل بعد ${beforeDoneRounds + 1} جولات — لا يُعلَن الإكمال.`); break }
+            beforeDoneRounds += 1
+            continuationHint = `خطّافُ الإكمال في ${HOOKS_FILE} فشل — أصلح السبب ثمّ سلّم:\n${failed.map((result) => result.line).join("\n")}`
+            continue
+          }
         }
         if (loop.stopReason === "complete" && requiresNpmAudit && !successfulAudit && existsSync(join(PROJECT_DIR, "package.json"))) {
           lastStop = "acceptance-pending"

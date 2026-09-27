@@ -40,6 +40,7 @@ export type PluginName =
   | "verifyAfterEdit"
   | "keylessSearch"
   | "research"
+  | "projectHooks"
   | "toolAvailability"
   | "overflowLadder"
   | "contextBreakdown"
@@ -204,6 +205,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     defaultOn: true,
     applies: "immediate",
     site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // الفجوة #3 من جدول 2026-09-27 — خطّافاتُ المستخدم. مفعَّل: لا يعمل خطّافٌ قبل موافقةٍ صريحة على بصمة ملفّه.
+  Object.freeze({
+    name: "projectHooks",
+    label: "خطّافاتُ المشروع",
+    description: "أوامرُ من .abdo/hooks.json في المشروع: afterEdit بعد كلّ كتابةٍ لملفٍّ مطابق (خرجُه في إيصال الكتابة)، وbeforeDone قبل إعلان الإكمال بعد مسِّ الشيفرة (فشلُه يعود إلى النموذج ليصلح). لا تعمل قبل أن توافق على محتوى الملفّ بعينه — بسؤالٍ لا يُعفي منه الوصولُ الكامل — وأيُّ تغييرٍ فيه يعيد السؤال. كلُّ خطّافٍ يمرّ بإدخال النواة ودفترها. المعطَّل = يُتجاهل الملفّ. يسري من الدور التالي.",
+    defaultOn: true,
+    applies: "next-turn",
+    site: "turn",
     wired: true,
     requiresVault: Object.freeze([]),
   }),

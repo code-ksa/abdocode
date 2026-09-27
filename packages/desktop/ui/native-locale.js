@@ -3722,6 +3722,12 @@ const pluginTranslations = {
 "englishLabel": "Hide tools whose prerequisite is missing",
 "englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
   },
+"projectHooks": {
+"label": "خطّافاتُ المشروع",
+"description": "أوامرُ من .abdo/hooks.json في المشروع: afterEdit بعد كلّ كتابةٍ لملفٍّ مطابق (خرجُه في إيصال الكتابة)، وbeforeDone قبل إعلان الإكمال بعد مسِّ الشيفرة (فشلُه يعود إلى النموذج ليصلح). لا تعمل قبل أن توافق على محتوى الملفّ بعينه — بسؤالٍ لا يُعفي منه الوصولُ الكامل — وأيُّ تغييرٍ فيه يعيد السؤال. كلُّ خطّافٍ يمرّ بإدخال النواة ودفترها. المعطَّل = يُتجاهل الملفّ. يسري من الدور التالي.",
+"englishLabel": "Project hooks",
+"englishDescription": "Commands from .abdo/hooks.json in the project: afterEdit runs after every write to a matching file (its output goes into the write receipt), and beforeDone runs before completion is declared after code was touched (a failure goes back to the model to fix). Nothing runs until you approve that exact file content — a question full access does not skip — and any change to the file asks again. Every hook goes through kernel admission and its ledger. Disabled means the file is ignored. Applies from the next turn."
+  },
 "research": {
 "label": "بحثٌ معمّق",
 "description": "أداةُ research: تبحث ثمّ تقرأ أعلى الصفحات (حتى 6) عبر محوّل الشبكة في النواة، وتقطّعها مقاطعَ تُرتَّب بالصلة بالسؤال (BM25 بتطبيعٍ عربيّ)، وتعيد أدلّةً مرقّمة [n] بمصادرها ليُكتب جوابٌ مستشهَد — بلا نموذجٍ في الأنبوب. مضيفُ كلّ نتيجةٍ يُفتح لحارس الخروج طولَ قراءتها وحدها. المعطَّل = الأداةُ ترفض باسمها ويبقى search. يسري فوراً.",
