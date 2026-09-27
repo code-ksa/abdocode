@@ -7703,7 +7703,8 @@ const runServeShell = async (): Promise<void> => {
       // جرد الدور قبل تمامه — إطارٌ للقشرة وحدها: لا يدخل الدفتر ولا التاريخ
       // ولا يمسّ نصّاً يراه النموذج. المعطَّل (plugins.inventory) = لا إطار.
       if (currentPlugins !== undefined && currentPlugins.enabled) emit({ kind: "plugins", turnId: turn.id, entries: currentPlugins.snapshot(), context: currentPlugins.context })
-      emit({ kind: "done", turnId: turn.id, rerun: !completed, outcome: completed ? "completed" : "checkpointed", ...(checkpoints.count(currentSession, turn.id) > 0 ? { checkpointFiles: checkpoints.count(currentSession, turn.id) } : {}), contextLeft: lastContextLeft })
+      // وضعُ CI (exec): الجوابُ الخاتم في إطار done لقشرة «cli» وحدها — القشرةُ المكتبيّة تبنيه من الأحداث كما كانت.
+      emit({ kind: "done", turnId: turn.id, rerun: !completed, ...(shellKind === "cli" ? { answer: answer.slice(-8000) } : {}), outcome: completed ? "completed" : "checkpointed", ...(checkpoints.count(currentSession, turn.id) > 0 ? { checkpointFiles: checkpoints.count(currentSession, turn.id) } : {}), contextLeft: lastContextLeft })
       projectCreatedInTurn = undefined
       running = undefined
       nestedEffectObserver = undefined
@@ -8329,6 +8330,8 @@ const HELP = `عبدو كود — نواة Rust وحزم rust-main
   mcp-google-search خادم MCP لبحث Google عبر stdio
   demo           الدورة الكاملة الخفيفة: مخطِّط ← إطار ← تدفّق ← نواة ← تحقّق ← لوح
   ask <سؤال>     أخفّ لمسة 9B: الجواب من فهرس L0 وحده، بميزانيةٍ مقيسة
+  exec "<مهمّة>" [--project د] [--mode read-only|auto|full-access] [--timeout ث] [--json] [--quiet]
+                 وضعُ CI: دورُ وكيلٍ كامل بلا واجهة؛ الموافقاتُ تُرفض آليّاً؛ الخروج 0 اكتمل · 1 توقّف · 2 رُفض/تعطّل
   secret ...     مقابض الخزنة: where | list | set <مقبض> | forget <مقبض> — القيمة من أنبوبٍ أو محرّر، لا من سطر الأمر`
 
 const main = async () => {
@@ -8445,6 +8448,20 @@ const main = async () => {
     case "ask":
       console.log(await ask(rest.join(" ")))
       break
+    case "exec": {
+      // الفجوة #6 (2026-09-27) — وضعُ CI: دورُ وكيلٍ كاملٌ بلا واجهة عبر المحرّك نفسِه في serve؛ الموافقاتُ تُرفض آليّاً، والرمزُ يتبع النتيجة.
+      const { parseExecArgs, runExec } = await import("./exec-mode")
+      const options = parseExecArgs(rest)
+      if ("error" in options) { console.error(options.error); process.exitCode = 2; break }
+      const summary = await runExec(options, selfEngineArgv(), process.env, (line) => { if (!options.quiet) process.stderr.write(`${line}\n`) })
+      if (options.json) console.log(JSON.stringify(summary, null, 2))
+      else {
+        if (summary.answer.length > 0) console.log(summary.answer)
+        process.stderr.write(`— ${summary.outcome}${summary.stop === undefined ? "" : ` (${summary.stop})`} · ${summary.tools.length} أداة · ${Math.round(summary.durationMs / 1000)} ث${summary.approvalsDenied.length > 0 ? ` · رُفضت ${summary.approvalsDenied.length} موافقة` : ""}${summary.reason === undefined ? "" : ` · ${summary.reason}`}\n`)
+      }
+      process.exitCode = summary.exitCode
+      break
+    }
     case "fetch":
       console.log(await executeBody(`fetch ${rest.join(" ")}`))
       break
