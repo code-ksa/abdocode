@@ -33,7 +33,10 @@ describe("token economy wiring in the live cli path", () => {
     expect(source).toContain('recordCloudUsage({ provider: prov.id, model: selected.model, note: "vision.point", ...charged })')
     expect(source.match(/note: "vision\.point"/gu)).toHaveLength(1)
     expect(source.match(/chargeableUsage\(decoded\.usage/gu)).toHaveLength(5)
-    expect(source.match(/recordCloudUsage\(\{/gu)).toHaveLength(5)
+    // Sixth writer (2026-09-27, gap #11): imagine spends one image call on the configured image model, tagged
+    // note:"image.generate"; the reply carries no chat usage shape, so the reported counts fall back to the estimate. 5 -> 6.
+    expect(source).toContain('recordCloudUsage({ provider: prov.id, model: imageModel, note: "image.generate", ...charged })')
+    expect(source.match(/recordCloudUsage\(\{/gu)).toHaveLength(6)
     expect(source.match(/note: "router\.gate"/gu)).toHaveLength(1)
     expect(source.match(/note:'memory\.semantic'/gu)).toHaveLength(1)
     // No hand-built entry survives that could drop cachedInputTokens again.
@@ -157,9 +160,11 @@ describe("turn budget wiring in the live cli path", () => {
 
   test("the global cloud cap is consulted first; the turn meter second, with the same estimate, and never raises it", () => {
     expect(source).toMatch(/cloudBudgetVerdict\(estimated \+ requestOutputCap\)[\s\S]{0,400}?hooks\.turnMeter\?\.verdict\(estimated \+ requestOutputCap\)/u)
-    // Five cloud call sites (ask + gateAsk + memoryRankAsk + inferAsk + visionPointAsk), each with exactly one global-cap check followed by one turn-meter check.
-    expect(source.match(/cloudBudgetVerdict\(/gu)).toHaveLength(5)
-    expect(source.match(/hooks\.turnMeter\?\.verdict\(/gu)).toHaveLength(5)
+    // Six cloud call sites (ask + gateAsk + memoryRankAsk + inferAsk + visionPointAsk + imagine, gap #11 2026-09-27), each with exactly one global-cap check followed by one turn-meter check.
+    expect(source.match(/cloudBudgetVerdict\(/gu)).toHaveLength(6)
+    expect(source.match(/hooks\.turnMeter\?\.verdict\(/gu)).toHaveLength(6)
+    // imagine refuses before transport when either cap says no, with the same estimate on both.
+    expect(source).toContain('if (!prov.local && (!cloudBudgetVerdict(imageEstimate + imageOutputCap).allowed || hooks.turnMeter?.verdict(imageEstimate + imageOutputCap).allowed === false)) return denied(')
     // ن7: the vision pointer refuses before transport when either cap says no, with the same estimate on both.
     expect(source).toContain('if (!prov.local && (!cloudBudgetVerdict(estimated + outputCap).allowed || hooks.turnMeter?.verdict(estimated + outputCap).allowed === false)) throw Error("vision-budget")')
     // The memory ranker refuses before transport when either cap says no, with the same estimate on both.
@@ -171,8 +176,9 @@ describe("turn budget wiring in the live cli path", () => {
   })
 
   test("the meter is charged from the same chargeableUsage result, outside the ledger try so a disk failure never hides spend", () => {
-    // one charge per ledger writer (ask + gateAsk + memoryRankAsk + inferAsk + visionPointAsk) — never a charge without a ledger write or vice versa.
-    expect(source.match(/hooks\.turnMeter\?\.charge\(charged\)/gu)).toHaveLength(5)
+    // one charge per ledger writer (ask + gateAsk + memoryRankAsk + inferAsk + visionPointAsk + imagine) — never a charge without a ledger write or vice versa.
+    expect(source.match(/hooks\.turnMeter\?\.charge\(charged\)/gu)).toHaveLength(6)
+    expect(source).toMatch(/note: "image\.generate", \.\.\.charged \}\) \} catch \{[^\r\n]*\}\r?\n\s+hooks\.turnMeter\?\.charge\(charged\)/u)
     expect(source).toContain("try{recordCloudUsage({provider:prov.id,model:selected.model,note:'memory.semantic',...charged})}catch{}")
     expect(source).toMatch(/note:'memory\.semantic',\.\.\.charged\}\)\}catch\{\}\r?\n\s+hooks\.turnMeter\?\.charge\(charged\)/u)
     expect(source).toMatch(/\} catch \(error\) \{\r?\n\s+ledgerNote = [^\r\n]*\r?\n\s+\}\r?\n(?:\s+\/\/[^\r\n]*\r?\n)*\s+hooks\.turnMeter\?\.charge\(charged\)/u)

@@ -169,6 +169,7 @@ import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./t
 import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
 import { formatKeyless, KEYLESS_HOST, KEYLESS_SOURCE, keylessSearchUrl, parseKeylessResults } from "./mind/keyless-search"
 import { formatResearch, pageTextOf, parseResearchCommand, selectEvidence, type ResearchSource } from "./mind/research"
+import { defaultImagePath, DEFAULT_IMAGE_MODEL, extractImage, imageKind, imageRequestBody, MAX_IMAGE_BYTES, parseImagineCommand } from "./mind/imagine"
 import { approvedDigest, commandFor, hookLine, HOOKS_FILE, hooksSummary, readHooks, recordApproval, type ProjectHook } from "./project-hooks"
 import { commandUsedLine, expandCustomCommand, listCustomCommands } from "./custom-commands"
 import { attachmentText, parseTable, parseTableCommand, profileTable, queryTable } from "./data-table"
@@ -1170,6 +1171,8 @@ type Settings = {
   gateModel?: string
   /** ذ1 — نموذجُ الرؤية: يُختار حين يحمل الدورُ صوراً؛ بلا ضبطٍ يبقى نموذجُ الحارة ويُرفض صراحةً إن لم يقبل الصور. */
   visionModel?: string
+  /** الفجوة #11 — نموذجُ توليد الصور «مزوّد/نموذج» (الافتراض qwen-token-plan/wan2.7-image). */
+  imageGenModel?: string
   /** سلّمُ التصعيد: مراجعُ نماذجَ من الأرخص إلى الأقدر. غيابُه = لا تصعيد (الغيابُ رفضٌ لا إذن). */
   modelLadder?: readonly string[]
   /** ذ6 — جدولُ الشراء بالهللات لكلّ مليون توكن، من المالك وحده: لا سعرَ افتراضيّ ولا مقدَّر. */
@@ -1246,7 +1249,7 @@ const SECRETISH = /sk-[A-Za-z0-9]{12,}|Bearer\s|[A-Za-z0-9_-]{40,}/
 // غير معروف» (سطر التحقّق أدناه). فشلٌ صامتٌ مزدوج: المِرساةُ تتحرّك في الشاشة
 // ولا تنجو من إعادة التشغيل، والرفضُ يظهر إشعاراً لا يربطه المستخدمُ بالسحب.
 // **حارسٌ يُفحص بعائده يمرّ وهو ينسى حقلاً — الفحصُ الحاكم يقرأ الملفّ.**
-const SETTINGS_KEYS = new Set<keyof Settings>(["model", "chatModel", "agentModel", "modelRole", "mode", "theme", "project", "railPolicy", "routerGate", "gateModel", "plugins", "language", "customProviders", "panelDocks", "mcpServers", "approvalTimeoutSeconds", "superAbdo", "projectInstructions", "computerUseEnabled", "desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled", "semanticMemoryEnabled", "sensitiveMemoryEnabled", "projectRoots", "inferredMemoryEnabled", "modelLadder", "visionModel", "workMode", "priceTable", "sellPlan", "sessionAffinity"])
+const SETTINGS_KEYS = new Set<keyof Settings>(["model", "chatModel", "agentModel", "modelRole", "mode", "theme", "project", "railPolicy", "routerGate", "gateModel", "plugins", "language", "customProviders", "panelDocks", "mcpServers", "approvalTimeoutSeconds", "superAbdo", "projectInstructions", "computerUseEnabled", "desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled", "semanticMemoryEnabled", "sensitiveMemoryEnabled", "projectRoots", "inferredMemoryEnabled", "modelLadder", "visionModel", "imageGenModel", "workMode", "priceTable", "sellPlan", "sessionAffinity"])
 
 const loadSettings = (): Settings => {
   try {
@@ -3819,6 +3822,65 @@ const runServeShell = async (): Promise<void> => {
             const fallback = `\nالبديلُ بلا مفتاح: نفّذ: open ${url} ثمّ نفّذ: dismiss (يغلق نافذةَ اللغة/الكوكيز إن ظهرت) ثمّ نفّذ: page لقراءة النتائج وروابطها. ولتفعيل النتائج المنظّمة: مفتاحُ Programmable Search (key + cx) في الخزنة «abdocode-google» من الإعدادات ▸ المفاتيح.`
             return { output: `فُتح البحث في المتصفّح، وتعذّرت النتائج المنظّمة: ${message}${fallback}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: message.slice(0, 160) } }
           }
+        }
+        if (spec.name === "imagine") {
+          // الفجوة #11 — توليدُ صورة: النداءُ السحابيّ عبر عامل Rust (المفتاحُ لا يلمسه المحرّك)، والتنزيلُ بمضيفٍ يُفتح طولَه وحده،
+          // والحفظُ عبر write_file في النواة (base64، ملفٌّ جديدٌ وحده). والفشلُ يُقال برقمه وجسده.
+          if (!pluginOnNow("imageGen")) return denied("رُفض imagine: توليدُ الصور مطفأ (plugins.imageGen) — فعّله من الإعدادات.", "tool_not_permitted")
+          let request: ReturnType<typeof parseImagineCommand>
+          try { request = parseImagineCommand(rest) } catch (cause) { return invalid(String(cause instanceof Error ? cause.message : cause)) }
+          const ref = loadSettings().imageGenModel ?? DEFAULT_IMAGE_MODEL
+          const slash = ref.indexOf("/")
+          const prov = slash > 0 ? Providers.provider(ref.slice(0, slash)) : undefined
+          if (prov === undefined) return invalid(`نموذجُ الصور «${ref}» غيرُ معروف — اضبط imageGenModel في الإعدادات بصيغة مزوّد/نموذج`)
+          const imageModel = ref.slice(slash + 1)
+          const ok = await gate(turnId, spec.effect, `توليدُ صورة (${ref}): ${request.prompt.slice(0, 160)}`)
+          if (!ok) return denied(`رُفض توليدُ الصورة — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
+          // نداءٌ سحابيٌّ كغيره: السقفُ العامّ أوّلاً ثمّ سقفُ الدور، بالتقدير نفسِه، قبل الإرسال — ثمّ يُسجَّل ويُحتسب بعده.
+          const imageEstimate = Math.ceil(estimateTokens(request.prompt) * ARABIC_UNDERCOUNT), imageOutputCap = 4000
+          if (!prov.local && (!cloudBudgetVerdict(imageEstimate + imageOutputCap).allowed || hooks.turnMeter?.verdict(imageEstimate + imageOutputCap).allowed === false)) return denied("رُفض توليدُ الصورة: ميزانيّةُ السحابة أو سقفُ الدور لا يتّسع لهذا النداء.", "policy_denied")
+          const chat = Providers.prepareChatRequest({ provider: prov, model: imageModel, system: "", messages: [{ role: "user", content: request.prompt }], tools: [], stream: false, nativeTools: false, credentialOwner: prov.local ? "caller" : "rust-worker", contextTokens: CHAT_CONTEXT_TOKENS, maxOutputTokens: 256, temperature: 0, think: false })
+          const body = imageRequestBody(imageModel, request.prompt)
+          let status: number, replyBody: string
+          try {
+            if (prov.local) { const r = await fetch(chat.url, { method: "POST", headers: chat.headers, body, signal: hooks.signal }); status = r.status; replyBody = await r.text() }
+            else { const r = await REACH.model({ provider: prov.id, url: chat.url, body, timeoutMs: 180_000 }, hooks.signal); status = r.status; replyBody = r.body }
+          } catch (cause) { return { output: `تعذّر نداءُ نموذج الصور (${ref}): ${String(cause instanceof Error ? cause.message : cause).slice(0, 200)}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "image_call_failed" } } }
+          if (status !== 200) return { output: `تعذّر توليدُ الصورة (${ref}): HTTP ${status} — ${replyBody.replace(/\s+/gu, " ").slice(0, 240)}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: `image_http_${status}` } }
+          if (!prov.local) {
+            let reported: { prompt_tokens?: number; input_tokens?: number; completion_tokens?: number; output_tokens?: number } = {}
+            try { reported = (JSON.parse(replyBody) as { usage?: typeof reported }).usage ?? {} } catch { /* الجسدُ يُقرأ صورةً بعد قليل */ }
+            const charged = chargeableUsage({ inputTokens: reported.prompt_tokens ?? reported.input_tokens, outputTokens: reported.completion_tokens ?? reported.output_tokens }, imageEstimate, imageOutputCap, pluginOnNow("cacheAccounting"))
+            try { recordCloudUsage({ provider: prov.id, model: imageModel, note: "image.generate", ...charged }) } catch { /* الدفترُ مساعِد */ }
+            hooks.turnMeter?.charge(charged)
+          }
+          const found = extractImage(replyBody)
+          if ("error" in found) return { output: `تعذّر توليدُ الصورة (${ref}): ${found.error}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "image_not_in_reply" } }
+          let bytes: Uint8Array
+          if ("base64" in found) bytes = new Uint8Array(Buffer.from(found.base64, "base64"))
+          else {
+            let target: URL
+            try { target = new URL(found.url) } catch { return { output: "رابطُ الصورة في الردّ غيرُ صالح", verdict: { ok: false, reason: "tool_failed", denied: false, detail: "image_url_invalid" } } }
+            if (!(target.protocol === "https:" || (prov.local && target.protocol === "http:"))) return { output: `رابطُ الصورة ليس https: ${target.protocol}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "image_url_not_https" } }
+            // مضيفُ الصورة من ردّ هذا النداء لا من النموذج، ويُفتح طولَ تنزيلها وحده.
+            const release = allowEgressWhile(target.hostname, "image download — the result of this explicit imagine call")
+            try {
+              const response = await fetch(target, { signal: hooks.signal ? AbortSignal.any([hooks.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000) })
+              if (!response.ok) return { output: `تعذّر تنزيلُ الصورة: HTTP ${response.status}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: `image_download_${response.status}` } }
+              bytes = new Uint8Array(await response.arrayBuffer())
+            } catch (cause) { return { output: `تعذّر تنزيلُ الصورة: ${String(cause instanceof Error ? cause.message : cause).slice(0, 160)}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "image_download_failed" } } }
+            finally { release() }
+          }
+          if (bytes.byteLength > MAX_IMAGE_BYTES) return { output: `الصورةُ أكبر من ${MAX_IMAGE_BYTES / 1024 / 1024} ميغابايت`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "image_too_large" } }
+          const kind = imageKind(bytes)
+          if (kind === undefined) return { output: "ما وصل ليس صورةً (لا PNG ولا JPEG ولا WebP بحسب بايتاته)", verdict: { ok: false, reason: "tool_failed", denied: false, detail: "image_not_an_image" } }
+          const imagePath = request.out ?? defaultImagePath(request.prompt, kind)
+          const abs = resolveProjectPath(imagePath)
+          if (abs === undefined) return refused(`مسارُ الصورة خارج المشروع: ${imagePath}`)
+          if (existsSync(abs)) return invalid(`الملفّ موجود: ${imagePath} — اختر --out آخر (الصورةُ لا تكتب فوق ملفّ)`)
+          const saved = await runAdapterV("write", "write_file", { path: abs, content: Buffer.from(bytes).toString("base64"), encoding: "base64" }, `imagine_${turnId}_${nextToolSeq()}`, hooks.signal)
+          if (saved.verdict?.ok === false) return saved
+          return okText(`🖼 ${imagePath} — ${bytes.byteLength} بايت، ${kind} (${ref})\nالوصف: ${request.prompt.slice(0, 300)}`)
         }
         if (spec.name === "research") {
           // الفجوة #2 (2026-09-27) — بحثٌ معمّق حتميّ: بحثٌ ⇦ قراءةُ أعلى الصفحات عبر النواة ⇦ مقاطعُ مرتّبةٌ بالصلة ⇦ أدلّةٌ مرقّمة.

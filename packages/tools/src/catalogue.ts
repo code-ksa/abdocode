@@ -105,6 +105,8 @@ export const TOOLS: readonly ToolSpec[] = [
 
   // شبكة بلا متصفّح — جلبُ صفحةٍ نصّاً (فكرة webfetch من 2.1 بأبسط كود، حارس SSRF واحد)
   { name: "fetch", effect: "network", usage: "fetch <رابط HTTPS>", summary: "جلب نص HTTPS عبر DNS/SSRF وحدود تحويل وحجم وعامل Rust", agentCallable: true, runner: "adapter" },
+  // الفجوة #11 (2026-09-27): توليدُ صورة بنموذج imageGenModel — تُحفظ في المشروع عبر النواة.
+  { name: "imagine", aliases: ["image_gen", "ارسم"], effect: "network", usage: "imagine <وصف الصورة> [--out images/name.png]", summary: "توليدُ صورةٍ من وصف بنموذج الصور المضبوط وحفظُها ملفّاً جديداً في المشروع (PNG/JPEG/WebP)", agentCallable: true, runner: "net" },
   // الفجوة #12 (2026-09-27): تحليلُ بياناتٍ بالكود لا بالنموذج — ملفُّ المشروع أو المرفقُ باسمه.
   { name: "table", aliases: ["data", "جدول"], effect: "read", usage: "table <ملفّ.csv|.tsv|.json|@مرفق> [--group عمود] [--sum|--avg|--min|--max|--median عمود | --count] [--where عمود=قيمة] [--sort asc|desc] [--limit ن]", summary: "تحليلُ جدولٍ بالكود: بلا خيارات ملفٌّ تعريفيّ (أنواع، فراغ، إحصاءات، أكثرُ القيم)، ومع --group/--sum… تجميعٌ محسوب — استعمله بدل الحساب من نصّ الجدول", agentCallable: true, runner: "data" },
   // الفجوة #2 (2026-09-27): بحثٌ معمّق — يقرأ الصفحاتِ التي أعادها بحثُه هو ويعيد أدلّةً مرقّمة بمصادرها.

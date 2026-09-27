@@ -3722,6 +3722,12 @@ const pluginTranslations = {
 "englishLabel": "Hide tools whose prerequisite is missing",
 "englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
   },
+"imageGen": {
+"label": "توليدُ الصور",
+"description": "أداةُ imagine: صورةٌ من وصف بنموذج imageGenModel (الافتراض qwen-token-plan/wan2.7-image)، تُحفظ ملفّاً جديداً في المشروع عبر النواة. النداءُ السحابيّ عبر عامل Rust فلا يلمس المحرّكُ المفتاح، ومضيفُ الصورة يُفتح طولَ تنزيلها وحده، والملفُّ القائمُ لا يُكتب فوقه. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "Image generation",
+"englishDescription": "The imagine tool: an image from a description with the imageGenModel model (default qwen-token-plan/wan2.7-image), saved as a new file in the project through the kernel. The cloud call goes through the Rust worker, so the engine never touches the key; the image host is opened only while it downloads; an existing file is never overwritten. Disabled means the tool refuses by name. Applies immediately."
+  },
 "osSandbox": {
 "label": "العزلُ على مستوى النظام",
 "description": "run --sandbox <أمر> يشغّل الأمرَ داخل AppContainer في ويندوز بلا أيّ قدرة: لا شبكة، ولا وصولَ إلى ملفّات المستخدم (الخزنة وSSH وملفُّه الشخصيّ)، ومجلّدُ المشروع وحده مفتوح — لتشغيل كود مستودعٍ لا تثق به. خطّافُ العزل موثَّقٌ ببصمته، ويُرفض الأمرُ باسمه إن تعذّر العزل ولا يُشغَّل بلاه أبداً. المعطَّل = يُرفض --sandbox. يسري فوراً.",

@@ -43,6 +43,7 @@ export type PluginName =
   | "projectHooks"
   | "dataTable"
   | "osSandbox"
+  | "imageGen"
   | "toolAvailability"
   | "overflowLadder"
   | "contextBreakdown"
@@ -237,6 +238,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     name: "osSandbox",
     label: "العزلُ على مستوى النظام",
     description: "run --sandbox <أمر> يشغّل الأمرَ داخل AppContainer في ويندوز بلا أيّ قدرة: لا شبكة، ولا وصولَ إلى ملفّات المستخدم (الخزنة وSSH وملفُّه الشخصيّ)، ومجلّدُ المشروع وحده مفتوح — لتشغيل كود مستودعٍ لا تثق به. خطّافُ العزل موثَّقٌ ببصمته، ويُرفض الأمرُ باسمه إن تعذّر العزل ولا يُشغَّل بلاه أبداً. المعطَّل = يُرفض --sandbox. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // الفجوة #11 من جدول 2026-09-27 — توليدُ الصور. مفعَّل: لا يعمل إلّا باستدعاءٍ صريح وبالبوّابة، ويُنفق حصّةَ المزوّد.
+  Object.freeze({
+    name: "imageGen",
+    label: "توليدُ الصور",
+    description: "أداةُ imagine: صورةٌ من وصف بنموذج imageGenModel (الافتراض qwen-token-plan/wan2.7-image)، تُحفظ ملفّاً جديداً في المشروع عبر النواة. النداءُ السحابيّ عبر عامل Rust فلا يلمس المحرّكُ المفتاح، ومضيفُ الصورة يُفتح طولَ تنزيلها وحده، والملفُّ القائمُ لا يُكتب فوقه. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
     defaultOn: true,
     applies: "immediate",
     site: "call",

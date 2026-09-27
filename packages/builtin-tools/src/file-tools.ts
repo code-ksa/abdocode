@@ -42,13 +42,14 @@ const BACKUP_DIR = join(tmpdir(), "abdo-tool-backups")
  * Commit a text replacement as one same-directory rename. A crash can leave a
  * clearly-named temporary file, but can never expose a half-written target.
  */
-function atomicWriteText(path: string, content: string): void {
+function atomicWriteText(path: string, content: string | Uint8Array): void {
   mkdirSync(dirname(path), { recursive: true })
   const temporary = join(dirname(path), `.${randomUUID()}.abdo-write.tmp`)
   let handle: number | undefined
   try {
     handle = openSync(temporary, "wx", 0o600)
-    writeFileSync(handle, content, "utf8")
+    if (typeof content === "string") writeFileSync(handle, content, "utf8")
+    else writeFileSync(handle, content)
     fsyncSync(handle)
     closeSync(handle)
     handle = undefined
@@ -347,6 +348,9 @@ export function writeFileTool(workspace: string): ToolDefinition {
       properties: {
         path: { type: "string", description: "Workspace-relative file path" },
         content: { type: "string", description: "Full file content to write" },
+        // 2026-09-27 — a generated image is bytes: base64 carries them through this same governed writer. New files only:
+        // a binary overwrite would need a binary backup and rollback this tool does not keep.
+        encoding: { type: "string", description: "\"utf8\" (default) or \"base64\" for binary content; base64 creates new files only" },
       },
       required: ["path", "content"],
       additionalProperties: false,
@@ -361,11 +365,16 @@ export function writeFileTool(workspace: string): ToolDefinition {
       const p = str(input, "path")
       const content = str(input, "content")
       if (!p || content === undefined) return { ok: false, error: "write_file requires { path, content }" }
+      const encoding = str(input, "encoding") ?? "utf8"
+      if (encoding !== "utf8" && encoding !== "base64") return { ok: false, error: `write_file encoding must be utf8 or base64, not ${encoding.slice(0, 20)}` }
+      if (encoding === "base64" && !/^[A-Za-z0-9+/]*={0,2}$/u.test(content)) return { ok: false, error: "write_file base64 content is not valid base64" }
+      const data: string | Uint8Array = encoding === "base64" ? Buffer.from(content, "base64") : content
       const executionId = ctx.executionId ?? `tex_${randomUUID()}`
       try {
         const abs = resolveInWorkspace(workspace, p)
         if (ctx.dryRun) return { ok: true, output: { path: p, dryRun: true } }
         const existedBefore = existsSync(abs)
+        if (encoding === "base64" && existedBefore) return { ok: false, error: `write_file base64 creates new files only — ${p} exists` }
         const before = existedBefore ? readFileSync(abs, "utf8") : null
         const beforeHash = before === null ? null : sha256(before)
         // Precondition work is done; from here the mutation starts.
@@ -380,11 +389,11 @@ export function writeFileTool(workspace: string): ToolDefinition {
         }
         try {
           // [CL-00A:ALLOW file_tools_pep_executor]
-          atomicWriteText(abs, content)
+          atomicWriteText(abs, data)
           return {
             ok: true,
-            output: { path: p, bytes: Buffer.byteLength(content) },
-            mutation: { ...base, afterHash: sha256(content), mutationCommitted: true },
+            output: { path: p, bytes: typeof data === "string" ? Buffer.byteLength(data) : data.byteLength },
+            mutation: { ...base, afterHash: typeof data === "string" ? sha256(data) : createHash("sha256").update(data).digest("hex"), mutationCommitted: true },
           }
         } catch (e) {
           return {
