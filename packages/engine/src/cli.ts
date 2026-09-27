@@ -8427,7 +8427,7 @@ const HELP = `عبدو كود — نواة Rust وحزم rust-main
   mcp-google-search خادم MCP لبحث Google عبر stdio
   demo           الدورة الكاملة الخفيفة: مخطِّط ← إطار ← تدفّق ← نواة ← تحقّق ← لوح
   ask <سؤال>     أخفّ لمسة 9B: الجواب من فهرس L0 وحده، بميزانيةٍ مقيسة
-  exec "<مهمّة>" [--project د] [--mode read-only|auto|full-access] [--timeout ث] [--json] [--quiet]
+  exec "<مهمّة>" [--project د] [--mode read-only|auto|full-access] [--timeout ث] [--worktree] [--json] [--quiet]
                  وضعُ CI: دورُ وكيلٍ كامل بلا واجهة؛ الموافقاتُ تُرفض آليّاً؛ الخروج 0 اكتمل · 1 توقّف · 2 رُفض/تعطّل
   mcp-agent <مجلّد> [--mode …]  عبدو كود خادمَ MCP (stdio): أداةُ run_task لمشروعٍ ونمطٍ يُثبَّتان عند الإقلاع
   secret ...     مقابض الخزنة: where | list | set <مقبض> | forget <مقبض> — القيمة من أنبوبٍ أو محرّر، لا من سطر الأمر`
@@ -8554,10 +8554,10 @@ const main = async () => {
       break
     case "exec": {
       // الفجوة #6 (2026-09-27) — وضعُ CI: دورُ وكيلٍ كاملٌ بلا واجهة عبر المحرّك نفسِه في serve؛ الموافقاتُ تُرفض آليّاً، والرمزُ يتبع النتيجة.
-      const { parseExecArgs, runExec } = await import("./exec-mode")
+      const { parseExecArgs, runExec, runExecInWorktree } = await import("./exec-mode")
       const options = parseExecArgs(rest)
       if ("error" in options) { console.error(options.error); process.exitCode = 2; break }
-      const summary = await runExec(options, selfEngineArgv(), process.env, (line) => { if (!options.quiet) process.stderr.write(`${line}\n`) })
+      const summary = await (options.worktree === true ? runExecInWorktree : runExec)(options, selfEngineArgv(), process.env, (line) => { if (!options.quiet) process.stderr.write(`${line}\n`) })
       if (options.json) console.log(JSON.stringify(summary, null, 2))
       else {
         if (summary.answer.length > 0) console.log(summary.answer)

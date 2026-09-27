@@ -143,7 +143,8 @@ describe("قشرة المنتَج: الخطّ والشريط والشرائح", 
   test("كلُّ شريحةٍ في صفّ المُنشئ تحمل أيقونةً ونصّاً واسماً كاملاً", () => {
     const row = shell.slice(shell.indexOf('<button class="chip" id="pluschip"'), shell.indexOf('<button id="send"'))
     const chips = [...row.matchAll(/<button[^>]*class="chip[^"]*"[^>]*id="(\w+)"[^>]*>(.*?)<\/button>/gsu)]
-    expect(chips.length).toBe(5)
+    // + الإملاء (الفجوة #10، 2026-09-27): مخفيٌّ حتى تُكشف واجهةُ الكلام، وبأيقونةٍ ونصٍّ كغيره.
+    expect(chips.length).toBe(6)
     for (const [whole, id, inner] of chips) {
       expect(`${id}:${inner.includes('class="ico"')}`).toBe(`${id}:true`)
       expect(`${id}:${inner.includes('class="lbl"')}`).toBe(`${id}:true`)

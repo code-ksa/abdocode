@@ -1291,6 +1291,8 @@ describe("serve convergence wiring", () => {
       '    import { providerDisplayLabel } from "./provider-display.js";',
       // عرضُ أسطر المحرّك بلغة الواجهة — دالّاتٌ نقيّة لا ميزة، كـ`provider-display`.
       '    import { engineLineForDisplay, providerLabelsForDisplay, readWhenForDisplay } from "./engine-lines.js";',
+      // الفجوة #10 (2026-09-27): الصوتُ وحدةُ قشرةٍ دائمة — أزرارُها تظهر بكشف الواجهة لا بمفتاحٍ يُحمَّل كسولاً.
+      '    import { createDictation, createReader } from "./voice.js";',
       '    import { createTranscript } from "./native-transcript.js";',
       '    import { mountNativeShell } from "./native-shell.js";',
       '    import { mountNativeSurfaces } from "./native-surfaces.js";',

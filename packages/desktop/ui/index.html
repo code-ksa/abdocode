@@ -524,6 +524,9 @@
   .chip:hover { border-color: var(--accent); }
   .chip.mode { color: var(--accent); }
   .chip.mode.full { color: var(--bad); border-color: var(--bad); }
+  .block .role .speak { margin-inline-start: 6px; border: 0; background: transparent; cursor: pointer; font-size: var(--fs-ui); opacity: .7; }
+  .block .role .speak:hover { opacity: 1; }
+  #micchip.live { color: var(--accent); border-color: var(--accent); }
   #send {
     margin-inline-start: auto; width: 34px; height: 34px; border-radius: 50%;
     background: var(--sendbg); color: var(--sendfg); border: 0; font-size: var(--fs-h3);
@@ -806,6 +809,7 @@
           <button class="chip mode" id="modechip" title="نمط الموافقات" aria-label="نمط الموافقات"><span class="ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="3.4" y="7" width="9.2" height="6.6" rx="1"/><path d="M5.6 7V5.2a2.4 2.4 0 0 1 4.8 0V7"/></svg></span><span class="lbl">قراءة فقط</span></button>
           <button class="chip" id="railchip" title="وضع قوة النموذج — يحدد صرامة القضبان" aria-label="وضع قوة النموذج"><span class="ico">⚙</span><span class="lbl">تلقائي</span></button>
           <button class="chip" id="modelchip" title="النموذج الفاعل" aria-label="النموذج الفاعل"><span class="ico">✦</span><span class="lbl">AbdoCode</span></button>
+          <button class="chip" id="micchip" hidden data-app-title-en="Dictate" data-app-title-ar="إملاءٌ صوتيّ" title="Dictate" aria-label="Dictate"><span class="ico">🎤</span><span class="lbl" data-app-en="Dictate" data-app-ar="إملاء">Dictate</span></button>
           <button id="send" title="أرسل">↑</button>
         </div>
         <div id="railmenu" role="menu" aria-label="وضع قوة النموذج">
@@ -904,6 +908,7 @@
     import { Providers } from "./providers.js";
     import { providerDisplayLabel } from "./provider-display.js";
     import { engineLineForDisplay, providerLabelsForDisplay, readWhenForDisplay } from "./engine-lines.js";
+    import { createDictation, createReader } from "./voice.js";
     import { LANGUAGE_CODES } from './language-catalogue.js';
     import { settingsDrafts } from './settings-drafts.js';
     settingsDrafts.mount(document.getElementById('settings'));
@@ -1261,6 +1266,8 @@
       return node;
     };
 
+    // الفجوة #10 — القراءةُ بصوتٍ مسموع بأصوات ويندوز المثبّتة (بلا شبكة)؛ الزرُّ حيث تعمل القراءةُ وحدها.
+    const reader = createReader(window);
     const openAnswerBlock = (turnId) => {
       const node = addBlock("assistant", uiText("AbdoCode", "عبدو"), "");
       const state = node.querySelector(".state");
@@ -1298,6 +1305,13 @@
             const m = document.createElement("div");
             m.className = "meta execution-summary"; m.textContent = meta.map(engineText).join(" ");
             this.node.appendChild(m);
+          }
+          if (ending === "done" && reader.supported && this.bodyEl.textContent.trim().length > 0 && this.node.querySelector(".speak") === null) {
+            const speak = document.createElement("button");
+            speak.className = "speak"; speak.textContent = "🔊";
+            speak.title = uiText("Read aloud", "اقرأ بصوتٍ مسموع"); speak.setAttribute("aria-label", speak.title);
+            speak.onclick = (event) => { event.stopPropagation(); reader.toggle(this.bodyEl.textContent, shellSettings.language, (on) => { speak.textContent = on ? "⏹" : "🔊"; }); };
+            this.node.querySelector(".role").appendChild(speak);
           }
           refreshSessions();
           scroll();
@@ -2356,6 +2370,11 @@
     let palSel = 0;
     const palette = el("palette");
     const prompt = el("prompt");
+    // الفجوة #10 — الإملاءُ حيث يوجد مُعرِّفُ الكلام وحده (WebView2 لا يضمنه): الزرُّ مخفيٌّ ولا يظهر ليعمل كذباً.
+    const dictation = createDictation(window, () => (shellSettings.language === "en" ? "en-US" : "ar-SA"),
+      (said) => { prompt.value = prompt.value ? `${prompt.value} ${said}` : said; prompt.focus(); },
+      (on, error) => { el("micchip").classList.toggle("live", on); if (error) notice(uiText("Dictation stopped: ", "توقّف الإملاء: ") + error); });
+    if (dictation !== undefined) { el("micchip").hidden = false; el("micchip").onclick = () => dictation.toggle(); }
     const paletteItems = () => [...COMMANDS, ...customPalette()].filter((c) => c.cmd.slice(1).toLowerCase().startsWith(prompt.value.slice(1).toLowerCase()));
     const renderPalette = () => {
       const items = paletteItems();

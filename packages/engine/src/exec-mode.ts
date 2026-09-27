@@ -7,6 +7,9 @@
  * القشرة. والفرقُ الوحيد أنّه **لا يملك من يوافق**: كلُّ طلب موافقةٍ يُرفض آليّاً ويُسجَّل في الخلاصة — CI لا يمنح إذناً
  * ضمنيّاً، والتوسعةُ باختيارٍ صريح (`--mode full-access`). ورمزُ الخروج يتبع النتيجة: 0 اكتمل، 1 توقّف بلا إكمال، 2 رُفض أو تعطّل.
  */
+import { rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
 
 export interface ExecOptions {
@@ -16,6 +19,8 @@ export interface ExecOptions {
   readonly timeoutMs: number
   readonly json: boolean
   readonly quiet: boolean
+  /** الفجوة #8 محلّيّاً: فرعٌ وشجرةُ عملٍ وحالةُ محرّكٍ منفصلة لهذه المهمّة. */
+  readonly worktree?: boolean
 }
 
 export interface ExecSummary {
@@ -29,9 +34,10 @@ export interface ExecSummary {
   readonly gates?: string
   readonly answer: string
   readonly reason?: string
+  readonly worktree?: { readonly branch: string; readonly commit?: string; readonly changedFiles: readonly string[] }
 }
 
-const USAGE = "الصيغة: exec \"<مهمّة>\" [--project <مجلّد>] [--mode read-only|auto|full-access] [--timeout <ثوانٍ>] [--json] [--quiet]"
+const USAGE = "الصيغة: exec \"<مهمّة>\" [--project <مجلّد>] [--mode read-only|auto|full-access] [--timeout <ثوانٍ>] [--worktree] [--json] [--quiet]"
 
 /** الوسائطُ بعد `exec` — رفضٌ مسمّى لكلّ ما لا يُفهم، لا تخمين. */
 export function parseExecArgs(args: readonly string[]): ExecOptions | { readonly error: string } {
@@ -39,11 +45,12 @@ export function parseExecArgs(args: readonly string[]): ExecOptions | { readonly
   let project: string | undefined
   let mode: ExecOptions["mode"] = "auto"
   let timeoutMs = 30 * 60_000
-  let json = false, quiet = false
+  let json = false, quiet = false, worktree = false
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]!
     if (arg === "--json") json = true
     else if (arg === "--quiet") quiet = true
+    else if (arg === "--worktree") worktree = true
     else if (arg === "--project") { project = args[++i]; if (project === undefined) return { error: `--project يحتاج مجلّداً. ${USAGE}` } }
     else if (arg === "--mode") {
       const value = args[++i]
@@ -58,7 +65,7 @@ export function parseExecArgs(args: readonly string[]): ExecOptions | { readonly
   }
   const task = words.join(" ").trim()
   if (task.length === 0) return { error: USAGE }
-  return { task, ...(project === undefined ? {} : { project }), mode, timeoutMs, json, quiet }
+  return { task, ...(project === undefined ? {} : { project }), mode, timeoutMs, json, quiet, ...(worktree ? { worktree } : {}) }
 }
 
 const exitFor = (outcome: string): 0 | 1 | 2 => outcome === "completed" ? 0 : outcome === "checkpointed" || outcome === "unresolved" ? 1 : 2
@@ -130,5 +137,48 @@ export async function runExec(options: ExecOptions, engineArgv: readonly string[
     ...(stop === undefined ? {} : { stop }), durationMs: Date.now() - started, tools, approvalsDenied: denied,
     ...(gates === undefined ? {} : { gates }), answer: (finalAnswer ?? answer).trim().slice(-8000),
     ...(reason !== undefined ? { reason: tail.length > 0 ? `${reason} — ${tail}` : reason } : end?.why !== undefined ? { reason: String(end.why) } : {}),
+  }
+}
+
+/**
+ * الفجوة #8 محلّيّاً (2026-09-27) — `exec --worktree`: ما تفعله مهامُّ Codex السحابيّة في جوهره — بيئةٌ معزولة لكلّ مهمّة
+ * ونتيجةٌ تُراجَع قبل الدمج — على هذا الجهاز: فرعٌ `abdocode/task-<معرّف>` في شجرة عملٍ منفصلة، وحالةُ محرّكٍ منفصلة
+ * (محرّكان على دفترٍ واحد يكسران تسلسله)، فتتوازى المهامُّ ولا تمسّ نسخةَ عمل المستخدم. ما تغيّر يُودَع **في الفرع وحده**
+ * (لا دفع)، وتُزال الشجرةُ ويبقى الفرع. والتشغيلُ على خادمٍ بعيد قرارُ بنيةٍ تحتيّة عند المالك — لا يُدّعى هنا.
+ */
+const git = (cwd: string, args: readonly string[], env?: Record<string, string | undefined>) => {
+  const run = Bun.spawnSync(["git", "-C", cwd, ...args], { stdout: "pipe", stderr: "pipe", ...(env === undefined ? {} : { env }) })
+  return { ok: run.exitCode === 0, out: run.stdout.toString().trim(), err: run.stderr.toString().trim() }
+}
+
+export async function runExecInWorktree(options: ExecOptions, engineArgv: readonly string[], env: Record<string, string | undefined>, progress: (line: string) => void): Promise<ExecSummary> {
+  const started = Date.now()
+  const base = options.project ?? process.cwd()
+  const fail = (reason: string): ExecSummary => ({ task: options.task, outcome: "error", exitCode: 2, durationMs: Date.now() - started, tools: [], approvalsDenied: [], answer: "", reason })
+  const top = git(base, ["rev-parse", "--show-toplevel"])
+  if (!top.ok) return fail(`--worktree يحتاج مستودعَ git: ${base} ليس فيه (${top.err.slice(0, 120)})`)
+  const id = crypto.randomUUID().slice(0, 8)
+  const branch = `abdocode/task-${id}`
+  const root = join(tmpdir(), "abdocode-worktrees")
+  const dir = join(root, id), state = join(root, `${id}-state`)
+  const added = git(top.out, ["worktree", "add", "-q", "-b", branch, dir, "HEAD"])
+  if (!added.ok) return fail(`تعذّر إنشاءُ شجرة العمل: ${added.err.slice(0, 200)}`)
+  progress(`🌿 فرعٌ معزول ${branch} في ${dir}`)
+  try {
+    const summary = await runExec({ ...options, project: dir }, engineArgv, { ...env, ABDO_CODE_STATE_DIR: state }, progress)
+    const changed = git(dir, ["status", "--porcelain"]).out.split("\n").filter((line) => line.trim().length > 0).map((line) => line.slice(3))
+    let commit: string | undefined
+    if (changed.length > 0) {
+      git(dir, ["add", "-A"])
+      const made = git(dir, ["commit", "-q", "-m", `abdocode: ${options.task.split("\n")[0]!.slice(0, 72)}`])
+      if (made.ok) commit = git(dir, ["rev-parse", "--short", "HEAD"]).out
+      else progress(`⚠ تعذّر الإيداعُ في ${branch}: ${made.err.slice(0, 160)} — التغييراتُ لم تُحفظ في الفرع`)
+    }
+    return { ...summary, worktree: { branch, ...(commit === undefined ? {} : { commit }), changedFiles: changed } }
+  } finally {
+    git(top.out, ["worktree", "remove", "--force", dir])
+    rmSync(state, { recursive: true, force: true })
+    // فرعٌ بلا إيداع ولا تغيير لا يُبقى أثراً.
+    if (git(top.out, ["rev-parse", "--verify", "-q", branch]).ok && git(top.out, ["rev-list", "--count", `HEAD..${branch}`]).out === "0") git(top.out, ["branch", "-q", "-D", branch])
   }
 }
