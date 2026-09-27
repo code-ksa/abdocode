@@ -8332,6 +8332,7 @@ const HELP = `عبدو كود — نواة Rust وحزم rust-main
   ask <سؤال>     أخفّ لمسة 9B: الجواب من فهرس L0 وحده، بميزانيةٍ مقيسة
   exec "<مهمّة>" [--project د] [--mode read-only|auto|full-access] [--timeout ث] [--json] [--quiet]
                  وضعُ CI: دورُ وكيلٍ كامل بلا واجهة؛ الموافقاتُ تُرفض آليّاً؛ الخروج 0 اكتمل · 1 توقّف · 2 رُفض/تعطّل
+  mcp-agent <مجلّد> [--mode …]  عبدو كود خادمَ MCP (stdio): أداةُ run_task لمشروعٍ ونمطٍ يُثبَّتان عند الإقلاع
   secret ...     مقابض الخزنة: where | list | set <مقبض> | forget <مقبض> — القيمة من أنبوبٍ أو محرّر، لا من سطر الأمر`
 
 const main = async () => {
@@ -8374,6 +8375,12 @@ const main = async () => {
       }
       const { SqliteMcp } = await import("./mcp-servers/sqlite")
       process.exitCode = await SqliteMcp.serveSqliteMcp(target)
+      break
+    }
+    case "mcp-agent": {
+      // الفجوة #13 (2026-09-27) — عبدو كود خادمَ MCP: أداةُ run_task على مالك exec نفسِه؛ المشروعُ والنمطُ من سطر الأمر وحده.
+      const { AgentMcp } = await import("./mcp-servers/agent")
+      process.exitCode = await AgentMcp.serveAgentMcp(rest, selfEngineArgv(), process.env)
       break
     }
     case "mcp-git": {
