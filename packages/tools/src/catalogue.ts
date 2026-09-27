@@ -87,7 +87,7 @@ export const TOOLS: readonly ToolSpec[] = [
   { name: "packages", effect: "network", usage: "packages <npm|pnpm|bun|cargo> <offline|registry>", summary: "استعادة الحزم من lockfile فقط، بلا scripts وبمصادر مسموحة", agentCallable: true, runner: "adapter" },
 
   // تنفيذ — بوابة النمط، مهلةٌ وخرجٌ محدود
-  { name: "run", effect: "command", usage: "run <أمر> | run --bg <أمر طويل>", summary: "تنفيذ أمرٍ في مجلد المشروع (موافقة في قراءة-فقط)", agentCallable: true, runner: "exec" },
+  { name: "run", effect: "command", usage: "run <أمر> | run --bg <أمر طويل> | run --sandbox <أمر>", summary: "تنفيذ أمرٍ في مجلد المشروع (موافقة في قراءة-فقط)؛ --sandbox يعزله في AppContainer بلا شبكة وبلا ملفّات المستخدم — لكود مستودعٍ لا تثق به", agentCallable: true, runner: "exec" },
   { name: "script", effect: "command", usage: "script <ملف.py|.js|.mjs|.ts|.ps1|.sh> [--bg] [وسائط] | script backup <ملف>", summary: "تشغيلُ ملفّ سكربت بمفسِّره من لاحقته (python/node/bun/powershell/bash) بمسار run نفسِه — «--bg» يشغّله خلفيّاً ويعيد معرّفاً تقرأ خرجَه بـlogs وتوقفه بـstop؛ و«script backup <ملف>» يحفظ نسخةً مؤرَّخة من الكود قبل تعديله (ثمّ write/edit)", agentCallable: true, runner: "exec" },
   // ذ9ج — ذكاءُ الشيفرة من خادم اللغة الحقيقيّ (لا تخمين): الغيابُ يُقال غيرَ متاح.
   { name: "lsp", effect: "command", usage: "lsp diag <ملف> | lsp def <ملف> <سطر>:<عمود> | lsp refs <ملف> <سطر>:<عمود> | lsp symbols <ملف>", summary: "خادمُ اللغة: أخطاءُ الأنواع في ملفّ، تعريفُ رمز، مراجعُه، رموزُ الملفّ — من typescript-language-server المثبَّت في المشروع أو rust-analyzer؛ غيابُه يُقال لا يُخمَّن", agentCallable: true, runner: "framed" },

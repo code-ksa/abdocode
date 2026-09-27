@@ -25,6 +25,8 @@
  *      command that needed fixing never looks identical to one that arrived
  *      correct. A silent repair is how a prompt problem becomes invisible.
  */
+import { existsSync, statSync } from "node:fs"
+import { isAbsolute } from "node:path"
 import { needsShell, type CommandSpec } from "./command"
 
 export interface CommandRepair {
@@ -84,12 +86,18 @@ export function splitCommandLine(line: string): string[] {
  *   - `args` is already populated. Then the caller has said two different things
  *     about the same call, and guessing which it meant is not repair.
  */
+const isFile = (path: string): boolean => { try { return existsSync(path) && statSync(path).isFile() } catch { return false } }
+
 export function repairCommandSpec(spec: CommandSpec): CommandRepair {
   const executable = typeof spec.executable === "string" ? spec.executable.trim() : ""
   if (executable.length === 0) return { spec, repaired: false }
 
   // a bare program name is already correct
   if (!/\s/.test(executable)) return { spec, repaired: false }
+  // An absolute path to a file that exists is a program, spaces and all. Measured 2026-09-27: the
+  // sandbox runs `C:\Program Files\nodejs\node.exe` by its full path, and this repair read the space as a
+  // command line, then refused it as "shell features" — every real path under Program Files was refused.
+  if (isAbsolute(executable) && isFile(executable)) return { spec, repaired: false }
 
   // Shell features are only shell features OUTSIDE quotes. The real line the
   // model sent — `node -e "const db = require('x'); console.log(db)"` — has a

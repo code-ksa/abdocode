@@ -20,6 +20,11 @@
  * accidental.
  */
 
+import { existsSync, statSync } from "node:fs"
+import { isAbsolute } from "node:path"
+
+const isExistingFile = (path: string): boolean => { try { return existsSync(path) && statSync(path).isFile() } catch { return false } }
+
 export interface CommandSpec {
   /** The program. Never a sentence, never with arguments baked in. */
   readonly executable: string
@@ -67,7 +72,9 @@ export function validateCommand(spec: CommandSpec): CommandProblem[] {
     // A NUL byte truncates the program name at the OS boundary — the classic
     // way to make a check see one program and the kernel run another.
     if (spec.executable.includes("\0")) problems.push({ field: "executable", detail: "contains a NUL byte" })
-    if (/\s/.test(spec.executable.trim())) {
+    // An absolute path to an existing file is a program, spaces and all (`C:\Program Files\nodejs\node.exe`) —
+    // measured 2026-09-27 when the sandbox ran programs by full path and this check refused every one under Program Files.
+    if (/\s/.test(spec.executable.trim()) && !(isAbsolute(spec.executable.trim()) && isExistingFile(spec.executable.trim()))) {
       problems.push({
         field: "executable",
         detail: `"${spec.executable}" looks like a command line, not a program — put the arguments in args[]`,

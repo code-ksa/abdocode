@@ -7,6 +7,10 @@
  * The message was right and the model did not act on it, which is precisely
  * when a mechanical repair earns its place.
  */
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { validateCommand } from "../src/command"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import { repairCommandSpec, splitCommandLine } from "../src/repair-command"
 
@@ -60,6 +64,22 @@ describe("repairing what the model actually sent", () => {
     const r = repairCommandSpec(spec("ls -la", ["data/"]))
     expect(r.repaired).toBe(false)
     expect(r.note).toContain("two different instructions")
+  })
+
+  test("an absolute path to a real program is a program even with spaces — a path that does not exist is still a command line", () => {
+    const dir = mkdtempSync(join(tmpdir(), "abdo repair "))
+    const program = join(dir, "my tool.exe")
+    writeFileSync(program, "")
+    try {
+      const r = repairCommandSpec(spec(program, ["-e", "x"]))
+      expect(r).toEqual({ spec: spec(program, ["-e", "x"]), repaired: false })
+      expect(r.note).toBeUndefined()
+      // التوأم: مسارٌ لا وجود له يبقى سطراً يُقسَم كما كان.
+      expect(repairCommandSpec(spec("C:/nope dir/missing.exe --flag")).repaired).toBe(true)
+      // والتحقّقُ اللاحق يقبله برنامجاً — لا «يشبه سطرَ أوامر».
+      expect(validateCommand(spec(program, ["-e", "x"])).filter((p) => p.field === "executable")).toEqual([])
+      expect(validateCommand(spec("C:/nope dir/missing.exe")).some((p) => p.detail.includes("looks like a command line"))).toBe(true)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   test("the real `node -e` line from the run keeps its script as one argument", () => {

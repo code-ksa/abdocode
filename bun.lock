@@ -189,6 +189,7 @@
         "@abdo/controlplane": "workspace:*",
         "@abdo/egress": "workspace:*",
         "@abdo/engine-host": "workspace:*",
+        "@abdo/event-store": "workspace:*",
         "@abdo/evidence": "workspace:*",
         "@abdo/grants": "workspace:*",
         "@abdo/harness": "workspace:*",

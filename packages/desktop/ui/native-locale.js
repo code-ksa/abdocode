@@ -3722,6 +3722,12 @@ const pluginTranslations = {
 "englishLabel": "Hide tools whose prerequisite is missing",
 "englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
   },
+"osSandbox": {
+"label": "العزلُ على مستوى النظام",
+"description": "run --sandbox <أمر> يشغّل الأمرَ داخل AppContainer في ويندوز بلا أيّ قدرة: لا شبكة، ولا وصولَ إلى ملفّات المستخدم (الخزنة وSSH وملفُّه الشخصيّ)، ومجلّدُ المشروع وحده مفتوح — لتشغيل كود مستودعٍ لا تثق به. خطّافُ العزل موثَّقٌ ببصمته، ويُرفض الأمرُ باسمه إن تعذّر العزل ولا يُشغَّل بلاه أبداً. المعطَّل = يُرفض --sandbox. يسري فوراً.",
+"englishLabel": "OS-level sandbox",
+"englishDescription": "run --sandbox <command> runs the command inside a zero-capability Windows AppContainer: no network and no access to the user's files (the vault, SSH, the profile); only the project folder is open — for running code from a repository you do not trust. The isolation helper is verified by its digest, and if isolation is impossible the command is refused by name and never run without it. Disabled means --sandbox is refused. Applies immediately."
+  },
 "dataTable": {
 "label": "تحليلُ البيانات",
 "description": "أداةُ table: جدولٌ من ملفّ CSV/TSV/JSON في المشروع أو من مرفقٍ باسمه (@اسم) ⇦ ملفٌّ تعريفيّ (صفوف، أعمدة، أنواع، فراغ، أدنى/أعلى/متوسّط/وسيط/مجموع، أكثرُ القيم) أو تجميعٌ محسوب (--group و--sum/--avg/--count/--min/--max/--median و--where). الأرقامُ بالكود لا بتخمين النموذج، والأرقامُ العربيّة والفواصل والعملات تُقرأ. قراءةٌ محصورةٌ بالمشروع بسقف 25 ميغابايت. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",

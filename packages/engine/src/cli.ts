@@ -172,6 +172,8 @@ import { formatResearch, pageTextOf, parseResearchCommand, selectEvidence, type 
 import { approvedDigest, commandFor, hookLine, HOOKS_FILE, hooksSummary, readHooks, recordApproval, type ProjectHook } from "./project-hooks"
 import { commandUsedLine, expandCustomCommand, listCustomCommands } from "./custom-commands"
 import { attachmentText, parseTable, parseTableCommand, profileTable, queryTable } from "./data-table"
+import { SANDBOX_LINE, sandboxGrant, sandboxInvocation } from "./os-sandbox"
+import type { ControlledExecutionGrant } from "@abdo/tools"
 import { editsCode, isProjectTestRun, projectTestCommand, VERIFY_AFTER_EDIT_RUNS, verifyDemandLine, verifyGaveUpLine } from "./verify-after-edit"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
@@ -231,6 +233,13 @@ const HOST = COMPILED
 const TOOL_WORKER = COMPILED
   ? join(ROOT, "bin", "abdo-tool-worker.exe")
   : resolve(ROOT, "..", "..", "kernel", "target", "release", "abdo-tool-worker.exe")
+// الفجوة #4 — خطّافُ AppContainer وبيانُ بنائه (بصمةُ الثنائيّ): بجوار النواة في الحمولة، ومن حزمته في المصدر.
+const WINISO = COMPILED
+  ? join(ROOT, "bin", "abdo-winiso.exe")
+  : resolve(ROOT, "..", "..", "windows-isolation-helper", "target", "release", "abdo-winiso.exe")
+const WINISO_MANIFEST = COMPILED
+  ? join(ROOT, "bin", "helper-manifest.json")
+  : resolve(ROOT, "..", "..", "windows-isolation-helper", "helper-manifest.json")
 const JOURNAL = join(STATE_ROOT, "abdocode.sqlite")
 const ADAPTER_LEDGER = new AdapterEffectLedger(HOST, JOURNAL)
 // The public build never discovers private workspaces. The operator selects one
@@ -3525,6 +3534,13 @@ const runServeShell = async (): Promise<void> => {
           effectiveRest = `${parsed[1] ?? ""}${interpreter} ${parsed[2]}${parsed[3] ?? ""}`
         }
         if (effectiveRest.length === 0) return invalid("run يحتاج أمراً")
+        // الفجوة #4 — `run --sandbox <أمر>`: AppContainer بلا شبكة وبلا ملفّات المستخدم. الرفضُ لا يعود إلى تشغيلٍ غيرِ معزول أبداً.
+        const sandboxed = /^--sandbox\s+/u.test(effectiveRest)
+        if (sandboxed) {
+          if (!pluginOnNow("osSandbox")) return denied("رُفض run --sandbox: العزلُ مطفأ (plugins.osSandbox) — لا يُشغَّل الأمرُ بلا عزل.", "tool_not_permitted")
+          effectiveRest = effectiveRest.replace(/^--sandbox\s+/u, "")
+          if (/^--bg\s+/u.test(effectiveRest)) return invalid("run --sandbox لا يجتمع مع --bg — شغّله في المقدّمة.")
+        }
         const background = /^--bg\s+/u.test(effectiveRest)
         const command = background ? effectiveRest.replace(/^--bg\s+/u, "") : effectiveRest
         if (background && command.length === 0) return invalid("run --bg يحتاج أمراً")
@@ -3538,7 +3554,7 @@ const runServeShell = async (): Promise<void> => {
         if (!shellAdmission.admitted) return refused(`⚙ run ${rest}\nرُفض التنفيذ: لم تُدخِله النواة — ${shellAdmission.why}`)
         const ok = await gate(turnId, spec.effect, `تنفيذ${background ? " (خلفيّ)" : ""}: ${command}`)
         if (!ok) return denied(`⚙ run ${rest}\nرُفض التنفيذ — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
-        return runExecV(command, turnId, hooks, background, shellAdmission)
+        return runExecV(command, turnId, hooks, background, shellAdmission, sandboxed)
       }
       case "write":
         if (newProjectPending !== undefined) return denied(`رُفضت الكتابة في المشروع المختار: المستخدمُ طلب مشروعاً جديداً باسم «${newProjectPending}». أنشئه أوّلاً: نفّذ: project-create ${newProjectPending} — ثمّ اكتب فيه.`, "policy_denied")
@@ -4986,7 +5002,7 @@ const runServeShell = async (): Promise<void> => {
     shellDisclosed.add(turnId)
     await emitEvent(turnId, `🛡 أدخلت النواةُ أثرَ الشِّلّ (لا رجعةَ فيه) بإنفاذٍ ${admission.enforcement === "Partial" ? "جزئيّ" : admission.enforcement}${admission.limitations ? ` — ${admission.limitations}` : ""}؛ وكلُّ أمرٍ يُسجَّل في دفترها قبل إقلاعه ويُسوّى بخروجه.`)
   }
-  const runExecV = async (cmd: string, turnId: string, hooks: AskHooks, background = false, admission?: ShellAdmission): Promise<DispatchResultV> => {
+  const runExecV = async (cmd: string, turnId: string, hooks: AskHooks, background = false, admission?: ShellAdmission, sandbox = false): Promise<DispatchResultV> => {
     // م11 — إصلاحٌ حتميّ معلَن (لا تخمين): مسارٌ مقتبس ينتهي بـ.exe في صدر الأمر يحتاج & في PowerShell — أسقطه omni ثمّ super-120b (09-14).
     const callRepair = powershellCallOperatorRepair(cmd)
     if (callRepair !== undefined) { await emitEvent(turnId, `🔧 ${callRepair.note}`); cmd = callRepair.command }
@@ -5105,6 +5121,17 @@ const runServeShell = async (): Promise<void> => {
     }
     await discloseShellAdmission(turnId, admission)
     let shellRecord: Awaited<ReturnType<typeof beginShellEffect>>
+    // الفجوة #4 — منحُ العزل يُبنى قبل أن يبدأ الدفترُ الأثر: عزلٌ مرفوضٌ لا يبدأ شيئاً، ولا يرتدّ إلى تشغيلٍ غيرِ معزول.
+    let execution: ControlledExecutionGrant | undefined
+    let invocation: { readonly executable: string; readonly argv: readonly string[] } | undefined
+    if (sandbox) {
+      const call = sandboxInvocation(cmd, (name) => Bun.which(name), process.env.SystemRoot ?? "C:\\Windows")
+      if ("refusal" in call) return refused(`⚙ run --sandbox ${cmd}\n⛔ ${call.refusal}`)
+      invocation = call
+      const built = sandboxGrant({ helper: WINISO, manifest: WINISO_MANIFEST }, PROJECT_DIR)
+      if ("refusal" in built) return refused(`⚙ run --sandbox ${cmd}\n⛔ ${built.refusal}`)
+      execution = built.grant
+    }
     try {
       shellRecord = await beginShellEffect(ADAPTER_LEDGER, cmd, PROJECT_DIR, false)
     } catch (error) {
@@ -5114,14 +5141,16 @@ const runServeShell = async (): Promise<void> => {
     let result: Awaited<ReturnType<ReturnType<typeof runCommandTool>["run"]>>
     try {
     result = await runCommandTool(PROJECT_DIR).run({
-      executable: "powershell",
-      args: ["-NoProfile", "-Command", `$OutputEncoding=[Text.Encoding]::UTF8; ${cmd}`],
+      // داخل الصندوق: البرنامجُ محلولٌ على المضيف بمساره الكامل ووسائطُه منفصلة (sandboxInvocation) — لا PowerShell ولا PATH هناك.
+      executable: invocation?.executable ?? "powershell",
+      args: invocation !== undefined ? [...invocation.argv] : ["-NoProfile", "-Command", `$OutputEncoding=[Text.Encoding]::UTF8; ${cmd}`],
       cwd: ".",
       timeoutMs: RUN_TIMEOUT_MS,
     }, {
       dryRun: false,
       signal: hooks.signal,
       envOverlay: { PYTHONIOENCODING: "utf-8" },
+      ...(execution === undefined ? {} : { execution }),
       // البثُّ الحيّ: كان الخرجُ يُعاد عرضُه سطراً سطراً **بعد** خروج العملية،
       // فلا سبيلَ إلى تمييز بناءٍ بطيءٍ من أمرٍ معلّق. الآن يصل وهو يُكتب.
       // والإيصالُ المُجمَّع أدناه يبقى كما هو بايتاً — هذا إشعارُ تقدّمٍ لا
@@ -5186,7 +5215,7 @@ const runServeShell = async (): Promise<void> => {
           denied: output.failureClass === "isolation_refused",
           detail: result.error.slice(0, 160),
         }
-    return { output: `$ ${cmd}\n${head.join("\n")}\n${verdict}${diagnosis}`, verdict: toolVerdict }
+    return { output: `$ ${cmd}\n${sandbox ? `${SANDBOX_LINE}\n` : ""}${head.join("\n")}\n${verdict}${diagnosis}`, verdict: toolVerdict }
   }
 
   /** غلاف النصّ — يُبقى لأيّ مستدعٍ نصّيّ؛ الحكم يُسقَط هنا عمداً. */

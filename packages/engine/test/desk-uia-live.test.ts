@@ -43,7 +43,10 @@ test.skipIf(process.platform !== "win32")("desk on a real window: DPI-true scree
   const form = Bun.spawn(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script, "-Out", out], { stdout: "ignore", stderr: "pipe" })
   const truth = () => (existsSync(out) ? readFileSync(out, "utf8") : "")
   try {
-    await Bun.sleep(2500)
+    // مقيس 2026-09-27: الانتظارُ الثابت (2.5 ث) يسقط 1 من 3 تحت الحِمل حتى على الإيداع السابق — النافذةُ لم تظهر بعد.
+    // النموذجُ يكتب ملفَّ حقيقته كلَّ 150 مللي ثانية بعد أن يظهر: يُنتظر ظهورُه (حتى 20 ث) لا زمنٌ مخمَّن.
+    for (const deadline = Date.now() + 20_000; truth().length === 0 && Date.now() < deadline;) await Bun.sleep(100)
+    await Bun.sleep(300)
     // الربطُ ثمّ إعادتُه: نافذةٌ غريبةٌ تسرق المقدّمةَ وسطَ الاختبار تجعل الحارسَ يرفض بحقّ،
     // فيحمرّ المسارُ السعيد ويُقرأ عطلاً في المنتَج. الإعادةُ مرّتان بحدّ، **ومُعلَنةٌ على stderr**.
     const focusProbe = async (): Promise<DesktopBound | undefined> => {

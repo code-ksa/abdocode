@@ -25,6 +25,10 @@ const payload = path.join(desktop, "src-tauri", "payload")
 const engine = path.join(root, "packages", "engine", "dist", "abdocode.exe")
 const kernel = path.join(root, "packages", "kernel", "target", "release", "abdo-kernel.exe")
 const toolWorker = path.join(root, "packages", "kernel", "target", "release", "abdo-tool-worker.exe")
+// الفجوة #4 (2026-09-27) — خطّافُ AppContainer يُشحن مع بيان بنائه: المحرّكُ لا يثق بثنائيٍّ لا تطابق بصمتُه البيان.
+const winisoPackage = path.join(root, "packages", "windows-isolation-helper")
+const winiso = path.join(winisoPackage, "target", "release", "abdo-winiso.exe")
+const winisoManifest = path.join(winisoPackage, "helper-manifest.json")
 
 // The xterm renderer and CSS are bundled locally; no runtime CDN or remote code.
 await $`bun build ${path.join(desktop, "src", "native-terminal.js")} --target=browser --format=esm --outdir=${path.join(desktop, "ui")}`
@@ -59,6 +63,7 @@ await $`bun run --cwd ${path.join(root, "packages", "engine")} build`
 // deliberately keeps it compiled out for fail-closed library/test consumers.
 await $`cargo build --release --manifest-path ${path.join(root, "packages", "kernel", "Cargo.toml")} --bin abdo-kernel --features effectful-dispatch`
 await $`cargo build --release --manifest-path ${path.join(root, "packages", "kernel", "Cargo.toml")} --bin abdo-tool-worker`
+await $`powershell -NoProfile -ExecutionPolicy Bypass -File ${path.join(winisoPackage, "build.ps1")}`
 await $`mkdir -p ${path.join(payload, "bin")}`
 // The payload is a staging directory, not an application data directory, and
 // tauri.conf.json bundles it whole (`"resources": ["payload/**/*"]`) — so
@@ -73,6 +78,8 @@ const WRITES = [
   { file: path.join(payload, "abdocode.exe"), source: engine, staged: "abdocode.exe" },
   { file: path.join(payload, "bin", "abdo-kernel.exe"), source: kernel, staged: "bin/abdo-kernel.exe" },
   { file: path.join(payload, "bin", "abdo-tool-worker.exe"), source: toolWorker, staged: "bin/abdo-tool-worker.exe" },
+  { file: path.join(payload, "bin", "abdo-winiso.exe"), source: winiso, staged: "bin/abdo-winiso.exe" },
+  { file: path.join(payload, "bin", "helper-manifest.json"), source: winisoManifest, staged: "bin/helper-manifest.json" },
 ]
 const keep = new Set([...WRITES.map((entry) => entry.staged), "release-lessons.json"])
 // The three declared files are overwritten in place rather than deleted first:

@@ -42,6 +42,7 @@ export type PluginName =
   | "research"
   | "projectHooks"
   | "dataTable"
+  | "osSandbox"
   | "toolAvailability"
   | "overflowLadder"
   | "contextBreakdown"
@@ -225,6 +226,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     name: "dataTable",
     label: "تحليلُ البيانات",
     description: "أداةُ table: جدولٌ من ملفّ CSV/TSV/JSON في المشروع أو من مرفقٍ باسمه (@اسم) ⇦ ملفٌّ تعريفيّ (صفوف، أعمدة، أنواع، فراغ، أدنى/أعلى/متوسّط/وسيط/مجموع، أكثرُ القيم) أو تجميعٌ محسوب (--group و--sum/--avg/--count/--min/--max/--median و--where). الأرقامُ بالكود لا بتخمين النموذج، والأرقامُ العربيّة والفواصل والعملات تُقرأ. قراءةٌ محصورةٌ بالمشروع بسقف 25 ميغابايت. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // الفجوة #4 من جدول 2026-09-27 — العزلُ على مستوى النظام. مفعَّل: لا يعمل إلّا بطلبٍ صريح (run --sandbox).
+  Object.freeze({
+    name: "osSandbox",
+    label: "العزلُ على مستوى النظام",
+    description: "run --sandbox <أمر> يشغّل الأمرَ داخل AppContainer في ويندوز بلا أيّ قدرة: لا شبكة، ولا وصولَ إلى ملفّات المستخدم (الخزنة وSSH وملفُّه الشخصيّ)، ومجلّدُ المشروع وحده مفتوح — لتشغيل كود مستودعٍ لا تثق به. خطّافُ العزل موثَّقٌ ببصمته، ويُرفض الأمرُ باسمه إن تعذّر العزل ولا يُشغَّل بلاه أبداً. المعطَّل = يُرفض --sandbox. يسري فوراً.",
     defaultOn: true,
     applies: "immediate",
     site: "call",
