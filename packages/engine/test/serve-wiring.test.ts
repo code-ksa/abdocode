@@ -161,7 +161,7 @@ describe("serve convergence wiring", () => {
     const declared = PLUGINS.filter((d) => d.meta !== true)
     expect(declared.map((d) => d.name)).toEqual([
       // البند 13 (2026-09-27) — مسبارُ المفتاح أوّلُ اللوحة.
-      "providerProbe", "toolAvailability", "overflowLadder", "contextBreakdown", "emptyGuard", "denialBreaker", "unattendedDeny", "standingGrants", "inboundGuard", "mcpClient", "delegation", "reviewer", "activity", "terminalPanel", "serversPanel", "tasksPanel", "walls", "verifier", "toolVerdict",
+      "providerProbe", "toolAvailability", "overflowLadder", "contextBreakdown", "emptyGuard", "verifyAfterEdit", "denialBreaker", "unattendedDeny", "standingGrants", "inboundGuard", "mcpClient", "delegation", "reviewer", "activity", "terminalPanel", "serversPanel", "tasksPanel", "walls", "verifier", "toolVerdict",
       "miner", "readCompaction", "trailCompaction", "cacheAccounting", "resumeIntent", "turnBudget", "receiptFixtures",
       "intentField", "approvalTakeover", "trajectory", "deliverables", "secretIntake",
       // S13.1/S13.2 — صفّا الوعي يُلحقان في الذيل ولا يزحزحان ما قبلهما.
@@ -184,7 +184,7 @@ describe("serve convergence wiring", () => {
         // والخوادمُ تغيّر **عمرَ العمليات**، وما يغيّر سلوكاً يبدأ مطفأً.
         + ", terminalPanel: true, serversPanel: false, tasksPanel: true"
         // البند 13 (2026-09-27): المسبارُ التلقائيّ يُنفق توكنات فيبدأ مطفأً.
-        + ", providerProbe: false, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false").split(", ").sort(),
+        + ", providerProbe: false, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true").split(", ").sort(),
     )
     // ولا صفَّ ثابتاً بقي في القشرة: الصفوف عُقدٌ تُبنى من الإطار، والاستعادة تُحسب من الأوصاف.
     expect(desktopUi).toContain('<div id="pluginrows"></div>')

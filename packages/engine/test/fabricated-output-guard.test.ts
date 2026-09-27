@@ -70,4 +70,11 @@ describe("fabricated output guard", () => {
     // إيصالٌ مقصوصٌ بعلامة قصّ يغطّي سطراً يبدأ به — القصُّ من الإيصال لا من النموذج.
     expect(fabricatedOutputSignals(real, [`${real.slice(0, 50)}…`])).toEqual([])
   })
+  test("09-27: a real multi-line write echoed by the loop as «⚙ write f <<<» is covered by its own command — a forged one is not", () => {
+    const write = "write sum.js <<<\nmodule.exports = (a, b) => a + b"
+    const echoed = "⚙ write sum.js <<<\nmodule.exports = (a, b) => a + b\nDone."
+    expect(fabricatedOutputSignals(echoed, ["✍ sum.js — ok"], [write])).toEqual([])
+    // التوأم: الصدى نفسُه بلا أمرٍ منفَّذ ما زال يُسمّى.
+    expect(fabricatedOutputSignals(echoed, ["✍ sum.js — ok"], [])).toEqual(["⚙ write sum.js <<<"])
+  })
 })

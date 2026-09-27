@@ -3722,6 +3722,12 @@ const pluginTranslations = {
 "englishLabel": "Hide tools whose prerequisite is missing",
 "englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
   },
+"verifyAfterEdit": {
+"label": "التحقّق بعد التعديل",
+"description": "إن عدّل الوكيلُ شيفرةً في مشروعٍ له أمرُ اختبارٍ معرَّف (package.json أو pytest أو Cargo) ثمّ أعلن الإكمال قبل أن تنجح الاختباراتُ بعد آخر تعديل، يشغّلها المضيفُ بنفسه ويعيد خرجَها إليه ليصلح — حتى ثلاث مرّات، ثمّ يتوقّف الدورُ صادقاً بدل «مكتمل». تعديلُ التوثيق وحده لا يستدعيها. المعطَّل = لا تُشغَّل الاختباراتُ إلّا إن طلبها نصُّ المهمّة. يسري من الدور التالي.",
+"englishLabel": "Verify after editing",
+"englishDescription": "If the agent edits code in a project that defines a test command (package.json, pytest or Cargo) and then declares it is done before the tests pass after its last edit, the host runs them itself and hands the output back so the model can fix it — up to three times, after which the turn stops honestly instead of reporting complete. Documentation-only edits do not trigger it. Disabled means tests run only when the task text asks for them. Applies from the next turn."
+  },
 "emptyGuard": {
 "label": "محاولةٌ ثانية للردّ الفارغ",
 "description": "حين يردّ النموذج فراغاً بلا جوابٍ ولا أداة يُعاد النداء مرّةً واحدة بتنبيهٍ قصير قبل أن يتوقّف الدور باسمه. المعطَّل = يتوقّف الدور فوراً بسببٍ مسمّى («ردّ النموذج فراغاً») ولا يُعاد السياق. في الحالتين لا يُحسب الفراغُ إنجازاً. يسري من الدور التالي.",

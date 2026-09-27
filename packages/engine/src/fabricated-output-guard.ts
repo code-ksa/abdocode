@@ -63,6 +63,10 @@ export function fabricatedOutputSignals(modelText: string, receiptOutputs: reado
   for (const command of executedCommands) {
     const digest = lineDigest(`⚙ ${command}`)
     if (digest.length > 0) covered.add(digest)
+    // مقيس 2026-09-27: الحلقةُ تكتب الأمرَ متعدّدَ الأسطر («write f <<<» ومحتواه) سطراً سطراً بعد «⚙»، فالبصمةُ الكاملة
+    // لا تطابق سطرَه الأوّل — فكان كلُّ «تمّ» بعد كتابةٍ حقيقيّة يُردّ «إيصالاً مختلَقاً» ويكلّف نداءً. سطرُه الأوّلُ مغطّى بالأمر نفسِه.
+    const head = lineDigest(`⚙ ${command.split(/\r?\n/u, 1)[0] ?? ""}`)
+    if (head.length > 0) covered.add(head)
   }
   const truncatedPrefixes: string[] = []
   const receiptText = receiptOutputs.map((o) => lineDigest(o)).join("\n")

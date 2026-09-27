@@ -7,6 +7,7 @@ import { renderLedgerLine } from "../src/token-budget"
 import { exposureLine } from "../src/tool-exposure"
 import { hiddenToolsLine } from "../src/tool-availability"
 import { contextBreakdownLine, overflowLine } from "../src/context-window"
+import { verifyDemandLine, verifyGaveUpLine } from "../src/verify-after-edit"
 import { renderTurnBudgetLine, TurnSpendMeter } from "../src/turn-budget"
 import { describeWorkProfile, workProfile } from "../src/work-mode"
 import { engineLineForDisplay, engineOutputForDisplay, providerLabelsForDisplay, readWhenForDisplay } from "../../desktop/ui/engine-lines.js"
@@ -40,6 +41,9 @@ test("the engine's own generators render fully in English, and unchanged in Arab
     overflowLine(60000, 48000, 49152, 3, 9000, 2),
     overflowLine(52000, 47000, 49152, 0, 0, 1),
     overflowLine(6300, 4500, 5616, 1, 1900, 0),
+    verifyDemandLine("npm test", false),
+    verifyDemandLine("python -m pytest -q", true),
+    verifyGaveUpLine("cargo test", 3),
     renderLedgerLine({ calls: 3, inputTokens: 900, cachedInputTokens: 300, outputTokens: 50, effectiveTokens: 700, cacheHitRate: 1 / 3 }, 100_000),
     renderTurnBudgetLine(meter.snapshot(), 1),
     verdicts.line(1),

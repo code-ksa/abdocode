@@ -27,6 +27,11 @@ const EXACT = [
     () => "⚠ The model replied with nothing — no answer and no tool. The same context is not sent to it again; pick another model from the model chip, or retry."],
   [/^↻ ردٌّ فارغ من النموذج — يُعاد النداء مرّةً واحدة بتنبيه \(plugins\.emptyGuard\)$/u,
     () => "↻ The model replied with nothing — asking once more with a nudge (plugins.emptyGuard)"],
+  // التحقّقُ بعد التعديل (verify-after-edit.ts) — الأمرُ بين «» يبقى كما هو.
+  [/^↻ التحقّق بعد التعديل \(plugins\.verifyAfterEdit\): عُدّلت شيفرةٌ في مشروعٍ له اختبارات، و(لم تُشغَّل بعد|آخرُ تشغيلٍ لها فشل أو سبق التعديلَ الأخير) — يشغّل المضيفُ «(.+)» الآن ويعيد خرجَها\.$/u,
+    (m) => `↻ Verify after editing (plugins.verifyAfterEdit): code was edited in a project with tests, and ${m[1] === "لم تُشغَّل بعد" ? "they have not run yet" : "their last run failed or came before the last edit"} — the host runs «${m[2]}» now and returns the output.`],
+  [/^⚠ التحقّق بعد التعديل: «(.+)» لم ينجح بعد آخر تعديل رغم (\d+) تشغيلات — لا يُعلَن الإكمال\. أصلح الاختبارات أو أطفئ plugins\.verifyAfterEdit إن كان فشلُها سابقاً للتعديل\.$/u,
+    (m) => `⚠ Verify after editing: «${m[1]}» still fails after the last edit despite ${m[2]} runs — the task is not declared complete. Fix the tests, or turn off plugins.verifyAfterEdit if they were failing before the edit.`],
   [/^قرأت النواةُ الملفَّ وتحقّقت منه — بصمة المحتوى (\S+)… والأطوار السبعة في دفتر النواة \(صفوفه الآن: (\d+)\)\.$/u,
     (m) => `The kernel read and verified the file — content digest ${m[1]}…, all seven phases in the kernel ledger (rows now: ${m[2]}).`],
   [/^…\[قُصّ: عُرض (\d+) من (\d+) حرفاً\]$/u, (m) => `…[clipped: showing ${m[1]} of ${m[2]} characters]`],

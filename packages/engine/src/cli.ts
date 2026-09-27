@@ -166,6 +166,7 @@ import { buildReviewPrompt, judgeReview, parseReviewFindings, renderReviewReport
 import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"
 import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./tool-availability"
 import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
+import { editsCode, isProjectTestRun, projectTestCommand, VERIFY_AFTER_EDIT_RUNS, verifyDemandLine, verifyGaveUpLine } from "./verify-after-edit"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
 import { railProfile, type RailProfile, type RailSetting } from "./rail-policy"
@@ -6663,7 +6664,13 @@ const runServeShell = async (): Promise<void> => {
       // هدفٍ كانت تطابق (قيس 2026-09-02: إيدو جلوبال).
       const requiresNpmAudit = !planningOnly && /(?:next\.?js|(?<![\p{L}\w])p?npm(?![\w])|(?<![\p{L}])موقع(?![\p{L}]))/iu.test(effectiveGoal)
       const requiresTests = !planningOnly && goalRequiresTests(effectiveGoal)
-      const isTestCommand = (command: string) => /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:run\s+)?test|bun\s+(?:run\s+)?test|node\s+--test)\b/iu.test(command)
+      // التحقّقُ بعد التعديل (plugins.verifyAfterEdit، 2026-09-27) — يُشعله مسُّ الشيفرة في مشروعٍ له أمرُ اختبار،
+      // لا كلمةُ «test» في الطلب. الأمرُ من القرص (package.json/pytest/Cargo) لا من النموذج.
+      const verifyTestCommand = !planningOnly && plugins.read("verifyAfterEdit", "turn") ? projectTestCommand(PROJECT_DIR) : undefined
+      let codeEditedThisTurn = false
+      let verifyRuns = 0
+      // الاختباراتُ نفسُها تُعرف بأمرٍ واحد في البوّابتين (cargo test وpytest معها الآن).
+      const isTestCommand = isProjectTestRun
       const isBuildCommand = (command: string) => /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:run\s+)?build|bun\s+run\s+build|cargo\s+build)\b/iu.test(command)
       const isTypecheckCommand = (command: string) => /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:run\s+)?typecheck|bun\s+run\s+typecheck|(?:npx\s+)?tsc\s+--noEmit|cargo\s+check)\b/iu.test(command)
       const isAuditCommand = (command: string) => /^run\s+(?:npm|pnpm|yarn|bun)\s+audit(?:\s|$)/iu.test(command)
@@ -6677,11 +6684,12 @@ const runServeShell = async (): Promise<void> => {
       const gateTracks: Record<"build" | "typecheck" | "tests" | "audit", GateTrack> = { build: { ran: false, passed: false }, typecheck: { ran: false, passed: false }, tests: { ran: false, passed: false }, audit: { ran: false, passed: false } }
       const gateEvidence = (output: string): string => output.trim().slice(-160)
       const currentGateReceipts = () => gateReceipts(
-        { build: requiresBuild, typecheck: requiresTypecheck, tests: requiresTests, audit: requiresNpmAudit && existsSync(join(PROJECT_DIR, "package.json")) },
+        { build: requiresBuild, typecheck: requiresTypecheck, tests: requiresTests || (verifyTestCommand !== undefined && codeEditedThisTurn), audit: requiresNpmAudit && existsSync(join(PROJECT_DIR, "package.json")) },
         gateTracks,
       )
       const gateReceiptOf = (gate: "build" | "typecheck" | "tests" | "audit") => currentGateReceipts().find((r) => r.gate === gate) ?? { gate, state: "unverified" as const }
       const invalidateAcceptanceFor = (command: string) => {
+        if (editsCode(command)) codeEditedThisTurn = true
         if (/^(?:write|edit|patch)\b/iu.test(command) || /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update)\b/iu.test(command)) {
           successfulTypecheck = false
           successfulBuild = false
@@ -7269,6 +7277,19 @@ const runServeShell = async (): Promise<void> => {
           acceptanceStalls = loop.commands.length === 0 ? acceptanceStalls + 1 : 0
           await emitEvent(turn.id, `↻ شرط الاختبارات: ${gateShortfall(gateReceiptOf("tests"))}؛ ${continuationHint}`)
           if (acceptanceStalls >= 2) break
+          continue
+        }
+        // التحقّقُ بعد التعديل: الإعلانُ «تمّ» بعد مسّ الشيفرة لا يُقبل قبل أن تنجح اختباراتُ المشروع **بعد آخر تعديل**.
+        // المضيفُ يشغّلها بنفسه (pending ⇦ فحصُ القبول في الحقبة التالية، بالبوّابة والموافقة نفسِهما) — لا يُرجى النموذجُ أن يتذكّر.
+        if (loop.stopReason === "complete" && !requiresTests && verifyTestCommand !== undefined && codeEditedThisTurn && !successfulTests) {
+          lastStop = "acceptance-pending"
+          if (verifyRuns >= VERIFY_AFTER_EDIT_RUNS) {
+            await emitEvent(turn.id, verifyGaveUpLine(verifyTestCommand, verifyRuns))
+            break
+          }
+          await emitEvent(turn.id, verifyDemandLine(verifyTestCommand, verifyRuns > 0))
+          verifyRuns += 1
+          pending = `run ${verifyTestCommand}`
           continue
         }
         if (loop.stopReason === "complete" && requiresNpmAudit && !successfulAudit && existsSync(join(PROJECT_DIR, "package.json"))) {

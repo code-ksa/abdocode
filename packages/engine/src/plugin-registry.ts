@@ -37,6 +37,7 @@ export type PluginName =
   | "denialBreaker"
   | "providerProbe"
   | "emptyGuard"
+  | "verifyAfterEdit"
   | "toolAvailability"
   | "overflowLadder"
   | "contextBreakdown"
@@ -165,6 +166,18 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     label: "محاولةٌ ثانية للردّ الفارغ",
     description: "حين يردّ النموذج فراغاً بلا جوابٍ ولا أداة يُعاد النداء مرّةً واحدة بتنبيهٍ قصير قبل أن يتوقّف الدور باسمه. المعطَّل = يتوقّف الدور فوراً بسببٍ مسمّى («ردّ النموذج فراغاً») ولا يُعاد السياق. في الحالتين لا يُحسب الفراغُ إنجازاً. يسري من الدور التالي.",
     defaultOn: false,
+    applies: "next-turn",
+    site: "turn",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // ميزةُ ذكاءٍ مقيسة (2026-09-27) — التحقّقُ بعد التعديل. مفعَّلٌ لأنّه يمنع تسليمَ شيفرةٍ مكسورة بصمت، ومحدودٌ
+  // بثلاث تشغيلات، ولا يعمل في مشروعٍ بلا أمرِ اختبارٍ معرَّف.
+  Object.freeze({
+    name: "verifyAfterEdit",
+    label: "التحقّق بعد التعديل",
+    description: "إن عدّل الوكيلُ شيفرةً في مشروعٍ له أمرُ اختبارٍ معرَّف (package.json أو pytest أو Cargo) ثمّ أعلن الإكمال قبل أن تنجح الاختباراتُ بعد آخر تعديل، يشغّلها المضيفُ بنفسه ويعيد خرجَها إليه ليصلح — حتى ثلاث مرّات، ثمّ يتوقّف الدورُ صادقاً بدل «مكتمل». تعديلُ التوثيق وحده لا يستدعيها. المعطَّل = لا تُشغَّل الاختباراتُ إلّا إن طلبها نصُّ المهمّة. يسري من الدور التالي.",
+    defaultOn: true,
     applies: "next-turn",
     site: "turn",
     wired: true,
