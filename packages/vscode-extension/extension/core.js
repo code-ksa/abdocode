@@ -5,7 +5,9 @@
 // the extension only chooses the project, the mode and the timeout, then reads the JSON summary.
 "use strict"
 
-const path = require("node:path")
+// These are the desktop app's Windows locations (LOCALAPPDATA, APPDATA): built with path.win32 on every OS, so the
+// result is the same wherever it is computed (measured: CI on Linux joined them with "/").
+const path = require("node:path").win32
 
 /** Where the engine may be, in order: the user's setting, then the desktop app's per-user and machine installs. */
 function engineCandidates(env, configured) {
