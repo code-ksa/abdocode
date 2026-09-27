@@ -48,12 +48,12 @@ import { Database } from "bun:sqlite"
 import { readFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, statSync, renameSync, rmSync } from "node:fs"
 import { companionFiles, ledgerUnreadable, quarantineName, quarantineNotice } from "./ledger-quarantine"
 import { fabricatedImage, looksLikeShot } from "./fabricated-artifact-guard"
-import { lineEndingViolation } from "./line-ending-guard"
+import { keepLineEndings, keptLineEndingsLine, lineEndingViolation } from "./line-ending-guard"
 import { negativeOnlySuite } from "./negative-only-suite"
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { createHash, timingSafeEqual } from "node:crypto"
 import { stackStatus } from "./stack"
-import { install as installEgressGuard } from "@abdo/egress"
+import { allow as allowEgress, install as installEgressGuard } from "@abdo/egress"
 import type { HarnessToolDefinition, ModelMessage } from "@abdo/harness"
 import { CHAT_SYSTEM, acceptsImages, conversationMode, resolveAttachments, type ConversationMode, type ResolvedAttachments } from './conversation-attachments'
 import { BoundedWireDecoder, classifyModelFailure } from "@abdo/model-gateway"
@@ -109,7 +109,7 @@ import { RELEASE_LESSONS_APPLIED_FILE, RELEASE_LESSONS_FILE, applyReleaseLessons
 import { windowAllowedByTask } from "./desktop-name-gate"
 import { fileEditAllowedByTurn, scopeKey } from "./turn-scope-gate"
 import { bridgeCallArgs, parseBrowserAction, uploadPathVerdict } from "./browser-actions-args"
-import { goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck } from "./acceptance-goal-words"
+import { goalAsksForTestWork, goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck } from "./acceptance-goal-words"
 import { surfaceVerdict } from "./surface-receipt-verdict"
 import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
 import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, normalizeArabic, parseGateMode, type GateDecision } from "./front-gate"
@@ -166,6 +166,7 @@ import { buildReviewPrompt, judgeReview, parseReviewFindings, renderReviewReport
 import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"
 import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./tool-availability"
 import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
+import { formatKeyless, KEYLESS_HOST, KEYLESS_SOURCE, keylessSearchUrl, parseKeylessResults } from "./mind/keyless-search"
 import { editsCode, isProjectTestRun, projectTestCommand, VERIFY_AFTER_EDIT_RUNS, verifyDemandLine, verifyGaveUpLine } from "./verify-after-edit"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
@@ -1842,7 +1843,10 @@ const askOnce = async (
     })
   // البند 12 — البحثُ بلا مفتاحَي PSE يُقال كما هو: يفتح المتصفّح فقط، والقراءةُ بـopen/page — لا وعدَ بنتائج منظّمة.
   if (!searchReady) toolDefinitions = toolDefinitions.map((definition) => definition.legalName !== "search" ? definition
-    : Object.freeze({ ...definition, description: "بحث Google بلا مفتاح PSE في الخزنة: يفتح صفحةَ النتائج في متصفّح عبدو فقط ولا يعيد نتائجَ منظّمة — اقرأها بـopen ثمّ page." }))
+    : Object.freeze({ ...definition, description: pluginOnNow("keylessSearch")
+      // الفجوة #1 (2026-09-27): بلا مفتاح تعود نتائجُ منظّمة من DuckDuckGo — الوصفُ يقول ما يحدث فعلاً.
+      ? "بحث ويب بلا مفتاح عبر DuckDuckGo: يعيد حتى 10 نتائج (عنوان ورابط ومقتطف)؛ اقرأ صفحةً بـopen <الرابط> ثمّ page. الصورُ تحتاج مفتاح PSE."
+      : "بحث Google بلا مفتاح PSE في الخزنة: يفتح صفحةَ النتائج في متصفّح عبدو فقط ولا يعيد نتائجَ منظّمة — اقرأها بـopen ثمّ page." }))
   // S13.5 (الثغرة المقيسة «ب») — أدواتُ المزوّدين الخارجيّين الموصولين كانت
   // تُوزَّع ولا تُعلَن قطّ. تُلحق هنا بالكتالوج نفسه بأسمائها المنسوبة، وتمرّ
   // بسقف الوكيل كغيرها (وكيلٌ لا يعلن اسمها لا يراها).
@@ -3120,6 +3124,10 @@ const runServeShell = async (): Promise<void> => {
     // البصمةُ التي تُقارَن قبل الكتابة، فما تغيّر بين القرار والأثر لا يُمحى بصمت.
     const diskBefore = existsSync(checked.abs) ? readFileSync(checked.abs, "utf-8") : undefined
     const baseline = word === "write" ? diskBefore : before
+    // الملفُّ القائمُ النقيُّ النهاية يبقى عليها (مقيس 2026-09-27: write حوّل ملفّاً نقيَّ CRLF إلى LF ست مرّاتٍ بصمت).
+    // قبل المحو والبصمة والفرق والبوّابة: ما يراه المشغّلُ ويوافق عليه هو ما يُكتب.
+    const eolKept = keepLineEndings(diskBefore, after)
+    after = eolKept.text
     // م11 — كتابةٌ تمحو الملفّ (مقيس 09-14: omni ترك سطراً واحداً من ٥٫٥ك) تُرفض بحسب صرامة القضبان ما لم تُعلَن النيّة.
     const shrink = shrinkViolation(diskBefore, after, railTier, shrinkIntended)
     if (shrink !== undefined) return refused(shrink.why)
@@ -3165,7 +3173,10 @@ const runServeShell = async (): Promise<void> => {
     // 🔴 وسطرٌ واحدٌ بنهايةٍ خاطئة يجعل فرقَ Git بحجم الملفّ ويكسر كلَّ مسمارٍ يُرسي على
     // نهاية سطر. الشجرةُ مختلطةٌ بالضرورة، فالحكمُ يقارن ما كان بما صار: يمنع **الخلط**
     // لا اختيارَ النهاية.
-    const eolWarning = r.verdict?.ok === true ? lineEndingViolation(target, after, before) : undefined
+    // خطُّ الأساس من القرص: `before` فارغٌ لـ`write` فكان التحذيرُ يحسب كلَّ استبدالٍ ملفّاً جديداً ويسكت.
+    const eolWarning = r.verdict?.ok !== true ? undefined
+      : eolKept.style !== undefined ? keptLineEndingsLine(target, eolKept.style, eolKept.converted)
+      : lineEndingViolation(target, after, diskBefore)
     // 🔴 وصورةٌ تُكتب بأبعادٍ تافهةٍ إيهامٌ بمُسلَّم: مقيسٌ حرفيّاً أنّ الوكيل — بعد أن رُفض
     // المضيفُ في حارس الخروج، ورُفض التقاطُ الصفحة بلا سطح — كتب PNG بحجم 1×1 من base64
     // مكانَ لقطةٍ مطلوبة. كلُّ فحصٍ يسأل «هل الملفُّ موجود؟» يمرّ عليها. يُقال ولا يُمنع:
@@ -3727,6 +3738,19 @@ const runServeShell = async (): Promise<void> => {
           if (shellKind === "desktop") emit({ kind: "browse", url })
           // بلا مفتاحَي PSE لا يُطلب العاملُ نداءً سيفشل حتماً (مقيس 09-27: رحلةٌ كاملة ثمّ «تعذّرت») — البديلُ فوراً.
           if (!googleSearchReady()) {
+            // الفجوة #1 (2026-09-27) — بلا مفتاح: DuckDuckGo عبر محوّل النواة (DNS/SSRF والدفتر)، ونتائجُ منظّمة حتميّة.
+            if (pluginOnNow("keylessSearch") && request.kind !== "image") {
+              let input: import("./mind/google-search").GoogleSearchRequest
+              try { input = GoogleSearch.normaliseRequest(request) } catch (cause) { return invalid(String(cause instanceof Error ? cause.message : cause)) }
+              // مقيس حيّاً 2026-09-27: حارسُ الخروج رفضها «destination was never declared» — صواباً؛ فتُعلَن هنا وحدها، بعد البوّابة
+              // ولحظةَ الطلب الصريح (سابقةُ project-templates). ولا تُفتح وجهةٌ غيرها: fetch إلى مواقع النتائج يبقى مرفوضاً، والقراءةُ بـopen.
+              allowEgress(KEYLESS_HOST, "keyless web search — explicitly invoked search tool (plugins.keylessSearch)")
+              const fetched = await runAdapterV("network", "network_fetch", { url: keylessSearchUrl(input.query, input.site) }, `search_${turnId}_${nextToolSeq()}`, hooks.signal)
+              const items = fetched.verdict?.ok === false ? [] : parseKeylessResults(fetched.output, input.count!)
+              if (items.length > 0) return okText(formatKeyless(input.query, items))
+              const why = fetched.verdict?.ok === false ? fetched.output.split("\n", 1)[0]!.slice(0, 200) : "الصفحةُ بلا نتائج مقروءة"
+              return { output: `تعذّر البحثُ بلا مفتاح (${KEYLESS_SOURCE}): ${why}\nالبديل: نفّذ: open ${url} ثمّ نفّذ: page`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "keyless_search_empty" } }
+            }
             return { output: `فُتح البحث في المتصفّح؛ لا مفتاحَ بحثٍ منظّم (PSE) في الخزنة فلا نتائجَ منظّمة.\nالبديلُ بلا مفتاح: نفّذ: open ${url} ثمّ نفّذ: page`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "google_pse_not_configured" } }
           }
           try {
@@ -6668,6 +6692,11 @@ const runServeShell = async (): Promise<void> => {
       // لا كلمةُ «test» في الطلب. الأمرُ من القرص (package.json/pytest/Cargo) لا من النموذج.
       const verifyTestCommand = !planningOnly && plugins.read("verifyAfterEdit", "turn") ? projectTestCommand(PROJECT_DIR) : undefined
       let codeEditedThisTurn = false
+      // مقيس حيّاً 2026-09-27: «Find the Bun test runner documentation» — بحثٌ بلا تعديل في مشروعٍ بلا اختبارات — أشعل بوّابةَ
+      // الاختبارات بكلمة «test» فطالبت بـnpm test ولم يكتمل الدورُ أبداً. الشرطُ ينطبق حين يُمسّ الكودُ أو يعرّف المشروعُ أمرَ اختبار.
+      // والطلبُ الذي يكلّف بعملٍ على الاختبارات («اكتب اختبارات»، «run the tests») يبقى شرطاً ولو لم يُكتب شيءٌ بعد — نموذجٌ كسولٌ لا يُعفى.
+      const testsApplicable = (): boolean => codeEditedThisTurn || goalAsksForTestWork(effectiveGoal) || projectTestCommand(PROJECT_DIR) !== undefined
+      let testsNotApplicableSaid = false
       let verifyRuns = 0
       // الاختباراتُ نفسُها تُعرف بأمرٍ واحد في البوّابتين (cargo test وpytest معها الآن).
       const isTestCommand = isProjectTestRun
@@ -6684,7 +6713,7 @@ const runServeShell = async (): Promise<void> => {
       const gateTracks: Record<"build" | "typecheck" | "tests" | "audit", GateTrack> = { build: { ran: false, passed: false }, typecheck: { ran: false, passed: false }, tests: { ran: false, passed: false }, audit: { ran: false, passed: false } }
       const gateEvidence = (output: string): string => output.trim().slice(-160)
       const currentGateReceipts = () => gateReceipts(
-        { build: requiresBuild, typecheck: requiresTypecheck, tests: requiresTests || (verifyTestCommand !== undefined && codeEditedThisTurn), audit: requiresNpmAudit && existsSync(join(PROJECT_DIR, "package.json")) },
+        { build: requiresBuild, typecheck: requiresTypecheck, tests: (requiresTests && testsApplicable()) || (verifyTestCommand !== undefined && codeEditedThisTurn), audit: requiresNpmAudit && existsSync(join(PROJECT_DIR, "package.json")) },
         gateTracks,
       )
       const gateReceiptOf = (gate: "build" | "typecheck" | "tests" | "audit") => currentGateReceipts().find((r) => r.gate === gate) ?? { gate, state: "unverified" as const }
@@ -7271,7 +7300,10 @@ const runServeShell = async (): Promise<void> => {
           if (acceptanceStalls >= 2) break
           continue
         }
-        if (loop.stopReason === "complete" && requiresTests && !successfulTests) {
+        if (loop.stopReason === "complete" && requiresTests && !successfulTests && !testsApplicable()) {
+          if (!testsNotApplicableSaid) await emitEvent(turn.id, "↻ شرطُ الاختبارات لا ينطبق: لم تُعدَّل شيفرةٌ في هذا الدور والمشروعُ بلا أمرِ اختبار — كلمةُ «test» في الطلب ليست تكليفاً؛ لا يُختلق اختبارٌ لإرضاء البوّابة.")
+          testsNotApplicableSaid = true
+        } else if (loop.stopReason === "complete" && requiresTests && !successfulTests) {
           lastStop = "acceptance-pending"
           continuationHint = "لا يوجد إيصال اختبارات غير فارغة ناجحة. افحص إعداد الاختبارات وأصلح السبب، واكتب الاختبارات المطلوبة وشغل npm test -- --run ثم واصل الهدف."
           acceptanceStalls = loop.commands.length === 0 ? acceptanceStalls + 1 : 0

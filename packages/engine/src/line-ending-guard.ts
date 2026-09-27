@@ -67,3 +67,30 @@ export function lineEndingViolation(file: string, after: string, before?: string
 }
 
 const label = (style: EolStyle): string => (style === "crlf" ? "CRLF" : style === "lf" ? "LF" : style === "mixed" ? "مختلطة" : "بلا أسطر")
+
+/**
+ * **الملفُّ يبقى على نهايته — بالفعل لا بالقول** (مقيس حيّاً 2026-09-27، مختبر م8 على نموذجٍ محلّيّ 9B):
+ * `write` استبدل ملفّاً نقيَّ CRLF — والمهمّةُ تقول بنصّها «هذا الملفُّ CRLF، يبقى كذلك» — بمحتوى LF، ست مرّات،
+ * ولم يقل أحدٌ شيئاً: التحذيرُ أعلاه كان يُنادى بـ`before` الفارغ لـ`write` فيحسبه ملفّاً جديداً. ونموذجٌ صغير لا
+ * يملك التحكّمَ في `\r` داخل نصّه أصلاً. فالمضيفُ يحفظها: ملفٌّ قائمٌ **نقيّ** النهاية تُحوَّل كتابتُه إليها ويُقال كم.
+ * الملفُّ الجديد والمختلطُ لا يُمسّان (لا اصطلاحَ يُحفظ)، والتحويلُ المقصودُ للملفّ كلِّه له أداتُه الصريحة.
+ */
+export function keepLineEndings(before: string | undefined, after: string): { readonly text: string; readonly converted: number; readonly style?: "crlf" | "lf" } {
+  if (before === undefined) return { text: after, converted: 0 }
+  // والسطرُ الأخيرُ كذلك: بروتوكولُ النصّ يقصّ ما بعد المحتوى (`body.trim()`) فكان كلُّ استبدالٍ يُسقط سطرَ النهاية
+  // («No newline at end of file» في كلّ فرق). ملفٌّ قائمٌ انتهى بسطرٍ يبقى كذلك، بنهايته هو.
+  if (after.length > 0 && !after.endsWith("\n") && before.endsWith("\n")) after += before.endsWith("\r\n") ? "\r\n" : "\n"
+  const was = readEol(before)
+  if (was.style === "crlf") {
+    const lone = readEol(after).lone
+    return lone === 0 ? { text: after, converted: 0 } : { text: after.replace(/\r?\n/gu, "\r\n"), converted: lone, style: "crlf" }
+  }
+  if (was.style === "lf") {
+    const crlf = readEol(after).crlf
+    return crlf === 0 ? { text: after, converted: 0 } : { text: after.replace(/\r\n/gu, "\n"), converted: crlf, style: "lf" }
+  }
+  return { text: after, converted: 0 }
+}
+
+export const keptLineEndingsLine = (file: string, style: "crlf" | "lf", converted: number): string =>
+  `ℹ «${file}»: الملفُّ نقيُّ ${label(style)} فبقي كذلك — حُوّل ${converted} سطراً من محتوى كتابتك إلى ${label(style)}. لتحويل الملفّ كلِّه عمداً استعمل أداةً صريحة.`

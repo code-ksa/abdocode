@@ -38,6 +38,7 @@ export type PluginName =
   | "providerProbe"
   | "emptyGuard"
   | "verifyAfterEdit"
+  | "keylessSearch"
   | "toolAvailability"
   | "overflowLadder"
   | "contextBreakdown"
@@ -180,6 +181,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     defaultOn: true,
     applies: "next-turn",
     site: "turn",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // الفجوة #1 من جدول 2026-09-27 — بحثٌ بلا مفتاح. مفعَّل: الاستعلامُ نفسُه كان يذهب إلى Google في المتصفّح.
+  Object.freeze({
+    name: "keylessSearch",
+    label: "بحثٌ بلا مفتاح",
+    description: "بلا مفتاحَي Google PSE يعيد search نتائجَ منظّمة (عنوان ورابط ومقتطف، حتى 10) من DuckDuckGo عبر محوّل الشبكة في النواة — فحصُ DNS/SSRF والأثرُ في الدفتر، والاستعلامُ يُرسل إلى DuckDuckGo. الصورُ تحتاج PSE. المعطَّل = بلا مفتاح يفتح search المتصفّحَ فقط ويقرأ النموذجُ الصفحةَ بنفسه. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
     wired: true,
     requiresVault: Object.freeze([]),
   }),

@@ -15,10 +15,13 @@ import {
 } from "@abdo/tools"
 import { resolveInWorkspace } from "./workspace"
 import { stripChildEnv } from "@abdo/tools/env-strip"
+import { readableHtml } from "./readable-html"
 
 const OUTPUT_BYTES = 64 * 1024
 const NETWORK_BYTES = 512 * 1024
 const NETWORK_TEXT = 4_000
+// صفحةُ HTML تُقصّ بعد أن تصير نصّاً مقروءاً (2026-09-27): 4000 محرفٍ من الخام كانت رأسَ الصفحة وأنماطَها.
+const HTML_TEXT = 16_000
 const NETWORK_TIMEOUT_MS = 15_000
 const DNS_TIMEOUT_MS = 4_000
 const MAX_REDIRECTS = 3
@@ -384,9 +387,12 @@ export function networkFetchTool(options: AdapterOptions = {}): ToolDefinition {
         }
         const body = await readBounded(response)
         const decoded = new TextDecoder("utf-8", { fatal: false }).decode(body.bytes)
-        const text = decoded.slice(0, NETWORK_TEXT)
-        const truncated = body.truncated || decoded.length > text.length
-        const output = { url: target, status: response.status, contentType, text, bytes: body.bytes.byteLength, sha256: sha256(body.bytes), redirects, truncated }
+        const html = /^text\/html\b/.test(contentType)
+        const readable = html ? readableHtml(decoded) : decoded
+        const text = readable.slice(0, html ? HTML_TEXT : NETWORK_TEXT)
+        const truncated = body.truncated || readable.length > text.length
+        // البصمةُ على البايتات الخام كما وصلت؛ و`format` يقول إن كان النصُّ مستخرَجاً لا خاماً.
+        const output = { url: target, status: response.status, contentType, text, bytes: body.bytes.byteLength, sha256: sha256(body.bytes), redirects, truncated, ...(html ? { format: "readable" as const } : {}) }
         return { ok: true, output, resultFingerprint: sha256(JSON.stringify(output)) }
       }
       return { ok: false, error: `more than ${MAX_REDIRECTS} redirects` }

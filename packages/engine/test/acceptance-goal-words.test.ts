@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck, goalWordsOnly } from "../src/acceptance-goal-words"
+import { goalAsksForTestWork, goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck, goalWordsOnly } from "../src/acceptance-goal-words"
 
 // ن3 — كلماتُ القبول تُقرأ من كلمات المهمّة لا من المسارات: «ui-test/sample.txt» أشعل شرطَ الاختبارات حيّاً (09-15) فسقط دورُ متصفّحٍ بلا كود.
 
@@ -28,9 +28,20 @@ test("real acceptance words still fire, in both languages", () => {
 
 test("cli.ts derives the three predicates from the module, not from inline regexes", () => {
   const cli = readFileSync(join(import.meta.dir, "..", "src", "cli.ts"), "utf8")
-  expect(cli).toContain('import { goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck } from "./acceptance-goal-words"')
+  expect(cli).toContain('import { goalAsksForTestWork, goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck } from "./acceptance-goal-words"')
   expect(cli).toContain("const requiresBuild = !planningOnly && goalRequiresBuild(effectiveGoal)")
   expect(cli).toContain("const requiresTypecheck = !planningOnly && goalRequiresTypecheck(effectiveGoal)")
   expect(cli).toContain("const requiresTests = !planningOnly && goalRequiresTests(effectiveGoal)")
   expect(cli).not.toContain("/(?:npm\\s+(?:run\\s+)?test|اختبار|اختبارات|tests?\\b)/iu.test(effectiveGoal)")
+})
+
+test("2026-09-27: mentioning «test» is not an assignment — asking for test work is", () => {
+  // مقيس حيّاً: بحثٌ عن وثائق أشعل البوّابة فلم يكتمل الدورُ أبداً.
+  for (const lookup of ["Find the Bun test runner documentation", "what is a unit test?", "compare test frameworks for Node", "ما هو اختبار الوحدة؟", "ابحث عن وثائق test runner"])
+    expect(goalAsksForTestWork(lookup)).toBe(false)
+  for (const work of ["write a test for the parser", "add tests for sum.js", "run the tests after the change", "make sure the tests pass", "npm test must pass", "fix the failing test",
+    "أضف اختبارات للوحدة", "اكتب اختباراً للمحلّل", "شغّل الاختبارات ثمّ لخّص", "تأكّد أنّ الاختبارات تنجح"])
+    expect(goalAsksForTestWork(work)).toBe(true)
+  // المسارُ لا يُحسب كلمةً (ن3): ui-test/sample.txt ليس تكليفاً.
+  expect(goalAsksForTestWork("open ui-test/sample.txt and run it")).toBe(false)
 })

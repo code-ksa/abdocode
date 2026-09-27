@@ -161,7 +161,7 @@ describe("serve convergence wiring", () => {
     const declared = PLUGINS.filter((d) => d.meta !== true)
     expect(declared.map((d) => d.name)).toEqual([
       // البند 13 (2026-09-27) — مسبارُ المفتاح أوّلُ اللوحة.
-      "providerProbe", "toolAvailability", "overflowLadder", "contextBreakdown", "emptyGuard", "verifyAfterEdit", "denialBreaker", "unattendedDeny", "standingGrants", "inboundGuard", "mcpClient", "delegation", "reviewer", "activity", "terminalPanel", "serversPanel", "tasksPanel", "walls", "verifier", "toolVerdict",
+      "providerProbe", "toolAvailability", "overflowLadder", "contextBreakdown", "emptyGuard", "verifyAfterEdit", "keylessSearch", "denialBreaker", "unattendedDeny", "standingGrants", "inboundGuard", "mcpClient", "delegation", "reviewer", "activity", "terminalPanel", "serversPanel", "tasksPanel", "walls", "verifier", "toolVerdict",
       "miner", "readCompaction", "trailCompaction", "cacheAccounting", "resumeIntent", "turnBudget", "receiptFixtures",
       "intentField", "approvalTakeover", "trajectory", "deliverables", "secretIntake",
       // S13.1/S13.2 — صفّا الوعي يُلحقان في الذيل ولا يزحزحان ما قبلهما.
@@ -184,7 +184,7 @@ describe("serve convergence wiring", () => {
         // والخوادمُ تغيّر **عمرَ العمليات**، وما يغيّر سلوكاً يبدأ مطفأً.
         + ", terminalPanel: true, serversPanel: false, tasksPanel: true"
         // البند 13 (2026-09-27): المسبارُ التلقائيّ يُنفق توكنات فيبدأ مطفأً.
-        + ", providerProbe: false, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true").split(", ").sort(),
+        + ", providerProbe: false, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true").split(", ").sort(),
     )
     // ولا صفَّ ثابتاً بقي في القشرة: الصفوف عُقدٌ تُبنى من الإطار، والاستعادة تُحسب من الأوصاف.
     expect(desktopUi).toContain('<div id="pluginrows"></div>')
@@ -570,6 +570,12 @@ describe("serve convergence wiring", () => {
         expect(source.split(`pluginOnNow("${d.name}")`).length - 1).toBe(1)
         if (d.name === "delegation") expect(source.split("delegationEnabled()").length - 1).toBe(4)
         expect(source).not.toContain(`plugins?.${d.name}`)
+        continue
+      }
+      if (d.name === "keylessSearch") {
+        // الفجوة #1 — يُسأل عند وصف الأداة في الكتالوج وعند الاستدعاء في المُشغِّل، بالمحلِّل نفسِه (`pluginOnNow`).
+        expect(d.site).toBe("call")
+        expect(source.split('pluginOnNow("keylessSearch")').length - 1).toBe(2)
         continue
       }
       if (d.name === "overflowLadder" || d.name === "contextBreakdown") {

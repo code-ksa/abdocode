@@ -3722,6 +3722,12 @@ const pluginTranslations = {
 "englishLabel": "Hide tools whose prerequisite is missing",
 "englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
   },
+"keylessSearch": {
+"label": "بحثٌ بلا مفتاح",
+"description": "بلا مفتاحَي Google PSE يعيد search نتائجَ منظّمة (عنوان ورابط ومقتطف، حتى 10) من DuckDuckGo عبر محوّل الشبكة في النواة — فحصُ DNS/SSRF والأثرُ في الدفتر، والاستعلامُ يُرسل إلى DuckDuckGo. الصورُ تحتاج PSE. المعطَّل = بلا مفتاح يفتح search المتصفّحَ فقط ويقرأ النموذجُ الصفحةَ بنفسه. يسري فوراً.",
+"englishLabel": "Search without a key",
+"englishDescription": "Without Google PSE keys, search returns structured results (title, link and snippet, up to 10) from DuckDuckGo through the kernel network adapter — DNS/SSRF checks and a ledger entry; the query is sent to DuckDuckGo. Images need PSE. Disabled means that without a key search only opens the browser and the model reads the page itself. Applies immediately."
+  },
 "verifyAfterEdit": {
 "label": "التحقّق بعد التعديل",
 "description": "إن عدّل الوكيلُ شيفرةً في مشروعٍ له أمرُ اختبارٍ معرَّف (package.json أو pytest أو Cargo) ثمّ أعلن الإكمال قبل أن تنجح الاختباراتُ بعد آخر تعديل، يشغّلها المضيفُ بنفسه ويعيد خرجَها إليه ليصلح — حتى ثلاث مرّات، ثمّ يتوقّف الدورُ صادقاً بدل «مكتمل». تعديلُ التوثيق وحده لا يستدعيها. المعطَّل = لا تُشغَّل الاختباراتُ إلّا إن طلبها نصُّ المهمّة. يسري من الدور التالي.",

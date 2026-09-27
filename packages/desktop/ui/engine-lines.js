@@ -27,6 +27,8 @@ const EXACT = [
     () => "⚠ The model replied with nothing — no answer and no tool. The same context is not sent to it again; pick another model from the model chip, or retry."],
   [/^↻ ردٌّ فارغ من النموذج — يُعاد النداء مرّةً واحدة بتنبيه \(plugins\.emptyGuard\)$/u,
     () => "↻ The model replied with nothing — asking once more with a nudge (plugins.emptyGuard)"],
+  [/^↻ شرطُ الاختبارات لا ينطبق: لم تُعدَّل شيفرةٌ في هذا الدور والمشروعُ بلا أمرِ اختبار — كلمةُ «test» في الطلب ليست تكليفاً؛ لا يُختلق اختبارٌ لإرضاء البوّابة\.$/u,
+    () => "↻ The tests condition does not apply: no code was edited this turn and the project has no test command — the word «test» in the request is not an assignment; no test is invented to satisfy the gate."],
   // التحقّقُ بعد التعديل (verify-after-edit.ts) — الأمرُ بين «» يبقى كما هو.
   [/^↻ التحقّق بعد التعديل \(plugins\.verifyAfterEdit\): عُدّلت شيفرةٌ في مشروعٍ له اختبارات، و(لم تُشغَّل بعد|آخرُ تشغيلٍ لها فشل أو سبق التعديلَ الأخير) — يشغّل المضيفُ «(.+)» الآن ويعيد خرجَها\.$/u,
     (m) => `↻ Verify after editing (plugins.verifyAfterEdit): code was edited in a project with tests, and ${m[1] === "لم تُشغَّل بعد" ? "they have not run yet" : "their last run failed or came before the last edit"} — the host runs «${m[2]}» now and returns the output.`],
