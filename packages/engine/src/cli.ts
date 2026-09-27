@@ -46,6 +46,7 @@ import { MAX_IMAGE_BASE64 } from "@abdo/model-gateway"
 import { Shell } from "./shells/shell"
 import { Database } from "bun:sqlite"
 import { readFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, statSync, renameSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { companionFiles, ledgerUnreadable, quarantineName, quarantineNotice } from "./ledger-quarantine"
 import { fabricatedImage, looksLikeShot } from "./fabricated-artifact-guard"
 import { keepLineEndings, keptLineEndingsLine, lineEndingViolation } from "./line-ending-guard"
@@ -162,13 +163,15 @@ import { compactConversation, compactionEventLine, contextLeftOf, DEFAULT_KEEP_R
 import { FrameQueue, createRemoteControl, mergeFrames, type RemoteControl } from "./remote-control"
 import { CheckpointStore, restoreReportLine } from "./turn-checkpoint"
 import { FileMutationQueue, queueWaitLine } from "./file-mutation-queue"
-import { buildReviewPrompt, judgeReview, parseReviewFindings, renderReviewReport, REVIEW_LENSES, REVIEW_SYSTEM, reviewDiffText, type ReviewChange } from "./review-lane"
+import { buildReviewPrompt, changesFromUnifiedDiff, judgeReview, parsePrRef, parseReviewFindings, PR_REVIEW_HEADER, renderReviewReport, REVIEW_LENSES, REVIEW_SYSTEM, reviewDiffText, type ReviewChange } from "./review-lane"
 import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"
 import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./tool-availability"
 import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
 import { formatKeyless, KEYLESS_HOST, KEYLESS_SOURCE, keylessSearchUrl, parseKeylessResults } from "./mind/keyless-search"
 import { formatResearch, pageTextOf, parseResearchCommand, selectEvidence, type ResearchSource } from "./mind/research"
 import { approvedDigest, commandFor, hookLine, HOOKS_FILE, hooksSummary, readHooks, recordApproval, type ProjectHook } from "./project-hooks"
+import { commandUsedLine, expandCustomCommand, listCustomCommands } from "./custom-commands"
+import { attachmentText, parseTable, parseTableCommand, profileTable, queryTable } from "./data-table"
 import { editsCode, isProjectTestRun, projectTestCommand, VERIFY_AFTER_EDIT_RUNS, verifyDemandLine, verifyGaveUpLine } from "./verify-after-edit"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
@@ -3423,7 +3426,7 @@ const runServeShell = async (): Promise<void> => {
           projectSelected = true
           projectCreatedInTurn?.(target)
           const next = saveSettings({ project: target })
-          emit({ kind: "project", path: target, trusted: isTrusted(target) })
+          emit({ kind: "project", path: target, trusted: isTrusted(target), customCommands: customCommandsFor(target) })
           emit({ kind: "settings", settings: next, ...pluginFrameFields(next) })
           switched = true
         }
@@ -3478,7 +3481,7 @@ const runServeShell = async (): Promise<void> => {
         const next = saveSettings({project: actual})
         mkdirSync(dirname(trustFile(actual)), {recursive: true})
         writeFileSync(trustFile(actual), JSON.stringify({project: actual, trustedAt: new Date().toISOString(), by: "approved-project-create"}))
-        emit({kind: "project", path: actual, trusted: true, created: true})
+        emit({kind: "project", path: actual, trusted: true, created: true, customCommands: customCommandsFor(actual)})
         emit({kind: "settings", settings: next, ...pluginFrameFields(next)})
         return {...okText("Created empty project folder and selected it: " + actual + ". No application files have been created yet. Now write your sprint plan, then implement sprint 1. For Next/Vite/React use `templates <stack>` (pinned starters); for Flutter, React Native (Expo) or Swift use `templates <stack>` to get the exact doctor → scaffold → verify → run commands."), mutated: true}
       }
@@ -3864,6 +3867,32 @@ const runServeShell = async (): Promise<void> => {
           if (spec.name === "open" || spec.name === "ui") return surfaced(await runSurfaceTool("ui", rest, turnId))
           return invalid("انقطع اتصالُ متصفّح الوكيل (أُغلق أو قُتل خارج المحرّك) — أعد open <الرابط> ليُوصل من جديد.")
         }
+      }
+      case "data": {
+        // الفجوة #12 — الحسابُ بالكود: قراءةٌ محلّيّة محصورةٌ بالمشروع (كـproject-inspect) أو مرفقُ الدور باسمه، بسقف حجم، بلا أثر.
+        if (!pluginOnNow("dataTable")) return denied("رُفض table: تحليلُ البيانات مطفأ (plugins.dataTable) — فعّله من الإعدادات.", "tool_not_permitted")
+        let command: ReturnType<typeof parseTableCommand>
+        try { command = parseTableCommand(rest) } catch (cause) { return invalid(String(cause instanceof Error ? cause.message : cause)) }
+        let text: string, name: string, hint = command.format
+        if (command.source.startsWith("@")) {
+          name = command.source.slice(1)
+          const found = attachmentText(hooks.attachments?.text ?? "", name)
+          if (found === undefined) return invalid(`لا مرفقَ باسم «${name.slice(0, 80)}» في هذا الدور — المرفقاتُ: ${(hooks.attachments?.descriptions ?? []).map((d) => d.name).join("، ") || "لا شيء"}`)
+          text = found
+          hint ??= /\.json$/iu.test(name) ? "json" : /\.csv$/iu.test(name) ? "csv" : undefined
+        } else {
+          const target = resolveProjectPath(command.source)
+          if (target === undefined) return refused("المسار خارج المشروع — مرفوض")
+          if (!existsSync(target) || !statSync(target).isFile()) return invalid(`الملفّ غير موجود: ${command.source}`)
+          if (statSync(target).size > 25 * 1024 * 1024) return invalid(`الملفّ أكبر من 25 ميغابايت — قسّمه أو صفِّه أوّلاً بـrun`)
+          name = command.source
+          text = readFileSync(target, "utf8")
+          hint ??= /\.json$/iu.test(name) ? "json" : /\.tsv$/iu.test(name) ? "tsv" : /\.csv$/iu.test(name) ? "csv" : undefined
+        }
+        try {
+          const table = parseTable(text, hint)
+          return okText(command.query === undefined ? profileTable(name, table) : queryTable(name, table, command.query))
+        } catch (cause) { return invalid(`تعذّر تحليلُ «${name.slice(0, 80)}»: ${String(cause instanceof Error ? cause.message : cause).slice(0, 200)}`) }
       }
       case "design":
         // S9 (2026-09-18) — تصميمُ الواجهات بلا Canva: مواصفةٌ من الصفحة/اللقطة، رندرٌ حتميّ، ومقارنةٌ بالبكسل — الكتابةُ في المشروع بمسار write وبوّابته.
@@ -5296,8 +5325,8 @@ const runServeShell = async (): Promise<void> => {
   }
   const emitReady = () => {
     const s = loadSettings()
-    emit({ kind: "ready", name: "عبدو كود", version: "4.0.0", sessionId:currentSession, conversationMode:currentConversationMode, settings: s, ...pluginFrameFields(s) })
-    if (desktopProjectRequired && projectSelected) emit({kind: "project", path: PROJECT_DIR, trusted: isTrusted(PROJECT_DIR)})
+    emit({ kind: "ready", name: "عبدو كود", version: "4.0.0", sessionId:currentSession, conversationMode:currentConversationMode, settings: s, ...pluginFrameFields(s), customCommands: projectSelected ? customCommandsFor(PROJECT_DIR) : [] })
+    if (desktopProjectRequired && projectSelected) emit({kind: "project", path: PROJECT_DIR, trusted: isTrusted(PROJECT_DIR), customCommands: customCommandsFor(PROJECT_DIR)})
     void emitDevServers()
   }
   // كتالوج 1.13 (يتيم الخمول): محرك أنهى دوره وسكت مشغّله يبقى قابضاً على
@@ -6047,7 +6076,7 @@ const runServeShell = async (): Promise<void> => {
       PROJECT_DIR = resolve(dir)
       projectSelected = true
       const next = saveSettings({ project: dir })
-      if (isTrusted(dir)) emit({ kind: "project", path: dir, trusted: true })
+      if (isTrusted(dir)) emit({ kind: "project", path: dir, trusted: true, customCommands: customCommandsFor(dir) })
       else emit({ kind: "trust-request", path: dir })
       emit({ kind: "settings", settings: next, ...pluginFrameFields(next) })
       // تبديلُ المشروع يبدّل إعداداتِ الإطلاق — لوحةُ المتصفّح تُعاد من الملفّ الجديد.
@@ -6063,7 +6092,7 @@ const runServeShell = async (): Promise<void> => {
       writeFileSync(trustFile(dir), JSON.stringify({ project: resolve(dir), trustedAt: new Date().toISOString(), by: "operator" }, null, 2))
       PROJECT_DIR = resolve(dir)
       projectSelected = true
-      emit({ kind: "project", path: dir, trusted: true })
+      emit({ kind: "project", path: dir, trusted: true, customCommands: customCommandsFor(dir) })
       void emitDevServers()
       continue
     }
@@ -6082,7 +6111,10 @@ const runServeShell = async (): Promise<void> => {
     // فلا موضع نسيانٍ في مسارٍ لاحق. أرضيّةُ الأمان هذه **لا يطفئها مفتاح**؛
     // `plugins.secretIntake` يحكم فتحَ المحرّر وكتابةَ الخزنة وحدهما.
     const secretScan = classifyInboundSecret(frame.turn.body)
-    const turn = { id: frame.turn.id, body: secretScan.redacted }
+    // الفجوة #5 — `/اسم وسائط` بملفّه في .abdo/commands (أو ~/.abdo/commands) يصير نصَّ الطلب هنا، قبل الإدخال والدفتر وكلّ بوّابة:
+    // ما يحكمه النظامُ هو ما يُنفَّذ. وبعد حجب الأسرار — الملفُّ نصٌّ من القرص لا من المحادثة.
+    const customCommand = expandCustomCommand(secretScan.redacted, PROJECT_DIR)
+    const turn = { id: frame.turn.id, body: customCommand?.body ?? secretScan.redacted }
     const submittedOptions=frame as {conversationMode?:ConversationMode;attachments?:string[]}
     const turnAttachments=submittedOptions.attachments??[]
     const secretWarning = secretScan.carriesSecret ? rotationWarning(secretScan.kinds, secretScan.providerHandle) : undefined
@@ -6335,6 +6367,7 @@ const runServeShell = async (): Promise<void> => {
       }
     }
     activeTurn = (async (): Promise<{ answer: string; completed: boolean }> => {
+      if (customCommand !== undefined) await emitEvent(turn.id, commandUsedLine(customCommand.name, customCommand.source))
       // داخلَ جسم الدور المنفصل لا قبله: السؤالُ ينتظر إطارَ «approve» من حلقة القراءة نفسِها — قبله كان يحبسها (مقيس: الدورُ علق).
       // الفجوة #3 — خطّافاتُ المشروع: تُفعَّل بموافقةٍ على بصمة ملفّها بعينها، بسؤالٍ لا يُعفي منه نمطُ الوصول الكامل،
       // ثمّ لا تُسأل حتى يتغيّر الملفّ. ملفُّ خطّافاتٍ في مستودعٍ مستنسخ شيفرةٌ تعمل بفتح المشروع — فلا تعمل بلا عينِ المستخدم.
@@ -6439,6 +6472,39 @@ const runServeShell = async (): Promise<void> => {
         ...(verdictOn && idempotencyKey ? { idempotencyKey } : {}),
       })
       // م9ح — حارةُ المراجعة: «review [معرّف|last|git]» / «راجع تغييراتي» — ثلاثُ عدساتٍ بلا أدوات على فرق الدور الكاتب الأخير (أو فرق git).
+      // الفجوة #9 — مراجعةُ PR على GitHub: الفرقُ بـgh عبر مسار run نفسِه (النواةُ والبوّابة)، والعدساتُ نفسُها، والنشرُ ببوّابة الشبكة.
+      {
+        const pr = /^\/?review\s+pr\s+(\S+?)(\s+--post)?$/iu.exec(turn.body.trim())
+        if (pr !== null) {
+          const ref = parsePrRef(pr[1]!)
+          if (ref === undefined) return { answer: "review pr يحتاج رقمَ PR أو رابطَه على github.com: review pr 42 [--post]", completed: false }
+          const stamp = crypto.randomUUID()
+          const diffFile = join(tmpdir(), `abdo-pr-${stamp}.diff`), bodyFile = join(tmpdir(), `abdo-pr-${stamp}.md`)
+          if (/[\s"&|<>^%]/u.test(diffFile)) return { answer: `مسارُ الملفّات المؤقّتة فيه محرفٌ لا يُمرَّر إلى الصَّدَفة: ${diffFile}`, completed: false }
+          try {
+            // إلى ملفٍّ لا إلى الإيصال: إيصالُ run يُبقي آخرَ 400 سطر فيضيع رأسُ الفرق الكبير. وcmd يكتب البايتاتِ كما هي.
+            const fetched = await dispatchToolV("run", `run cmd /c "gh pr diff ${ref} > ${diffFile}"`, turn.id, hooks)
+            const text = existsSync(diffFile) ? readFileSync(diffFile, "utf8").replace(/^\uFEFF/u, "") : ""
+            const changes = changesFromUnifiedDiff(text)
+            if (!exitZero(fetched.output, fetched.verdict) || changes.length === 0) return { answer: `تعذّر جلبُ فرق PR ${ref} بـgh (هل gh مثبّتٌ ومسجَّل الدخول، والمشروعُ مستودعَ GitHub؟): ${fetched.output.split("\n").slice(-3).join(" / ").slice(0, 300)}`, completed: false }
+            const diff = reviewDiffText(changes)
+            await emitEvent(turn.id, `🔍 مراجعةُ PR ${ref}: ${diff.files} ملفّاً، ${diff.lines} سطر فرق${diff.truncated ? " (قُصّ بعضُه)" : ""} — ثلاثُ عدساتٍ بلا أدوات`)
+            const findings = (await Promise.all(REVIEW_LENSES.map(async (lens) => {
+              const reply = await ask(buildReviewPrompt(`PR ${ref}`, diff.text, lens), { ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REVIEW_SYSTEM }, [], turnSelection)
+              return parseReviewFindings(lens.key, typeof reply === "string" ? reply : String(reply))
+            }))).flat()
+            const report = renderReviewReport(judgeReview(findings), diff)
+            if (pr[2] === undefined) return { answer: report, completed: true }
+            // النشرُ أثرٌ عامٌّ على GitHub: بوّابةُ الشبكة — auto يسأل المشغّل، وfull-access بإرادة --post الصريحة (سطرُ CI الذي كتبه المستخدم).
+            const allowed = await gate(turn.id, "network", `نشرُ المراجعة تعليقاً على PR ${ref} في GitHub`)
+            if (!allowed) return { answer: `${report}\n\n⚠ لم تُنشر المراجعة على PR ${ref}: لم تُمنح الموافقة.`, completed: true }
+            writeFileSync(bodyFile, `${PR_REVIEW_HEADER}\n\n${report}\n`)
+            const posted = await dispatchToolV("run", `run gh pr review ${ref} --comment --body-file ${bodyFile}`, turn.id, hooks)
+            const ok = exitZero(posted.output, posted.verdict)
+            return { answer: `${report}\n\n${ok ? `✓ نُشرت المراجعة تعليقاً على PR ${ref}.` : `⚠ تعذّر نشرُ المراجعة: ${posted.output.split("\n").slice(-2).join(" / ").slice(0, 200)}`}`, completed: ok }
+          } finally { rmSync(diffFile, { force: true }); rmSync(bodyFile, { force: true }) }
+        }
+      }
       {
         const review = /^\/?review(?:\s+(\S+))?$/iu.exec(turn.body.trim()) ?? /^راجع (?:تغييراتي|التغييرات)(?:\s+(\S+))?$/u.exec(turn.body.trim())
         if (review !== null) {
@@ -7966,6 +8032,8 @@ const skillCommand = (tail: readonly string[]): string => {
 }
 
 /** رأسُ أمر المحرّك نفسِه — لأوامر خوادم الموصّلات (كالذي تعرفه القشرة من identity). */
+// الفجوة #5 — أوامرُ «/» المخصّصة للوحة القشرة: الاسمُ والوصفُ والمصدرُ وحدها، لا مسارٌ ولا نصّ.
+const customCommandsFor = (dir: string) => { try { return listCustomCommands(dir).map(({ name, description, source }) => ({ name, description, source })) } catch { return [] } }
 const selfEngineArgv = (): string[] => (COMPILED ? [process.execPath] : [process.execPath, join(ROOT, "cli.ts")])
 
 /**

@@ -29,7 +29,7 @@ export interface ToolSpec {
   readonly agentCallable: boolean
   /** المنفّذ الذي يخدمها — يقرؤه المُوزِّع من هنا فلا يخمّن بالاسم، ولا
    *  تعود قائمةُ أسماءٍ ثانيةٌ إلى الحياة. */
-  readonly runner: "templates" | "project-template" | "project-inspect" | "project-locate" | "project-open" | "project-orient" | "project-create" | "exec" | "write" | "image" | "project-read" | "framed" | "surface" | "net" | "patch" | "adapter" | "delegate" | "desktop" | "design"
+  readonly runner: "templates" | "project-template" | "project-inspect" | "project-locate" | "project-open" | "project-orient" | "project-create" | "exec" | "write" | "image" | "project-read" | "framed" | "surface" | "net" | "patch" | "adapter" | "delegate" | "desktop" | "design" | "data"
   /** قدرةٌ لا تُمنح إلا لنموذجٍ سحابيّ كبير — صيغتها تقتل النماذج الصغيرة
    *  الحكم من المزوّد الفاعل وقتَ النداء، لا من نيّة النموذج. */
   readonly cloudOnly?: boolean
@@ -105,6 +105,8 @@ export const TOOLS: readonly ToolSpec[] = [
 
   // شبكة بلا متصفّح — جلبُ صفحةٍ نصّاً (فكرة webfetch من 2.1 بأبسط كود، حارس SSRF واحد)
   { name: "fetch", effect: "network", usage: "fetch <رابط HTTPS>", summary: "جلب نص HTTPS عبر DNS/SSRF وحدود تحويل وحجم وعامل Rust", agentCallable: true, runner: "adapter" },
+  // الفجوة #12 (2026-09-27): تحليلُ بياناتٍ بالكود لا بالنموذج — ملفُّ المشروع أو المرفقُ باسمه.
+  { name: "table", aliases: ["data", "جدول"], effect: "read", usage: "table <ملفّ.csv|.tsv|.json|@مرفق> [--group عمود] [--sum|--avg|--min|--max|--median عمود | --count] [--where عمود=قيمة] [--sort asc|desc] [--limit ن]", summary: "تحليلُ جدولٍ بالكود: بلا خيارات ملفٌّ تعريفيّ (أنواع، فراغ، إحصاءات، أكثرُ القيم)، ومع --group/--sum… تجميعٌ محسوب — استعمله بدل الحساب من نصّ الجدول", agentCallable: true, runner: "data" },
   // الفجوة #2 (2026-09-27): بحثٌ معمّق — يقرأ الصفحاتِ التي أعادها بحثُه هو ويعيد أدلّةً مرقّمة بمصادرها.
   { name: "research", aliases: ["deep_research", "بحث_معمق"], effect: "network", usage: "research <سؤال> [--pages 4]", summary: "بحثٌ معمّق: يبحث ثمّ يقرأ أعلى الصفحات عبر النواة ويعيد المقاطعَ الأوثقَ صلةً مرقّمةً [n] بمصادرها ليُكتب جوابٌ مستشهَد", agentCallable: true, runner: "net" },
   { name: "search", aliases: ["google", "google_search", "بحث"], effect: "network", usage: "search <عبارة> [--count 5] [--site example.com] [--images]", summary: "بحث Google منظّم؛ يفتح النتائج في متصفّح عبدو ويعيد العناوين والروابط عند ضبط PSE", agentCallable: true, runner: "net" },

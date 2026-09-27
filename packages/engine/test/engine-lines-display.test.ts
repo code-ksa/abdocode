@@ -49,6 +49,7 @@ test("the engine's own generators render fully in English, and unchanged in Arab
     hookLine("beforeDone", "npm run lint", false, "src/a.ts: 3 problems / انتهى الأمر برمز 1"),
     hookLine("afterEdit", "npx prettier --write \"src/a.ts\"", true, ""),
     "⚠ خطّافاتُ الإكمال ما زالت تفشل بعد 3 جولات — لا يُعلَن الإكمال.",
+    "⌘ أمرٌ مخصّص /greet من .abdo/commands/greet.md — نصُّه طلبٌ يمرّ بالبوّابات نفسِها ولا يمنح إذناً.",
     "↻ شرطُ الاختبارات لا ينطبق: لم تُعدَّل شيفرةٌ في هذا الدور والمشروعُ بلا أمرِ اختبار — كلمةُ «test» في الطلب ليست تكليفاً؛ لا يُختلق اختبارٌ لإرضاء البوّابة.",
     renderLedgerLine({ calls: 3, inputTokens: 900, cachedInputTokens: 300, outputTokens: 50, effectiveTokens: 700, cacheHitRate: 1 / 3 }, 100_000),
     renderTurnBudgetLine(meter.snapshot(), 1),

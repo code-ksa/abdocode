@@ -1917,6 +1917,7 @@
       else if (trajBuffer !== null && trajBuffer.length < TRAJ_BUFFER_CAP) trajBuffer.push(f);
       if (f.kind === "ready") {
         if (typeof f.sessionId === "string" && f.sessionId) currentSessionId = f.sessionId;
+        customCommands = Array.isArray(f.customCommands) ? f.customCommands : [];
         engineUp = true;
         requestSettingsSnapshot();
         if (f.settings?.mode && MODE_ORDER.includes(f.settings.mode)) {
@@ -2092,6 +2093,7 @@
       if (f.kind === "browser-history") { browserHistoryFrame(f); return; }
       if (f.kind === "project") {
         rootDir = f.path; renderStatus();
+        customCommands = Array.isArray(f.customCommands) ? f.customCommands : [];
         runtimeSettings = { ...runtimeSettings, project: f.path };
         // الفخُّ نفسُه الذي أُغلق للنمط والنموذج: كتابةُ `textContent` على
         // الزرّ تمحو عقدةَ الأيقونة معها. النصُّ في `.lbl` وحدها. وشريحةُ
@@ -2330,6 +2332,12 @@
     };
 
     // ---- لوحة «/» ----
+    // الفجوة #5 — أوامرُ المشروع والمستخدم (.abdo/commands/*.md) من المحرّك مع ready وproject. تُرسل **بشرطتها** فيوسّعها المحرّك؛
+    // المدمجةُ وحدها تفقد «/» قبل الإرسال.
+    let customCommands = [];
+    const customPalette = () => customCommands
+      .filter((c) => c && typeof c.name === "string" && !COMMANDS.some((b) => b.cmd === "/" + c.name))
+      .map((c) => ({ cmd: "/" + c.name, body: "/" + c.name + " ", desc: (typeof c.description === "string" && c.description) || (c.source === "user" ? "أمرُ المستخدم" : "أمرُ المشروع"), stay: true }));
     const COMMANDS = [
       { cmd: "/status", body: "status", desc: "حالة النواة والدفتر بسطر S138" },
       { cmd: "/docs", body: "docs", desc: "الفهارس — تعريف الأنظمة وكيفية استخدامها" },
@@ -2348,7 +2356,7 @@
     let palSel = 0;
     const palette = el("palette");
     const prompt = el("prompt");
-    const paletteItems = () => COMMANDS.filter((c) => c.cmd.slice(1).startsWith(prompt.value.slice(1).toLowerCase()));
+    const paletteItems = () => [...COMMANDS, ...customPalette()].filter((c) => c.cmd.slice(1).toLowerCase().startsWith(prompt.value.slice(1).toLowerCase()));
     const renderPalette = () => {
       const items = paletteItems();
       if (!prompt.value.startsWith("/") || items.length === 0) { palette.style.display = "none"; return; }

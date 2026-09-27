@@ -150,3 +150,27 @@ export function renderReviewReport(outcome: ReviewOutcome, diff: ReviewDiff, len
   const tail = notes.length > 0 ? `\n\nملاحظاتٌ بلا سيناريو فشل (لا تُحتسب):\n${notes.join("\n")}` : ""
   return `${head}${body}${tail}${outcome.verdict === "fix" ? "\n\nلم يُصلَح شيءٌ تلقائيّاً — قل «أصلح عيوب المراجعة» أو اختر ما تريد." : ""}`
 }
+
+/**
+ * الفجوة #9 (2026-09-27) — مراجعةُ PR على GitHub بالعدسات نفسِها: `review pr <رقم|رابط> [--post]`.
+ * المرجعُ يصل سطرَ أمر (`gh pr diff …`)، فلا يُقبل إلّا رقماً أو رابطَ PR على github.com — لا شيءَ غيرهما يُمرَّر إلى الصَّدَفة.
+ */
+export function parsePrRef(ref: string): string | undefined {
+  const value = ref.trim()
+  if (/^\d{1,7}$/u.test(value)) return value
+  if (/^https:\/\/github\.com\/[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}\/pull\/\d{1,7}\/?$/u.test(value)) return value.replace(/\/$/u, "")
+  return undefined
+}
+
+/** فرقٌ موحَّد (خرجُ `gh pr diff`) ⇦ تغييرٌ لكلّ ملفّ بفرقه الجاهز — فيمرّ بـ`reviewDiffText` وسقفِه كفرقِ دورٍ محلّيّ. */
+export function changesFromUnifiedDiff(text: string): ReviewChange[] {
+  const out: ReviewChange[] = []
+  const blocks = text.replace(/\r\n/gu, "\n").split(/^(?=diff --git )/mu).filter((block) => block.startsWith("diff --git "))
+  for (const block of blocks) {
+    const path = /^diff --git a\/(.+?) b\/(.+)$/mu.exec(block)?.[2] ?? /^\+\+\+ b\/(.+)$/mu.exec(block)?.[1] ?? "?"
+    out.push(Object.freeze({ path, patch: block.trimEnd() }))
+  }
+  return out
+}
+
+export const PR_REVIEW_HEADER = "## مراجعةُ عبدو كود — ثلاثُ عدساتٍ مستقلّة (الصحّة، الأمان، عضُّ الاختبارات)"

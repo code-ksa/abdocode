@@ -161,7 +161,7 @@ describe("serve convergence wiring", () => {
     const declared = PLUGINS.filter((d) => d.meta !== true)
     expect(declared.map((d) => d.name)).toEqual([
       // البند 13 (2026-09-27) — مسبارُ المفتاح أوّلُ اللوحة.
-      "providerProbe", "toolAvailability", "overflowLadder", "contextBreakdown", "emptyGuard", "verifyAfterEdit", "keylessSearch", "research", "projectHooks", "denialBreaker", "unattendedDeny", "standingGrants", "inboundGuard", "mcpClient", "delegation", "reviewer", "activity", "terminalPanel", "serversPanel", "tasksPanel", "walls", "verifier", "toolVerdict",
+      "providerProbe", "toolAvailability", "overflowLadder", "contextBreakdown", "emptyGuard", "verifyAfterEdit", "keylessSearch", "research", "projectHooks", "dataTable", "denialBreaker", "unattendedDeny", "standingGrants", "inboundGuard", "mcpClient", "delegation", "reviewer", "activity", "terminalPanel", "serversPanel", "tasksPanel", "walls", "verifier", "toolVerdict",
       "miner", "readCompaction", "trailCompaction", "cacheAccounting", "resumeIntent", "turnBudget", "receiptFixtures",
       "intentField", "approvalTakeover", "trajectory", "deliverables", "secretIntake",
       // S13.1/S13.2 — صفّا الوعي يُلحقان في الذيل ولا يزحزحان ما قبلهما.
@@ -184,7 +184,7 @@ describe("serve convergence wiring", () => {
         // والخوادمُ تغيّر **عمرَ العمليات**، وما يغيّر سلوكاً يبدأ مطفأً.
         + ", terminalPanel: true, serversPanel: false, tasksPanel: true"
         // البند 13 (2026-09-27): المسبارُ التلقائيّ يُنفق توكنات فيبدأ مطفأً.
-        + ", providerProbe: false, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true").split(", ").sort(),
+        + ", providerProbe: false, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true").split(", ").sort(),
     )
     // ولا صفَّ ثابتاً بقي في القشرة: الصفوف عُقدٌ تُبنى من الإطار، والاستعادة تُحسب من الأوصاف.
     expect(desktopUi).toContain('<div id="pluginrows"></div>')
@@ -570,6 +570,12 @@ describe("serve convergence wiring", () => {
         expect(source.split(`pluginOnNow("${d.name}")`).length - 1).toBe(1)
         if (d.name === "delegation") expect(source.split("delegationEnabled()").length - 1).toBe(4)
         expect(source).not.toContain(`plugins?.${d.name}`)
+        continue
+      }
+      if (d.name === "dataTable") {
+        // الفجوة #12 — يُسأل عند الاستدعاء في المُشغِّل وحده، بالمحلِّل نفسِه (`pluginOnNow`).
+        expect(d.site).toBe("call")
+        expect(source.split('pluginOnNow("dataTable")').length - 1).toBe(1)
         continue
       }
       if (d.name === "research") {
@@ -1141,7 +1147,9 @@ describe("serve convergence wiring", () => {
   // تحذير تدوير الاسرار و يفتحلة ملف نوت باد لادخال الاسرار في خزنة الاسرار».
   test("الترتيب هو الميزة: الكشف والحجب قبل القبول في الدفتر، لا بعده", () => {
     const classify = source.indexOf("const secretScan = classifyInboundSecret(frame.turn.body)")
-    const turnConst = source.indexOf("const turn = { id: frame.turn.id, body: secretScan.redacted }")
+    // الفجوة #5 (2026-09-27): الأمرُ المخصّص يُوسَّع من النصّ المحجوب — فالترتيبُ نفسُه: الكشفُ قبل بناء الدور.
+    const turnConst = source.indexOf("const turn = { id: frame.turn.id, body: customCommand?.body ?? secretScan.redacted }")
+    expect(source.indexOf("const customCommand = expandCustomCommand(secretScan.redacted, PROJECT_DIR)")).toBeGreaterThan(classify)
     const admit = source.indexOf("await serveJournal.admit({ turnId: turn.id, body: turn.body, sessionId: currentSession, attachments:turnAttachments })")
     const attachments = source.indexOf('attached=resolveAttachments(SETTINGS_FILE,currentSession,turnAttachments)')
     const bodies = source.indexOf("turnBodies.set(turn.id, turn.body)")

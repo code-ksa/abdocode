@@ -29,7 +29,8 @@ describe("engine wiring", () => {
   test("cli.ts: يُبثّ عند الجاهزيّة واختيار المشروع والإعدادات؛ ويُوقَف عند خروج المحرّك لا عند ختام الدور", () => {
     expect(cli).toMatch(/if \(desktopProjectRequired && projectSelected\) emit\(\{kind: "project"[^\n]*\r?\n\s+void emitDevServers\(\)/u)
     expect(cli).toMatch(/emit\(\{ kind: "trust-request", path: dir \}\)\r?\n[^\n]*\r?\n[^\n]*\r?\n\s+void emitDevServers\(\)/u)
-    expect(cli).toMatch(/emit\(\{ kind: "project", path: dir, trusted: true \}\)\r?\n\s+void emitDevServers\(\)\r?\n\s+continue/u)
+    // الفجوة #5 (2026-09-27): إطارُ project يحمل أوامرَ «/» المخصّصة للمشروع الجديد.
+    expect(cli).toMatch(/emit\(\{ kind: "project", path: dir, trusted: true, customCommands: customCommandsFor\(dir\) \}\)\r?\n\s+void emitDevServers\(\)\r?\n\s+continue/u)
     expect(cli).toMatch(/emit\(\{ kind: "settings", settings: current, \.\.\.pluginFrameFields\(current\), \.\.\.reply \}\)\r?\n\s+void emitDevServers\(\)/u)
     // خروجُ المحرّك (الخمول/غياب المالك) يوقفها؛ ختامُ الدور لا يعرفها — عمرُها التبويب.
     expect(cli.match(/devServers\.stopAll\(\)/gu)?.length).toBe(2)

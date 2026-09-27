@@ -3722,6 +3722,12 @@ const pluginTranslations = {
 "englishLabel": "Hide tools whose prerequisite is missing",
 "englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
   },
+"dataTable": {
+"label": "تحليلُ البيانات",
+"description": "أداةُ table: جدولٌ من ملفّ CSV/TSV/JSON في المشروع أو من مرفقٍ باسمه (@اسم) ⇦ ملفٌّ تعريفيّ (صفوف، أعمدة، أنواع، فراغ، أدنى/أعلى/متوسّط/وسيط/مجموع، أكثرُ القيم) أو تجميعٌ محسوب (--group و--sum/--avg/--count/--min/--max/--median و--where). الأرقامُ بالكود لا بتخمين النموذج، والأرقامُ العربيّة والفواصل والعملات تُقرأ. قراءةٌ محصورةٌ بالمشروع بسقف 25 ميغابايت. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "Data analysis",
+"englishDescription": "The table tool: a CSV/TSV/JSON file in the project, or an attachment by name (@name), becomes a profile (rows, columns, types, blanks, min/max/mean/median/sum, most frequent values) or a computed aggregate (--group with --sum/--avg/--count/--min/--max/--median and --where). The numbers come from code, not the model's guess; Arabic digits, separators and currencies are read. A read confined to the project, capped at 25 MB. Disabled means the tool refuses by name. Applies immediately."
+  },
 "projectHooks": {
 "label": "خطّافاتُ المشروع",
 "description": "أوامرُ من .abdo/hooks.json في المشروع: afterEdit بعد كلّ كتابةٍ لملفٍّ مطابق (خرجُه في إيصال الكتابة)، وbeforeDone قبل إعلان الإكمال بعد مسِّ الشيفرة (فشلُه يعود إلى النموذج ليصلح). لا تعمل قبل أن توافق على محتوى الملفّ بعينه — بسؤالٍ لا يُعفي منه الوصولُ الكامل — وأيُّ تغييرٍ فيه يعيد السؤال. كلُّ خطّافٍ يمرّ بإدخال النواة ودفترها. المعطَّل = يُتجاهل الملفّ. يسري من الدور التالي.",

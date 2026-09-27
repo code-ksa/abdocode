@@ -29,6 +29,9 @@ const EXACT = [
     () => "↻ The model replied with nothing — asking once more with a nudge (plugins.emptyGuard)"],
   [/^↻ شرطُ الاختبارات لا ينطبق: لم تُعدَّل شيفرةٌ في هذا الدور والمشروعُ بلا أمرِ اختبار — كلمةُ «test» في الطلب ليست تكليفاً؛ لا يُختلق اختبارٌ لإرضاء البوّابة\.$/u,
     () => "↻ The tests condition does not apply: no code was edited this turn and the project has no test command — the word «test» in the request is not an assignment; no test is invented to satisfy the gate."],
+  // الأوامرُ المخصّصة (custom-commands.ts).
+  [/^⌘ أمرٌ مخصّص \/(\S+) من (\S+) — نصُّه طلبٌ يمرّ بالبوّابات نفسِها ولا يمنح إذناً\.$/u,
+    (m) => `⌘ Custom command /${m[1]} from ${m[2]} — its text is a request that passes the same gates and grants nothing.`],
   // خطّافاتُ المشروع (project-hooks.ts) — الأوامرُ بين «» وملخّصُها يبقيان كما كُتبا.
   [/^🪝 خطّافاتُ المشروع مفعّلة \((\d+)\): (.+)$/u, (m) => `🪝 Project hooks active (${m[1]}): ${m[2]}`],
   [/^🪝 (afterEdit|beforeDone) «(.+)»: (نجح|فشل)(?: — (.*))?$/u,

@@ -206,5 +206,6 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     // هـ3 (2026-09-07): الثاني عشر معلَن — التفنيدُ العدائيّ في وضع «أقصى» (نداءٌ واحدٌ في خريطة العدسات الثلاث)،
     // بدفتر الكلفة والعدّاد نفسيهما، وكلفتُه تُعلَن قبل إنفاقها ويُسلَّم الدورُ عند موضعه إن تربت الميزانية.
     // م9ح (2026-09-14): الثالث عشر معلَن — حارةُ المراجعة «review» (نداءٌ واحدٌ في خريطة العدسات الثلاث بلا أدوات وبسياقٍ منفصل).
-    expect(source.match(/\bawait ask\(/gu)).toHaveLength(13)
+    // الفجوة #9 (2026-09-27): الرابع عشر معلَن — مراجعةُ PR («review pr»): العدساتُ الثلاث نفسُها بلا أدوات وبسياقٍ منفصل على فرق gh.
+    expect(source.match(/\bawait ask\(/gu)).toHaveLength(14)
     expect(source).toContain("const reply = await ask(buildReviewPrompt(reviewGoal, diff.text, lens), { ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REVIEW_SYSTEM }, [], turnSelection)")

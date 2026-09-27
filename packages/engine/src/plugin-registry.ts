@@ -41,6 +41,7 @@ export type PluginName =
   | "keylessSearch"
   | "research"
   | "projectHooks"
+  | "dataTable"
   | "toolAvailability"
   | "overflowLadder"
   | "contextBreakdown"
@@ -216,6 +217,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     defaultOn: true,
     applies: "next-turn",
     site: "turn",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // الفجوة #12 من جدول 2026-09-27 — تحليلُ البيانات بالكود. مفعَّل: قراءةٌ محصورةٌ بلا أثر، تحلّ محلَّ حسابٍ في رأس النموذج.
+  Object.freeze({
+    name: "dataTable",
+    label: "تحليلُ البيانات",
+    description: "أداةُ table: جدولٌ من ملفّ CSV/TSV/JSON في المشروع أو من مرفقٍ باسمه (@اسم) ⇦ ملفٌّ تعريفيّ (صفوف، أعمدة، أنواع، فراغ، أدنى/أعلى/متوسّط/وسيط/مجموع، أكثرُ القيم) أو تجميعٌ محسوب (--group و--sum/--avg/--count/--min/--max/--median و--where). الأرقامُ بالكود لا بتخمين النموذج، والأرقامُ العربيّة والفواصل والعملات تُقرأ. قراءةٌ محصورةٌ بالمشروع بسقف 25 ميغابايت. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
     wired: true,
     requiresVault: Object.freeze([]),
   }),

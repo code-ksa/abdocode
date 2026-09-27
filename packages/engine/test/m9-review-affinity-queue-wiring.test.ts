@@ -45,7 +45,8 @@ describe("م9ز — session affinity wiring", () => {
 
 describe("م9ح — review lane wiring", () => {
   test("«review» is an operator word before the checkpoint words, reads changes from the checkpoint or git, and asks each lens without tools", () => {
-    expect(source).toContain('import { buildReviewPrompt, judgeReview, parseReviewFindings, renderReviewReport, REVIEW_LENSES, REVIEW_SYSTEM, reviewDiffText, type ReviewChange } from "./review-lane"')
+    // الفجوة #9 (2026-09-27): + مراجعةُ PR (changesFromUnifiedDiff وparsePrRef وPR_REVIEW_HEADER) من الوحدة نفسِها.
+    expect(source).toContain('import { buildReviewPrompt, changesFromUnifiedDiff, judgeReview, parsePrRef, parseReviewFindings, PR_REVIEW_HEADER, renderReviewReport, REVIEW_LENSES, REVIEW_SYSTEM, reviewDiffText, type ReviewChange } from "./review-lane"')
     expect(source).toContain('import { gitChanges, gitState } from "./git-state"')
     const review = source.indexOf("const review = /^\\/?review(?:\\s+(\\S+))?$/iu.exec(turn.body.trim()) ?? /^راجع (?:تغييراتي|التغييرات)(?:\\s+(\\S+))?$/u.exec(turn.body.trim())")
     const checkpointsWord = source.indexOf("if (/^\\/?checkpoints$/iu.test(turn.body.trim())")
