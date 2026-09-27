@@ -36,7 +36,7 @@ describe("S11 — الاعتمادُ يُفحص عند القبول قبل أو�
   })
 
   test("نموذجُ الدور بلا مقبض ⇦ يُخطّى بإشعارٍ واحد يسمّي المقبض، ويمضي الدور على أوّل درجةٍ حاضرة؛ والسلّم يُصفّى بترتيبه", async () => {
-    const r = await admitCredentials({ selected: "nvidia/nemotron", ladder: ["nvidia/nemotron", "deepseek/deepseek-v4-flash", "ollama/qwen3"] }, deps(["deepseek"]))
+    const r = await admitCredentials({ selected: "nvidia/nemotron", ladder: ["nvidia/nemotron", "deepseek/deepseek-v4-flash", "ollama/qwen3"], language: "ar" }, deps(["deepseek"]))
     expect(r.selected).toBe("deepseek/deepseek-v4-flash")
     expect(r.ladder).toEqual(["deepseek/deepseek-v4-flash", "ollama/qwen3"])
     expect(r.missing).toEqual([{ ref: "nvidia/nemotron", provider: "nvidia", handle: "abdocode-nvidia" }])
@@ -47,7 +47,7 @@ describe("S11 — الاعتمادُ يُفحص عند القبول قبل أو�
   })
 
   test("الرؤيةُ بلا مقبض ⇦ تُخطّى وحدها والدورُ يمضي على نموذجه، والإشعارُ يقول إنّ الرؤية على نموذج الدور", async () => {
-    const r = await admitCredentials({ selected: "ollama/qwen3", ladder: [], vision: "nvidia/vision" }, deps([]))
+    const r = await admitCredentials({ selected: "ollama/qwen3", ladder: [], vision: "nvidia/vision", language: "ar" }, deps([]))
     expect(r.selected).toBe("ollama/qwen3")
     expect(r.vision).toBeUndefined()
     expect(r.notice).toContain("nvidia: abdocode-nvidia")
@@ -57,7 +57,7 @@ describe("S11 — الاعتمادُ يُفحص عند القبول قبل أو�
   })
 
   test("لا نموذجَ يبقى ⇦ رفضٌ مسمّى يسرد المقابض الغائبة كلَّها بلا تكرار؛ وفشلُ سؤال الخزنة غيابٌ لا إذن", async () => {
-    const r = await admitCredentials({ selected: "qwen/qwen-max", ladder: ["nvidia/a", "nvidia/b"], vision: "qwen/vision" }, deps(["deepseek"]))
+    const r = await admitCredentials({ selected: "qwen/qwen-max", ladder: ["nvidia/a", "nvidia/b"], vision: "qwen/vision", language: "ar" }, deps(["deepseek"]))
     expect(r.selected).toBeUndefined()
     expect(r.ladder).toEqual([])
     expect(r.vision).toBeUndefined()
@@ -70,6 +70,14 @@ describe("S11 — الاعتمادُ يُفحص عند القبول قبل أو�
     expect((await admitCredentials({ selected: "nvidia/a", ladder: [] }, deps(["nvidia"]))).failure).toBeUndefined()
   })
 
+  test("الإشعارُ والرفضُ بلغة الإعدادات: الإنجليزيّةُ افتراضُ المنتَج، والعربيّةُ حين تُطلب", async () => {
+    const failed = await admitCredentials({ selected: "qwen/qwen-max", ladder: ["ghost/x"] }, deps([]))
+    expect(failed.failure).toBe("No model has a key in the vault — missing: qwen: abdocode-qwen, ghost/x: unresolvable reference. Add the key in Settings → Providers, then try again.")
+    const skipped = await admitCredentials({ selected: "nvidia/nemotron", ladder: ["deepseek/deepseek-v4-flash"], vision: "nvidia/vision", language: "en" }, deps(["deepseek"]))
+    expect(skipped.notice).toBe("Vault key missing — nvidia: abdocode-nvidia; skipped: nvidia/nemotron, nvidia/vision; this turn uses deepseek/deepseek-v4-flash; images use the turn's model.")
+    expect(/[\u0600-\u06FF]/u.test(`${failed.failure}${skipped.notice}`)).toBe(false)
+  })
+
   test("مرجعٌ لا يُحلّ يُسمّى غياباً لا يُبتلع", async () => {
     const r = await admitCredentials({ selected: "ghost/x", ladder: ["ollama/qwen3"] }, deps([]))
     expect(r.selected).toBe("ollama/qwen3")
@@ -78,7 +86,8 @@ describe("S11 — الاعتمادُ يُفحص عند القبول قبل أو�
 
   test("cli.ts يفحص عند القبول قبل أوّل نداء: الرفضُ المسمّى، الإشعارُ الواحد، تبديلُ النموذج، تصفيةُ السلّم، والرؤيةُ غيرُ المقبولة لا تُسلَك", () => {
     expect(cliSource).toContain("const admission = await admitCredentials(")
-    expect(cliSource).toContain("{ parseRef: Providers.parseRef, providerOf: Providers.provider, hasCredential: (provider) => REACH.hasCredential(provider) },")
+    expect(cliSource).toContain("{ parseRef: Providers.parseRef, providerOf: Providers.provider, hasCredential: hasProviderKey },")
+    expect(cliSource).toContain('language: settingsAtTurn.language ?? "en" },')
     expect(cliSource).toContain("if (admission.failure !== undefined) throw new Error(admission.failure)")
     expect(cliSource).toContain("if (admission.notice !== undefined) await emitEvent(turn.id, `⚠ ${admission.notice}`)")
     expect(cliSource).toContain("if (admission.selected !== undefined && admission.selected !== selectedModel.ref) selectedModel = selectionOf(admission.selected, selectedModel.lane) ?? selectedModel")

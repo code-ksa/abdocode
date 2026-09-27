@@ -53,13 +53,30 @@ test("the inventory carries the condition through, and only for the keys that ha
   expect(row("walls").readWhen).toBeUndefined()
 })
 
+test("the plugin line follows an English interface, conditions included", async () => {
+  const { readWhenForDisplay } = await import("../../desktop/ui/engine-lines.js")
+  const source = /const plugSummary = \(entries\) => \{[\s\S]*?\n    \};/u.exec(SHELL)![0]
+  const summary = new Function("shellPluginReads", "uiText", "readWhenForDisplay", "shellSettings", `${source}\nreturn plugSummary;`)(
+    new Set(["activity"]), (en: string) => en, readWhenForDisplay, { language: "en" },
+  ) as (entries: unknown[]) => string
+  const line = summary([
+    { name: "walls", reads: 1, effective: true, wired: true, site: "turn" },
+    { name: "activity", reads: 0, effective: true, wired: true, site: "panel" },
+    { name: "unattendedDeny", reads: 0, effective: true, wired: true, site: "call", readWhen: "حين يُطرح سؤالُ موافقة" },
+    { name: "ghost", reads: 0, effective: true, wired: false, site: "none" },
+  ])
+  expect(line).toBe("🧩 Read, enabled: walls · Read in the shell: activity · Conditional, not triggered: unattendedDeny (when an approval question is asked) · Declared, not read: ghost (not wired)")
+})
+
 test("THE LIVE SHELL LINE (the positive twin): the seven stop being called dead, and a truly unread key still is", () => {
   // الدالّةُ المشحونةُ نفسُها تُستخرج وتُشغَّل — لا نصٌّ مُثبَّت يمرّ والسطرُ يكذب.
   const source = /const plugSummary = \(entries\) => \{[\s\S]*?\n    \};/u.exec(SHELL)?.[0]
   expect(source).toBeDefined()
-  const build = new Function("shellPluginReads", `${source}\nreturn plugSummary;`) as (
-    reads: Set<string>,
+  // السطرُ يُعرض بلغة الواجهة: العربيّةُ هنا هويّةٌ صريحة، والإنجليزيّةُ توأمٌ في الاختبار التالي.
+  const make = new Function("shellPluginReads", "uiText", "readWhenForDisplay", "shellSettings", `${source}\nreturn plugSummary;`) as (
+    reads: Set<string>, uiText: (en: string, ar: string) => string, readWhen: (text: string, language: string) => string, settings: { language: string },
   ) => (entries: unknown[]) => string
+  const build = (reads: Set<string>) => make(reads, (_en, ar) => ar, (text) => text, { language: "ar" })
   const summary = build(new Set(["activity"]))
   const line = summary([
     { name: "walls", reads: 1, effective: true, wired: true, site: "turn" },

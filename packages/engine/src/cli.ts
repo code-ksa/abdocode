@@ -6304,8 +6304,9 @@ const runServeShell = async (): Promise<void> => {
       // S11 (مقيس 09-18: ستّة أدوارٍ ماتت قبل أوّل أداة بـ«اعتماد المزوّد غير متاح») — حضورُ مقبض الخزنة لنموذج الدور
       // والسلّم والرؤية يُفحص هنا قبل أوّل نداء: الغائبُ يُخطّى بسطر ⚠ واحد، وإن لم يبقَ شيءٌ رُفض الدور بأسماء المقابض.
       const admission = await admitCredentials(
-        { selected: selectedModel.ref, ladder: ownerRungs.map((rung) => rung.ref), ...(typeof settingsAtTurn.visionModel === "string" && settingsAtTurn.visionModel.length > 0 ? { vision: settingsAtTurn.visionModel } : {}) },
-        { parseRef: Providers.parseRef, providerOf: Providers.provider, hasCredential: (provider) => REACH.hasCredential(provider) },
+        { selected: selectedModel.ref, ladder: ownerRungs.map((rung) => rung.ref), ...(typeof settingsAtTurn.visionModel === "string" && settingsAtTurn.visionModel.length > 0 ? { vision: settingsAtTurn.visionModel } : {}), language: settingsAtTurn.language ?? "en" },
+        // حضورُ المقبض بالسؤال الواحد نفسِه (الخزنةُ المشحونة من ملفّها) — كان PowerShell لكلّ مزوّدٍ في رأس كلّ دور.
+        { parseRef: Providers.parseRef, providerOf: Providers.provider, hasCredential: hasProviderKey },
       )
       if (admission.failure !== undefined) throw new Error(admission.failure)
       if (admission.notice !== undefined) await emitEvent(turn.id, `⚠ ${admission.notice}`)

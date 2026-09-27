@@ -70,8 +70,10 @@ const spoken = (s: Session): string => s.frames.filter((f) => f.kind === "delta"
 test.skipIf(process.platform !== "win32")("two team children asking for approval at once are queued, not collided: ask → grant → ask → grant, and both effects land", async () => {
   const nth = counter()
   const s = await session("stronger", "read-only", (user) => {
-    if (user.includes("اكتب ملفّ alpha")) return nth("alpha") === 1 ? "نفّذ: write alpha.txt <<<\nAAA" : "كُتب alpha."
-    if (user.includes("اكتب ملفّ beta")) return nth("beta") === 1 ? "نفّذ: write beta.txt <<<\nBBB" : "كُتب beta."
+    // «اكتب» حتى يظهر إيصالُ الملفّ في المحادثة — لا «أوّلُ نداءٍ فقط»: تحت الحِمل تُعاد محاولةُ نداءٍ تجاوز مهلتَه،
+    // فكان النداءُ المُعاد يجيب «كُتب» بلا كتابة، ويُنهي الطفلُ بلا أثر (فشلٌ مقيس في التشغيل الكامل فقط، 2026-09-27).
+    if (user.includes("اكتب ملفّ alpha")) return user.includes("alpha.txt") ? "كُتب alpha." : "نفّذ: write alpha.txt <<<\nAAA"
+    if (user.includes("اكتب ملفّ beta")) return user.includes("beta.txt") ? "كُتب beta." : "نفّذ: write beta.txt <<<\nBBB"
     if (user.includes("أنت الوكيلُ الموجِّه")) return "لا حاجة للتوجيه هنا."
     if (user.includes("TEAM-APPROVE") && !user.includes("المهمّة المفوَّضة إليك") && nth("parent") === 1) return "نفّذ: team <<<\nbuilder :: اكتب ملفّ alpha\nbuilder :: اكتب ملفّ beta"
     return "Done."

@@ -25,6 +25,11 @@ export interface AdmissionInput {
   readonly ladder: readonly string[]
   /** نموذجُ الرؤية المضبوط إن وُجد. */
   readonly vision?: string
+  /**
+   * لغةُ نصّ الإشعار والرفض — يراهما المستخدمُ مباشرةً (شريطُ الفشل والإشعار). الغيابُ = الإنجليزيّة،
+   * افتراضُ المنتَج نفسُه. مقيس 2026-09-27: رفضُ «لا مفتاح» كان عربيّاً في واجهةٍ إنجليزيّة.
+   */
+  readonly language?: string
 }
 
 export interface MissingHandle { readonly ref: string; readonly provider: string; readonly handle: string }
@@ -80,16 +85,23 @@ export async function admitCredentials(input: AdmissionInput, deps: AdmissionDep
   const selected = selectedOk ? input.selected : ladder[0]
 
   if (missing.length === 0) return Object.freeze({ selected, ladder: Object.freeze(ladder), vision, missing: Object.freeze([]), notice: undefined, failure: undefined })
-  const handles = [...new Map(missing.map((m) => [`${m.provider}: ${m.handle}`, m])).keys()].join("، ")
+  const ar = input.language === "ar"
+  const list = ar ? "، " : ", "
+  const handleText = (handle: string) => handle === UNRESOLVED && !ar ? "unresolvable reference" : handle
+  const handles = [...new Map(missing.map((m) => [`${m.provider}: ${handleText(m.handle)}`, m])).keys()].join(list)
   if (selected === undefined) {
     return Object.freeze({
       selected: undefined, ladder: Object.freeze(ladder), vision, missing: Object.freeze(missing), notice: undefined,
-      failure: `لا نموذجَ له اعتمادٌ في الخزنة — المقابضُ الغائبة: ${handles}. أضف المفتاح من الإعدادات ← المزوّدون ثمّ أعد الإطلاق.`,
+      failure: ar
+        ? `لا نموذجَ له اعتمادٌ في الخزنة — المقابضُ الغائبة: ${handles}. أضف المفتاح من الإعدادات ← المزوّدون ثمّ أعد الإطلاق.`
+        : `No model has a key in the vault — missing: ${handles}. Add the key in Settings → Providers, then try again.`,
     })
   }
-  const skipped = missing.map((m) => m.ref).join("، ")
-  const visionNote = input.vision !== undefined && vision === undefined ? "؛ والرؤيةُ على نموذج الدور" : ""
-  const switched = selectedOk ? "" : `؛ يمضي الدور على ${selected}`
-  const notice = `اعتمادُ الخزنة غائب — المقابض: ${handles}؛ تُخطّى: ${skipped}${switched}${visionNote}.`
+  const skipped = missing.map((m) => m.ref).join(list)
+  const visionNote = input.vision !== undefined && vision === undefined ? (ar ? "؛ والرؤيةُ على نموذج الدور" : "; images use the turn's model") : ""
+  const switched = selectedOk ? "" : ar ? `؛ يمضي الدور على ${selected}` : `; this turn uses ${selected}`
+  const notice = ar
+    ? `اعتمادُ الخزنة غائب — المقابض: ${handles}؛ تُخطّى: ${skipped}${switched}${visionNote}.`
+    : `Vault key missing — ${handles}; skipped: ${skipped}${switched}${visionNote}.`
   return Object.freeze({ selected, ladder: Object.freeze(ladder), vision, missing: Object.freeze(missing), notice, failure: undefined })
 }

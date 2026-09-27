@@ -65,10 +65,10 @@ describe("قشرة المنتَج: الخطّ والشريط والشرائح", 
     expect(refusalHandler).toBeDefined()
     for (const why of ["Settings could not be applied", "تعذّر تطبيق الإعدادات"]) {
       const effects: unknown[] = []
-      new Function("f", "approvalFold", "delivFold", "settle", "notice", "mcpResync", refusalHandler!)(
+      new Function("f", "approvalFold", "delivFold", "settle", "notice", "mcpResync", "engineNotice", refusalHandler!)(
         { kind: "refused", why },
         () => effects.push("approval"), () => effects.push("deliverables"), () => effects.push("settle"),
-        (message: string) => effects.push(["notice", message]), () => effects.push("resync"),
+        (message: string) => effects.push(["notice", message]), () => effects.push("resync"), (message: string) => message,
       )
       expect(effects).toEqual([["notice", why], "resync"])
     }

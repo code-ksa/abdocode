@@ -1,5 +1,7 @@
 // Render receipts as receipts, separate from the model's prose. Text always
 // enters through textContent; project output cannot inject executable markup.
+import { engineOutputForDisplay } from './engine-lines.js';
+
 export function createTranscript(document, language = () => 'en') {
   const turns = new WeakMap();
   const text = (en, ar) => language() === 'ar' ? ar : en;
@@ -56,7 +58,7 @@ export function createTranscript(document, language = () => 'en') {
     diff(entry,frame){const s=state(entry),item=s.pending;if(!item)return;item.diff=String(frame.diff||'');const preview=make('details','acx-preview'),title=make('summary','',text('Review changes: ','معاينة التغييرات: ')+frame.path),body=make('pre','acx-diff');
       for(const line of item.diff.split('\n'))body.append(make('div',line.startsWith('+')?'acx-added':line.startsWith('-')?'acx-removed':'',line));preview.append(title,body);item.node.append(preview);
     },
-    result(entry,frame){const s=state(entry),found=s.tools.get(String(frame.cmd||''));if(!found)return;const {item,g}=found;item.done=true;item.ok=frame.verdict?.ok;item.output.textContent=String(frame.output||'')+(frame.outputTruncated?'\n\n'+text('Output shortened for display.','اختُصر الناتج للعرض.'):'');item.status.textContent=item.ok===false?text('Failed','فشلت'):item.ok===true?text('Completed','اكتملت'):text('Finished · unverified','انتهت · غير متحقق');item.node.dataset.outcome=item.ok===false?'failed':'finished';item.title.textContent=item.word==='run'?text('Command output','نتيجة الأمر'):item.title.textContent;update(g);},
+    result(entry,frame){const s=state(entry),found=s.tools.get(String(frame.cmd||''));if(!found)return;const {item,g}=found;item.done=true;item.ok=frame.verdict?.ok;item.output.textContent=engineOutputForDisplay(String(frame.output||''),language())+(frame.outputTruncated?'\n\n'+text('Output shortened for display.','اختُصر الناتج للعرض.'):'');item.status.textContent=item.ok===false?text('Failed','فشلت'):item.ok===true?text('Completed','اكتملت'):text('Finished · unverified','انتهت · غير متحقق');item.node.dataset.outcome=item.ok===false?'failed':'finished';item.title.textContent=item.word==='run'?text('Command output','نتيجة الأمر'):item.title.textContent;update(g);},
     finish(entry){const s=turns.get(entry);if(!s)return;flush(s);for(const {item,g} of s.tools.values())if(!item.done){item.done=true;item.status.textContent=text('Interrupted · no result','توقفت · بلا نتيجة');update(g);}},
     diagnostics(entry,value){const node=make('details','acx-diagnostics'),summary=make('summary','',text('Execution details','تفاصيل التنفيذ')),body=make('pre','acx-output',value);node.append(summary,body);entry.node.append(node);},
   };

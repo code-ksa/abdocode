@@ -901,6 +901,7 @@
     import { McpCatalogue } from "./mcp-catalogue.js";
     import { Providers } from "./providers.js";
     import { providerDisplayLabel } from "./provider-display.js";
+    import { engineLineForDisplay, providerLabelsForDisplay, readWhenForDisplay } from "./engine-lines.js";
     import { LANGUAGE_CODES } from './language-catalogue.js';
     import { settingsDrafts } from './settings-drafts.js';
     settingsDrafts.mount(document.getElementById('settings'));
@@ -1223,6 +1224,11 @@
     // Only explicitly owned controls use these labels. Transcript text and paths
     // remain outside localization, even when they happen to match a UI phrase.
     const uiText = (en, ar) => shellSettings.language === "ar" ? ar : en;
+    // أسطرُ المحرّك التشخيصيّة عربيّةٌ على السلك (الدفترُ وقرّاءُ القشرة يقرؤونها) — تُعرض بلغة الواجهة.
+    const engineText = (line) => engineLineForDisplay(line, shellSettings.language);
+    const engineLines = (lines) => lines.map(engineText).join("\n");
+    // الرفضُ والإشعار نصُّ المحرّك لا نصُّ النموذج: أسماءُ المزوّدين المُجمَّعين تُعرض بلغة الواجهة أيضاً.
+    const engineNotice = (text) => engineText(providerLabelsForDisplay(text, Providers, providerDisplayLabel, shellSettings.language));
     const transcript = createTranscript(document, () => shellSettings.language);
     const appControlText = (node, en, ar) => {
       node.dataset.appEn = en; node.dataset.appAr = ar;
@@ -1279,8 +1285,8 @@
           if (ending !== "done") node.classList.add("warnb");
           const meta = this.lines.filter((l) => l.startsWith("— المقيس"));
           const bodyLines = this.lines.filter((l) => !l.startsWith("— المقيس"));
-          if (transcript.has(this)) { transcript.finish(this); if(bodyLines.length) transcript.diagnostics(this, bodyLines.join("\n")); }
-          else if (bodyLines.length > 0) this.bodyEl.textContent = bodyLines.join("\n");
+          if (transcript.has(this)) { transcript.finish(this); if(bodyLines.length) transcript.diagnostics(this, engineLines(bodyLines)); }
+          else if (bodyLines.length > 0) this.bodyEl.textContent = engineLines(bodyLines);
           if (!this.streamed && !transcript.has(this)) {
             this.node.classList.add("sysb");
             this.node.querySelector(".chev").textContent = "▾";
@@ -1288,7 +1294,7 @@
           }
           if (meta.length > 0 && this.node.querySelector(".meta") === null) {
             const m = document.createElement("div");
-            m.className = "meta execution-summary"; m.textContent = meta.join(" ");
+            m.className = "meta execution-summary"; m.textContent = meta.map(engineText).join(" ");
             this.node.appendChild(m);
           }
           refreshSessions();
@@ -1965,10 +1971,10 @@
           const lines = t.lines.filter((l) => !l.startsWith("— المقيس"));
           const meta = t.lines.filter((l) => l.startsWith("— المقيس"));
           if (lines.length > 0) {
-            const node = addBlock("assistant", uiText("AbdoCode", "عبدو"), lines.join("\n"));
+            const node = addBlock("assistant", uiText("AbdoCode", "عبدو"), engineLines(lines));
             if (meta.length > 0) {
               const m = document.createElement("div");
-              m.className = "meta execution-summary"; m.textContent = meta[0];
+              m.className = "meta execution-summary"; m.textContent = engineText(meta[0]);
               node.appendChild(m);
             }
           }
@@ -2238,10 +2244,10 @@
             const entry = blocks.get(f.turnId) ?? historyBlock(f.turnId);
             entry.lines.push(ev.payload);
             if (!transcript.has(entry) && (!entry.node.classList.contains("assistant") || entry.node.classList.contains("sysb"))) {
-              entry.bodyEl.textContent = entry.lines.join("\n");
+              entry.bodyEl.textContent = engineLines(entry.lines);
             } else if (ev.payload.startsWith("— المقيس") && entry.node.querySelector(".meta") === null) {
               const m = document.createElement("div");
-              m.className = "meta execution-summary"; m.textContent = ev.payload;
+              m.className = "meta execution-summary"; m.textContent = engineText(ev.payload);
               entry.node.appendChild(m);
             }
           }
@@ -2270,7 +2276,7 @@
       if (f.kind === "unresolved") {
         const entry = blocks.get(f.turnId) ?? historyBlock(f.turnId);
         entry.lines.push("⚠ " + f.why);
-        entry.bodyEl.textContent = entry.lines.join("\n");
+        entry.bodyEl.textContent = engineLines(entry.lines);
         approvalFold(f); delivFold(f);
         settle(f.turnId, interruptedTurns.has(f.turnId), "unresolved");
         return;
@@ -2280,7 +2286,7 @@
       // يكذب صراحةً حين يقتل أوّلُ دورٍ تالٍ كلَّ الخوادم دفعةً واحدة.
       if (f.kind === "refused") {
         if (f.turnId) { approvalFold(f); delivFold(f); settle(f.turnId, interruptedTurns.has(f.turnId), "refused"); }
-        notice(f.why); mcpResync();
+        notice(engineNotice(f.why)); mcpResync();
       }
     };
 
@@ -2510,21 +2516,22 @@
       for (const e of entries || []) {
         // قارئُ القشرة يُنسب إلى القشرة صراحةً ولا يُدمج في عدّاد المحرّك:
         // الدمجُ كان سيصنع كذبةً ثانية («قُرئ ×1» ولا قراءةَ في المحرّك).
-        if (!e.reads && shellPluginReads.has(e.name)) { shell.push(e.name + (e.wired ? "" : " (غير موصول)")); continue; }
+        const unwired = e.wired ? "" : uiText(" (not wired)", " (غير موصول)");
+        if (!e.reads && shellPluginReads.has(e.name)) { shell.push(e.name + unwired); continue; }
         // قارئٌ مشروطٌ لم تقع حالتُه ≠ مفتاحٌ بلا قارئ. الأوّلُ يقول «لم يُسأل
         // عنه في هذا الدور»، والثاني «لا أحدَ يقرؤه أصلاً» — وخلطُهما يجعل
         // سبعةَ مفاتيحَ حيّةٍ تبدو ميتةً للمشغّل. الشرطُ من سجلّ المحرّك
         // (`readWhen`) لا من قائمةٍ ثانيةٍ تُصان هنا بيدٍ فتفترق عنه.
-        if (!e.reads && e.readWhen && e.wired) { waiting.push(e.name + " (" + e.readWhen + ")"); continue; }
-        if (!e.reads) { unread.push(e.name + (e.wired ? "" : " (غير موصول)")); continue; }
+        if (!e.reads && e.readWhen && e.wired) { waiting.push(e.name + " (" + readWhenForDisplay(e.readWhen, shellSettings.language) + ")"); continue; }
+        if (!e.reads) { unread.push(e.name + unwired); continue; }
         (e.effective ? on : off).push(e.name + (e.reads > 1 ? "×" + e.reads : ""));
       }
-      const parts = [];
-      if (on.length) parts.push("قُرئ مفعَّلاً: " + on.join("، "));
-      if (off.length) parts.push("قُرئ معطَّلاً: " + off.join("، "));
-      if (shell.length) parts.push("قُرئ في القشرة: " + shell.join("، "));
-      if (waiting.length) parts.push("قارئُه مشروطٌ ولم تقع حالتُه: " + waiting.join("، "));
-      if (unread.length) parts.push("مُعلَن ولم يُقرأ: " + unread.join("، "));
+      const parts = [], sep = uiText(", ", "، ");
+      if (on.length) parts.push(uiText("Read, enabled: ", "قُرئ مفعَّلاً: ") + on.join(sep));
+      if (off.length) parts.push(uiText("Read, disabled: ", "قُرئ معطَّلاً: ") + off.join(sep));
+      if (shell.length) parts.push(uiText("Read in the shell: ", "قُرئ في القشرة: ") + shell.join(sep));
+      if (waiting.length) parts.push(uiText("Conditional, not triggered: ", "قارئُه مشروطٌ ولم تقع حالتُه: ") + waiting.join(sep));
+      if (unread.length) parts.push(uiText("Declared, not read: ", "مُعلَن ولم يُقرأ: ") + unread.join(sep));
       return "🧩 " + parts.join(" · ");
     };
 

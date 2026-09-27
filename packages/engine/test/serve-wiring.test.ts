@@ -1044,7 +1044,7 @@ describe("serve convergence wiring", () => {
     expect(refusalHandler).toBeDefined()
     const refusalEffects: unknown[] = []
     // 09-14 ظهراً: الرفضُ يُطوى بسببه («refused») لا بوسم المقاطعة — «قوطع بيد المشغّل» كان يُلصق بخطأ المزوّد (مقيس على 4.0.14).
-    new Function("f", "approvalFold", "delivFold", "settle", "notice", "mcpResync", "interruptedTurns", refusalHandler!)(
+    new Function("f", "approvalFold", "delivFold", "settle", "notice", "mcpResync", "interruptedTurns", "engineNotice", refusalHandler!)(
       { kind: "refused", turnId: "failed-provider", why: "Open provider settings" },
       (frame: unknown) => refusalEffects.push(["approval", frame]),
       (frame: unknown) => refusalEffects.push(["deliverables", frame]),
@@ -1052,6 +1052,7 @@ describe("serve convergence wiring", () => {
       (why: string) => refusalEffects.push(["notice", why]),
       () => refusalEffects.push(["resync"]),
       new Set<string>(),
+      (why: string) => why,
     )
     expect(refusalEffects).toEqual([
       ["approval", { kind: "refused", turnId: "failed-provider", why: "Open provider settings" }],
@@ -1237,6 +1238,8 @@ describe("serve convergence wiring", () => {
       '    import { McpCatalogue } from "./mcp-catalogue.js";',
       '    import { Providers } from "./providers.js";',
       '    import { providerDisplayLabel } from "./provider-display.js";',
+      // عرضُ أسطر المحرّك بلغة الواجهة — دالّاتٌ نقيّة لا ميزة، كـ`provider-display`.
+      '    import { engineLineForDisplay, providerLabelsForDisplay, readWhenForDisplay } from "./engine-lines.js";',
       '    import { createTranscript } from "./native-transcript.js";',
       '    import { mountNativeShell } from "./native-shell.js";',
       '    import { mountNativeSurfaces } from "./native-surfaces.js";',
