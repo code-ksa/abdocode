@@ -1,5 +1,27 @@
+import { resolve as resolvePath } from "node:path"
 import { workerExitReason } from "./exit-reason"
 export * from "./provider"
+
+/**
+ * One writer per journal inside this process.
+ *
+ * The kernel journal admits a single writer, and every ledger operation (and every
+ * kernel read host) is a short-lived process that opens it exclusively. Measured
+ * 2026-09-27: two team agents writing in parallel from one engine collided, and
+ * the second write was refused ("journal writer is busy … nothing was executed")
+ * while its report still said it ran. A bounded wait in the kernel does not
+ * cover it: four parallel begins still lost one after 3 s. Callers that share a
+ * process therefore queue here, per journal file, and never race each other.
+ */
+const journalQueues = new Map<string, Promise<unknown>>()
+export function withJournalWriter<T>(journalPath: string, run: () => Promise<T>): Promise<T> {
+  const key = resolvePath(journalPath).toLowerCase()
+  const next = (journalQueues.get(key) ?? Promise.resolve()).catch(() => undefined).then(run)
+  const tail = next.catch(() => undefined)
+  journalQueues.set(key, tail)
+  void tail.then(() => { if (journalQueues.get(key) === tail) journalQueues.delete(key) })
+  return next
+}
 
 export interface ToolWorkerRequest { readonly version: 1; readonly requestId: string; readonly tool: string; readonly argv: readonly string[]; readonly timeoutMs: number }
 export interface ToolWorkerResult { readonly version: 1; readonly requestId: string; readonly status: "completed" | "refused" | "timed-out"; readonly output: string }
@@ -175,7 +197,7 @@ export class AdapterEffectLedger {
     for (const value of args.slice(2, -1)) {
       if (!/^[0-9a-f]{32}$|^[0-9a-f]{64}$/.test(value)) throw new Error("adapter_ledger_invalid_binding")
     }
-    const result = await this.runCommand([this.kernelExecutable, "adapter-ledger", ...args])
+    const result = await withJournalWriter(this.journalPath, () => this.runCommand([this.kernelExecutable, "adapter-ledger", ...args]))
     const line = result.stdout.trim()
     if (result.exitCode !== 0 || !line.startsWith(expected)) {
       throw new Error(`adapter_ledger_refused: ${result.stderr.trim() || `exit ${result.exitCode}`}`)

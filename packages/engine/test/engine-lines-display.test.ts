@@ -49,6 +49,9 @@ test("the engine's own generators render fully in English, and unchanged in Arab
     "⚠ رد النموذج بلا أداة (ليس إيصال إنجاز):",
     "النواة: حاضرة (نسخة الـ72 ساعة) · دفتر النواة: 21 صفّاً · قدرات المنتج: 11/11",
     "بيئة الأبناء: يُنزع 2 متغيّراً (ABDO_VAULT_DIR، ABDO_VAULT_SCRIPT)",
+    // مقيسٌ حيّاً 2026-09-27 (خطّةُ Qwen بلغت حدَّها): سطرُ الانتظار نفسُه كان عربيّاً في واجهةٍ إنجليزيّة.
+    "⏳ المزوّد qwen-token-plan مزدحم (HTTP 429) — المحاولة 1/7، أعيد بعد 2 ث",
+    "⏳ المزوّد nvidia: transport failed before response — المحاولة 2/7، أعيد بعد 4 ث",
   ]
   for (const line of lines) {
     fullyEnglish(line)

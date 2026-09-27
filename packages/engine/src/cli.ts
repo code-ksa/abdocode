@@ -37,7 +37,7 @@ import { StandingGrants } from "./standing-grants"
 import { DenialBreaker } from "./denial-breaker"
 import { protectedCommandVerdict, protectedPathVerdict } from "./protected-paths"
 import { registerAdapterTools, registerBuiltins, runCommandTool } from "@abdo/builtin-tools"
-import { AdapterEffectLedger, PROVIDER_WORKER_TIMEOUT_MS_MAX, ToolAdmissionWorker, type AdapterTool } from "@abdo/tool-worker"
+import { AdapterEffectLedger, PROVIDER_WORKER_TIMEOUT_MS_MAX, ToolAdmissionWorker, withJournalWriter, type AdapterTool } from "@abdo/tool-worker"
 import { CdpBrowser, launchBrowserProcess } from "@abdo/browser"
 import { browserSiteAllowed, desktopBrowserOwnership, ownedDesktopBrowserPort, sitePolicyCommand } from "./browser-site-policy"
 import { BrowserHistory, BrowserSessionStore, PROFILE_DIR, historyCommand, loginPageVerdict, loginReceipt, originOf, sessionsCommand } from "./browser-sessions"
@@ -84,6 +84,7 @@ import { nativeToolDefinition, nativeToolReply, dropOldestExchange } from "./nat
 import { composeSystem, isoDate, systemReceiptLine, type ComposeInput } from "./prompt-composer"
 import { epochReceiptLine } from "./receipt-ledger-line"
 import { admitCredentials } from "./credential-admission"
+import { PROBE_OUTPUT_TOKENS, probeProvider } from "./provider-probe"
 import { AGENT_DIR, AGENT_FILE_RE, BUILTIN_AGENT_FILES, buildAgentCatalogue, describeAgents, describeAgentsBrief, findAgent, type AgentCatalogue, type AgentDefinition } from "./agent-definitions"
 import { DELEGATE_TOOL, MAX_DELEGATION_DEPTH, NESTED_TEAM_MAX, childToolRefusal, parseDelegateCommand, renderDelegateReport, runDelegatedAgent } from "./delegation"
 import { applyEdit, countOccurrences, nearestHint, parseEditCommand } from "./edit-match"
@@ -813,6 +814,8 @@ const readThroughKernelV = async (file: string, range?: Readonly<{ from: number;
       : `الملفّ غير موجود: ${target}`)
   }
 
+  // مضيفُ النواة يمسك الدفترَ كاتباً وحيداً طوال القراءة: يمرّ بطابور الدفتر نفسِه مع آثار الوكلاء المتوازين.
+  return withJournalWriter(JOURNAL, async (): Promise<DispatchResultV> => {
   const host = new KernelHost({
     executable: HOST,
     journal: JOURNAL,
@@ -872,6 +875,7 @@ const readThroughKernelV = async (file: string, range?: Readonly<{ from: number;
   } finally {
     await host.close()
   }
+  })
 }
 
 /** كلّ منافذ read (الأداة المؤطَّرة بحكمها، وREPL والأمر وexecuteBody بغلاف النصّ) تمرّ من هنا: خطّةٌ نقيّة (planRead) ثمّ الأثر الواحد (readThroughKernelV). */
@@ -5738,6 +5742,26 @@ const runServeShell = async (): Promise<void> => {
       vaultStatus.request()
       continue
     }
+    if (frame.kind === "provider-probe") {
+      // «اختبار الاتصال» بضغطة مشغّل دائماً؛ والتلقائيُّ بعد الحفظ (auto) بإذن plugins.providerProbe وحده.
+      const probe = frame as { provider: string; model?: string; auto?: boolean }
+      if (probe.auto === true && !pluginOnNow("providerProbe")) continue
+      void probeProvider(probe.provider, {
+        provider: (id) => Providers.provider(id),
+        hasKey: hasProviderKey,
+        send: async (prov, model) => {
+          const request = Providers.prepareChatRequest({
+            provider: Providers.provider(prov.id)!, model, messages: [{ role: "user", content: "ping" }],
+            stream: false, conversationOnly: true, credentialOwner: "rust-worker", maxOutputTokens: PROBE_OUTPUT_TOKENS, temperature: 0, think: false,
+          })
+          const response = await REACH.model({ provider: prov.id, url: request.url, body: request.body, timeoutMs: 30_000 })
+          return { status: response.status }
+        },
+        now: () => Date.now(),
+      }, probe.model).then((result) => emit({ kind: "provider-probe", ...result }))
+        .catch(() => emit({ kind: "provider-probe", provider: probe.provider, model: "", ok: false, verdict: "transport", ms: 0 }))
+      continue
+    }
     if (frame.kind === "interrupt") {
       // المقاطعة بيد المشغّل: تقطع الجاري باسمه، وغير الجاري رفضٌ مسمّى
       const target = (frame as { turnId?: string }).turnId
@@ -6899,7 +6923,7 @@ const runServeShell = async (): Promise<void> => {
             // ذ3 — إيصالُ تشغيلٍ فشل يُسجَّل درساً (السطرُ يُبثّ عند نقطة الحفظ — الردّ هنا متزامن).
             if (/^run\b/iu.test(cmd) && receiptFailed(output, verdict)) learn(cmd, output, epoch)
             recipeCollector.observe(cmd, output, verdict)
-            awareness.observe(cmd, output, epoch)
+            awareness.observe(cmd, output, epoch, verdict?.ok === true)
             // S2: يقطّر الإيصال حقيقةً دائمةً (بناء نجح، ملف كُتب، منفذ خادم)
             // فلا يعيد النموذج اكتشافها في حقبةٍ أو جلسةٍ تالية.
             // وS13.5 (إصلاح النزاهة): إيصالُ `delegate` ناتجُه **جوابُ نموذجٍ**

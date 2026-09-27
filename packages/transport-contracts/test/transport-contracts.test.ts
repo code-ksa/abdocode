@@ -29,7 +29,7 @@ const requests: readonly TransportRequest[] = [
 describe("R9 transport contracts", () => {
   test("owns and validates every current product shell frame", () => {
     // العددُ يُثبَّت كي لا يدخل إطارٌ صامتاً خارج عقد النقل.
-    expect(SHELL_FRAMES.filter((frame) => frame.dir === "in")).toHaveLength(41) // 09-14: background-list, remote-control-get/regenerate؛ 09-17: dev-servers, dev-server-start/stop؛ 09-18: browser-history
+    expect(SHELL_FRAMES.filter((frame) => frame.dir === "in")).toHaveLength(42) // 09-14: background-list, remote-control-get/regenerate؛ 09-17: dev-servers, dev-server-start/stop؛ 09-18: browser-history؛ 09-27: provider-probe
     // خوادمُ التطوير في لوحة المتصفّح: الاسمُ بصيغة الإعداد والمنفذُ عددٌ صحيحٌ في مداه — ما عداه يُرفض بالاسم.
     expect(validateShellFrame({ kind: "dev-servers" })).toEqual({ ok: true })
     expect(validateShellFrame({ kind: "dev-server-start", name: "web-app" })).toEqual({ ok: true })

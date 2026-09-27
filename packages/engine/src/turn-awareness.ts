@@ -34,8 +34,13 @@ export class TurnAwareness {
     this.#limit = Math.max(10, limit)
   }
 
-  /** يُغذّى من onToolResult: الأمر كما نُفّذ ونصّ إيصاله. */
-  observe(command: string, output: string, epoch: number): void {
+  /**
+   * يُغذّى من onToolResult: الأمر كما نُفّذ ونصّ إيصاله، و`succeeded` من حكمه.
+   * كتابةٌ لم يُثبت حكمُها النجاح لا تدخل «كتبتَ» — مقيس 2026-09-27: كتابةٌ رُفضت
+   * («journal writer is busy … nothing was executed») دخلت الموجز «كتبتَ: beta.txt»
+   * فبنى الطفلُ عليها «كُتب» وقال التقريرُ إنّها نُفّذت.
+   */
+  observe(command: string, output: string, epoch: number, succeeded = true): void {
     const read = READ_RECEIPT.exec(command.trim())
     if (read !== null) {
       const digest = DIGEST_IN_OUTPUT.exec(output)?.[1]
@@ -53,6 +58,7 @@ export class TurnAwareness {
     }
     const write = WRITE_RECEIPT.exec(command.trim())
     if (write !== null) {
+      if (!succeeded) return
       if (this.#writes.size >= this.#limit && !this.#writes.has(write[2])) return
       this.#writes.set(write[2], epoch)
       // كتابة ملفٍ تبطل صلاحية قراءته السابقة: بصمته تغيّرت حتماً — الملفّ

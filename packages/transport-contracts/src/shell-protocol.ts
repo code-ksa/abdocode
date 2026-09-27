@@ -55,6 +55,7 @@ export const SHELL_FRAMES: readonly FrameSpec[] = [
   inbound("connector-forget", "فصلُ موصّل: مسحُ رموزه من الخزنة وإزالةُ خادمه", ["id"], ["id"]),
   inbound("settings-set", "حفظ إعداداتٍ دون أسرار؛ expectedPluginsRevision سياجٌ اختياري لكتابات plugins", ["settings", "expectedPluginsRevision"], ["settings"]),
   inbound("vault-status", "حضور مفاتيح المزوّدين بنعم/لا"),
+  inbound("provider-probe", "مسبارُ مفتاح مزوّد: نداءٌ صغيرٌ واحدٌ عبر عامل Rust وحكمٌ بسببٍ مسمّى — auto=true يحترم plugins.providerProbe", ["provider", "model", "auto"], ["provider"]),
   inbound("external-connect", "توصيل مزوّد أدوات خارجي بقرار المالك", ["id", "command", "protocol"], ["id", "command"]),
   inbound("external-disconnect", "فصل مزوّد خارجي", ["id"], ["id"]),
   // لوحُ الخوادم (plugins.serversPanel). القياسُ **طلبٌ** لا اشتراك: اللوحُ
@@ -118,6 +119,7 @@ export const SHELL_FRAMES: readonly FrameSpec[] = [
   { kind: "browser-history", dir: "out", required: ["entries"], summary: "تاريخُ متصفّح الوكيل: زياراتٌ {url,title,at,sessionOrigin} الأحدثُ أوّلاً — يُبثّ عند الطلب وبعد كلّ تنقّل" },
   { kind: "plugins", dir: "out", required: ["turnId", "entries"], summary: "جرد الإضافات المقروءة في الدور بقيمها النافذة وأسبابها" },
   { kind: "vault-status", dir: "out", required: ["status"], summary: "حضور المفاتيح" },
+  { kind: "provider-probe", dir: "out", required: ["provider", "ok", "verdict"], summary: "حكمُ مسبار مفتاح المزوّد: ok أو سببٌ مسمّى (credential، rate-limited، transport…) مع رمز HTTP والزمن — بلا جسد المزوّد" },
   { kind: "external", dir: "out", required: ["id", "tools"], summary: "مزوّد خارجي موصول" },
   { kind: "external-gone", dir: "out", required: ["id"], summary: "مزوّد خارجي مفصول" },
   { kind: "resumed", dir: "out", required: ["from", "upTo"], summary: "مدى إعادة البث" },
@@ -193,6 +195,10 @@ export const validateShellFrame = (value: unknown): ShellValidation => {
     if (!boundedString(value.path, 32_767)) return invalidField(kind, "path")
   } else if (kind === "model-set") {
     if (!boundedString(value.name, 512)) return invalidField(kind, "name")
+  } else if (kind === "provider-probe") {
+    if (!boundedString(value.provider, 64) || !/^[a-z0-9][a-z0-9-]*$/.test(value.provider as string)) return invalidField(kind, "provider")
+    if (value.model !== undefined && (!boundedString(value.model, 160) || /[\x00-\x1f\x7f]/u.test(value.model as string))) return invalidField(kind, "model")
+    if (value.auto !== undefined && typeof value.auto !== "boolean") return invalidField(kind, "auto")
   } else if (kind === "dev-server-start") {
     // اسمُ الإعداد كما يسمح به قارئُ launch.json — بلا فراغٍ ولا محارف تحكّم.
     if (!boundedString(value.name, 40) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value.name as string)) return invalidField(kind, "name")

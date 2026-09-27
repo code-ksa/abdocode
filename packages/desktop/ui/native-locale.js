@@ -3704,6 +3704,12 @@ const referencePairs = [
   ]
 ];
 const pluginTranslations = {
+"providerProbe": {
+"label": "اختبارُ المفتاح بعد حفظه",
+"description": "بعد حفظ مفتاح مزوّدٍ يُرسل نداءٌ صغيرٌ واحد (16 توكن إخراج) عبر عامل Rust نفسِه، فتقول البطاقةُ «يعمل» أو سببَ الرفض المسمّى بدل «محفوظ» وحدها. المعطَّل = يبقى زرُّ «اختبار الاتصال» وحده، ولا نداءَ بلا ضغطة. يسري فوراً.",
+"englishLabel": "Test a key after saving it",
+"englishDescription": "After a provider key is saved, send one small request (16 output tokens) through the same Rust worker, so the card says the key works or names why it was rejected, instead of only saved. Disabled means only the Test connection button remains, and nothing is sent without a click. Applies immediately."
+  },
 "denialBreaker": {
 "label": "قاطعُ الرفض المتكرّر",
 "description": "طلبٌ رُفض ثلاث مرّاتٍ في هذه الجلسة يُقطع بلا سؤالٍ رابع. العطلُ الذي يعالجه: نموذجٌ يعيد ما رُفض بصيغةٍ أخرى فيُسأل المشغّلُ السؤالَ نفسَه مراراً حتى يملّ فيوافق — وإرهاقُ الموافقة بابٌ خلفيٌّ بلا كود. **يبدأ مطفأً** لأنّه يقرّر نيابةً عن المشغّل؛ أمّا **عرضُ التاريخ** (كم مرّةً رُفض هذا الطلب) فيصحب كلَّ سؤالٍ بلا مفتاح، لأنّ إخفاء تاريخٍ يملكه النظامُ عمّن يقرّر ليس حياداً. والعدُّ للجلسة وحدها ولا يُكتب على قرص، والمحوُ من «الصلاحيات» يعيد السؤال.",

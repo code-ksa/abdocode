@@ -48,7 +48,7 @@ use abdo_contracts::{
     FilesystemHandle, IntentId, ReadEffect, ResourceLimits, Scope, TargetRef, ToolId, ToolSpec,
     FRAME_HEADER_LEN,
 };
-use abdo_journal::{ChainHash, Journal, StreamId};
+use abdo_journal::{ChainHash, Journal, JournalOptions, StreamId};
 use abdo_kernel::EffectIntent;
 use abdo_policy::{Policy, Risk};
 use sha2::{Digest as _, Sha256};
@@ -92,7 +92,15 @@ pub fn run_host() -> std::process::ExitCode {
 
 fn run() -> Result<std::process::ExitCode, String> {
     let options = Options::parse()?;
-    let mut journal = Journal::open(&options.journal).map_err(|error| format!("{error:?}"))?;
+    // The same bounded wait as the adapter ledger: a kernel read that meets a peer's
+    // effect in flight waits for it instead of failing with nothing executed.
+    let mut journal = Journal::open_with_options(
+        &options.journal,
+        JournalOptions {
+            writer_wait: crate::adapter_ledger::LEDGER_WRITER_WAIT,
+        },
+    )
+    .map_err(|error| format!("{error:?}"))?;
 
     let operation = label_digest(READ_OBJECT);
     let supervisor = EffectSupervisor::new();

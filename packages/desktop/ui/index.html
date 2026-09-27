@@ -393,6 +393,8 @@
   /* خطُّ Consolas بلا حروفٍ عربية: التلميحُ العربيّ كان يُرسم حروفاً منفصلةً بعرضٍ ثابت. */
   #settings .prov input::placeholder { font-family: "Segoe UI", Cairo, sans-serif; }
   #settings .prov.prov-focus { border-color: #2f6fed; box-shadow: 0 0 0 3px #2f6fed33; }
+  #settings .prov .probestate { margin-top: 8px; font-size: var(--fs-chip); color: var(--dim); }
+  #settings .prov[data-probe="ok"] .probestate { color: #1a7f37; }
   #settings .prov button { background: var(--accent); color: var(--sendfg); border: 0; border-radius: 8px; padding: 0 16px; cursor: pointer; font-family: inherit; }
   #settings .note { font-size: var(--fs-chip); color: var(--dim); margin-top: 6px; }
   #settings .settings-layout { display: grid; grid-template-columns: 170px minmax(0, 720px); gap: 22px; margin-top: 18px; }
@@ -1429,6 +1431,21 @@
     // آخرُ حالةٍ للخزنة من المحرّك: «حفظ وتطبيق» يعيد بناءَ بطاقات المزوّدين، فكانت كلُّها
     // تعود «…» ولا يسأل أحدٌ ثانيةً (مقيس 2026-09-27). الحالةُ المعروفة تُرسم على البطاقات الجديدة.
     let lastVaultStatus = null;
+    // حكمُ مسبار المفتاح (plugins.providerProbe / زرّ «اختبار الاتصال»): السببُ المسمّى من المحرّك، لا نصُّ المزوّد.
+    const probeText = (f) => {
+      const http = typeof f.status === "number" ? " (HTTP " + f.status + ")" : "";
+      if (f.ok) return uiText("✓ Works · ", "✓ يعمل · ") + f.model + " · " + f.ms + " ms";
+      switch (f.verdict) {
+        case "no-key": return uiText("No key saved", "لا مفتاحَ محفوظ");
+        case "credential": return uiText("✗ Key rejected", "✗ رُفض المفتاح") + http;
+        case "rate-limited": return uiText("Key accepted · usage limit reached now", "المفتاح مقبول · بلغ حدَّ الاستخدام الآن") + http;
+        case "provider-unavailable": return uiText("Provider busy or down — not your key", "المزوّد مزدحم أو متوقّف — ليس المفتاح") + http;
+        case "invalid-request": return uiText("✗ Request refused — check the endpoint or model", "✗ رُفض الطلب — تحقّق من العنوان أو النموذج") + http;
+        case "transport": return uiText("✗ Could not reach the provider", "✗ تعذّر الوصول إلى المزوّد");
+        case "local": return uiText("Local models need no key", "النماذج المحلية بلا مفتاح");
+        default: return uiText("✗ Test failed: ", "✗ فشل الاختبار: ") + f.verdict + http;
+      }
+    };
     const paintVaultStatus = (rows) => {
       for (const s of rows) {
         const el2 = document.querySelector('#settings [data-prov="' + s.provider + '"] .keystate');
@@ -2012,6 +2029,21 @@
       if (f.kind === "vault-status") {
         lastVaultStatus = Array.isArray(f.status) ? f.status : [];
         paintVaultStatus(lastVaultStatus);
+        return;
+      }
+      if (f.kind === "provider-probe") {
+        const card = document.querySelector('#settings [data-prov="' + f.provider + '"]');
+        if (card) {
+          // الشارةُ كلمةٌ قصيرة (نصٌّ طويلٌ فيها كان يعصر اسمَ المزوّد عموداً)، والحكمُ كاملاً في سطرٍ تحت الأزرار.
+          const state = card.querySelector(".keystate");
+          if (state) state.textContent = f.ok ? uiText("✓ Works", "✓ يعمل") : f.verdict === "no-key" ? uiText("No key", "لا مفتاح") : f.verdict === "rate-limited" ? uiText("⚠ Limited", "⚠ محدود") : f.verdict === "provider-unavailable" ? uiText("⚠ Busy", "⚠ مزدحم") : uiText("✗ Failed", "✗ فشل");
+          let line = card.querySelector(".probestate");
+          if (!line) { line = document.createElement("div"); line.className = "probestate"; card.querySelector(".row").after(line); }
+          line.textContent = probeText(f);
+          card.dataset.probe = f.ok ? "ok" : "failed";
+          const button = card.querySelector("button.probe");
+          if (button) button.disabled = false;
+        }
         return;
       }
       if (f.kind === "settings") {
@@ -2673,6 +2705,15 @@
           };
           card.querySelector('.row').appendChild(importButton);
         }
+        const testButton = document.createElement("button");
+        testButton.className = "probe"; testButton.textContent = uiText("Test connection", "اختبار الاتصال");
+        testButton.onclick = () => {
+          testButton.disabled = true;
+          card.querySelector(".keystate").textContent = uiText("Testing…", "جارٍ الاختبار…");
+          const model = pendingProviderModel !== null && pendingProviderModel.startsWith(p.id + "/") ? pendingProviderModel.slice(p.id.length + 1) : undefined;
+          sendFrame({ kind: "provider-probe", provider: p.id, ...(model === undefined ? {} : { model }) }).catch((error) => { testButton.disabled = false; notice(String(error)); });
+        };
+        card.querySelector(".row").appendChild(testButton);
         card.querySelector("button").onclick = async () => {
           const value = input.value.trim();
           if (value.length === 0) return;
@@ -2682,6 +2723,7 @@
             card.querySelector(".keystate").textContent = "✓ محفوظ";
             notice(uiText("Saved the key for ", "حُفظ مفتاح ") + p.label + uiText(" in the vault", " في الخزنة"));
             sendFrame({ kind: "vault-status" });
+            sendFrame({ kind: "provider-probe", provider: p.id, auto: true }).catch(() => {});
             bindPendingProviderModel(p.id);
           } catch (err) { notice("تعذّر الحفظ: " + err); }
         };

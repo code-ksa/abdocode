@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use abdo_contracts::{Digest, IntentId};
-use abdo_journal::{ChainHash, EffectId, EffectRecord, Journal, StreamId};
+use abdo_journal::{ChainHash, EffectId, EffectRecord, Journal, JournalOptions, StreamId};
 
 use crate::error::RuntimeError;
 use crate::phase::EffectPhase;
@@ -48,10 +48,27 @@ pub struct AdapterLedger {
     journal: Journal,
 }
 
+/// How long one ledger operation waits for the journal's sole writer.
+///
+/// Measured 2026-09-27: every begin/settle is its own short-lived process, and
+/// two team agents writing in parallel reached the journal together. With the
+/// library default of zero wait the second was refused outright ("journal writer
+/// is busy after 0ms; nothing was executed") and its write was lost. A bounded
+/// wait lets a peer from another process finish first, and past the bound the
+/// refusal still fails closed. Measured, the wait alone is not enough (four
+/// parallel begins still lost one after 3 s), so callers inside one engine also
+/// queue per journal in tool-worker's `withJournalWriter`.
+pub const LEDGER_WRITER_WAIT: std::time::Duration = std::time::Duration::from_millis(3_000);
+
 impl AdapterLedger {
     pub fn open(path: &Path) -> Result<Self, RuntimeError> {
         Ok(Self {
-            journal: Journal::open(path)?,
+            journal: Journal::open_with_options(
+                path,
+                JournalOptions {
+                    writer_wait: LEDGER_WRITER_WAIT,
+                },
+            )?,
         })
     }
 

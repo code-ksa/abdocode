@@ -28,6 +28,12 @@ const EXACT = [
   [/^النواة: (حاضرة \(نسخة الـ72 ساعة\)|غائبة) · دفتر النواة: (\d+) صفّاً · قدرات المنتج: (\S+)$/u,
     (m) => `Kernel: ${m[1] === "غائبة" ? "missing" : "available (72-hour build)"} · kernel ledger: ${m[2]} rows · product capabilities: ${m[3]}`],
   [/^(\u2068?)بلا نموذج — نواةٌ وفهرس(\u2069?)( · .*)$/u, (m) => `${m[1]}No model — kernel and index${m[2]}${m[3]}`],
+  // إعادةُ المحاولة (cli.ts requestWithBoundedRetry) — تظهر للمستخدم أثناء الانتظار نفسِه.
+  [/^⏳ المزوّد (\S+) مزدحم \(HTTP (\d+)\) — المحاولة (\d+)\/(\d+)، أعيد بعد (\d+) ث$/u,
+    (m) => `⏳ Provider ${m[1]} busy (HTTP ${m[2]}) — attempt ${m[3]}/${m[4]}, retrying in ${m[5]} s`],
+  // السببُ من تصنيف البوّابة؛ إن حمل عربيّةً يبقى السطرُ كاملاً كما هو.
+  [/^⏳ المزوّد (\S+): ([^\u0600-\u06FF]+) — المحاولة (\d+)\/(\d+)، أعيد بعد (\d+) ث$/u,
+    (m) => `⏳ Provider ${m[1]}: ${m[2]} — attempt ${m[3]}/${m[4]}, retrying in ${m[5]} s`],
 ]
 
 /** Fragments of marker lines, longest first where one contains another. */
@@ -100,6 +106,7 @@ const READ_WHEN = new Map([
   ["في غير وضع الدردشة", "outside chat mode"],
   ["حين يظهر سرٌّ في المحادثة", "when a secret appears in the conversation"],
   ["حين ينتج الإطارُ الدلاليُّ قيمة", "when the semantic frame yields a value"],
+  ["حين يُحفظ مفتاحُ مزوّد", "when a provider key is saved"],
 ])
 
 export function readWhenForDisplay(text, language) {

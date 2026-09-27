@@ -109,6 +109,8 @@ export interface DelegateReport {
   readonly epochs: number
   readonly commands: readonly string[]
   readonly refusals: readonly string[]
+  /** أدواتٌ وُزّعت وفشل حكمُها (رُفضت عند المنفِّذ أو سقطت) — «منفَّذة» لا تعني «نجحت». */
+  readonly failures: readonly string[]
   readonly stop: DelegateStop
   /** الجوابُ الخاتم للطفل، مسقوفاً. */
   readonly answer: string
@@ -159,6 +161,7 @@ export const runDelegatedAgent = async (options: DelegateOptions): Promise<Deleg
   const awareness = new TurnAwareness()
   const commands: string[] = []
   const refusals: string[] = []
+  const failures: string[] = []
   let history: TextAgentMessage[] = []
   let answer = ""
   let epochs = 0
@@ -195,9 +198,10 @@ export const runDelegatedAgent = async (options: DelegateOptions): Promise<Deleg
       },
       isCallable: (toolName) => childToolRefusal(agent, toolName, depth) === undefined,
       priorCommands: commands,
-      onToolResult: (command, output) => {
+      onToolResult: (command, output, verdict) => {
         commands.push(command)
-        awareness.observe(command, output, epoch)
+        if (verdict?.ok === false) failures.push(`${command.split("\n", 1)[0]!.slice(0, 90)} — ${verdict.reason}${verdict.detail === undefined ? "" : `: ${verdict.detail.slice(0, 120)}`}`)
+        awareness.observe(command, output, epoch, verdict?.ok === true)
       },
       maxRounds,
     })
@@ -218,6 +222,7 @@ export const runDelegatedAgent = async (options: DelegateOptions): Promise<Deleg
     epochs,
     commands: Object.freeze([...commands]),
     refusals: Object.freeze([...refusals]),
+    failures: Object.freeze([...failures]),
     stop,
     answer: answer.slice(0, REPORT_MAX_CHARS),
   })
@@ -236,11 +241,13 @@ const STOP_TEXT: Readonly<Record<DelegateStop, string>> = Object.freeze({
 export const renderDelegateReport = (report: DelegateReport): string => {
   const lines: string[] = []
   lines.push(`🤝 تقرير الوكيل «${report.agent}» — ${report.readOnly ? "قراءة-فقط (مشتقٌّ من أدواته المعلَنة)" : "يكتب/ينفّذ"}`)
-  lines.push(`الحِقب: ${report.epochs} · الأدوات المنفَّذة: ${report.commands.length} · المرفوضة: ${report.refusals.length} · التوقّف: ${STOP_TEXT[report.stop]}`)
+  const failed = report.failures?.length ?? 0
+  lines.push(`الحِقب: ${report.epochs} · الأدوات المنفَّذة: ${report.commands.length}${failed > 0 ? ` · فشلت: ${failed}` : ""} · المرفوضة: ${report.refusals.length} · التوقّف: ${STOP_TEXT[report.stop]}`)
   if (report.commands.length > 0) {
     lines.push(`نُفّذ: ${report.commands.slice(0, REPORT_MAX_COMMANDS).map((c) => c.split("\n", 1)[0]!.slice(0, 90)).join(" | ")}`)
   }
   for (const refusal of report.refusals.slice(0, REPORT_MAX_REFUSALS)) lines.push(`⛔ ${refusal.slice(0, 200)}`)
+  for (const failure of (report.failures ?? []).slice(0, REPORT_MAX_REFUSALS)) lines.push(`⚠ فشلت: ${failure.slice(0, 220)}`)
   lines.push(`الخلاصة: ${report.answer.length > 0 ? report.answer : "(بلا جواب)"}`)
   return lines.join("\n")
 }
