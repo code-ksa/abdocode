@@ -63,7 +63,8 @@ await $`bun run --cwd ${path.join(root, "packages", "engine")} build`
 // deliberately keeps it compiled out for fail-closed library/test consumers.
 await $`cargo build --release --manifest-path ${path.join(root, "packages", "kernel", "Cargo.toml")} --bin abdo-kernel --features effectful-dispatch`
 await $`cargo build --release --manifest-path ${path.join(root, "packages", "kernel", "Cargo.toml")} --bin abdo-tool-worker`
-await $`powershell -NoProfile -ExecutionPolicy Bypass -File ${path.join(winisoPackage, "build.ps1")}`
+// build.ps1 يبني ويكتب بيانه بمساراتٍ نسبيّة إلى حزمته — فيُشغَّل منها (مقيس: من الجذر بحث عن target\release في الجذر وسقط).
+await $`powershell -NoProfile -ExecutionPolicy Bypass -File ${path.join(winisoPackage, "build.ps1")}`.cwd(winisoPackage)
 await $`mkdir -p ${path.join(payload, "bin")}`
 // The payload is a staging directory, not an application data directory, and
 // tauri.conf.json bundles it whole (`"resources": ["payload/**/*"]`) — so

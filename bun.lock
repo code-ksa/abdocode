@@ -637,6 +637,9 @@
         "@typescript/native-preview": "catalog:",
       },
     },
+    "packages/vscode-extension": {
+      "name": "@abdo/vscode-extension",
+    },
     "packages/web": {
       "name": "@abdo/web",
       "version": "2.0.0",
@@ -797,6 +800,8 @@
     "@abdo/ui": ["@abdo/ui@workspace:packages/ui"],
 
     "@abdo/verification": ["@abdo/verification@workspace:packages/verification"],
+
+    "@abdo/vscode-extension": ["@abdo/vscode-extension@workspace:packages/vscode-extension"],
 
     "@abdo/web": ["@abdo/web@workspace:packages/web"],
 

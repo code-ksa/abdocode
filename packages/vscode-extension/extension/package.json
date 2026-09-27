@@ -1,0 +1,71 @@
+{
+  "name": "abdocode-vscode",
+  "displayName": "AbdoCode",
+  "description": "Run AbdoCode agent tasks on the open project from VS Code — through the same gates, kernel and ledger as the desktop app.",
+  "version": "0.1.0",
+  "publisher": "code-ksa",
+  "private": true,
+  "license": "MIT",
+  "main": "./extension.js",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "abdocode.runTask",
+        "title": "AbdoCode: Run task…"
+      },
+      {
+        "command": "abdocode.askSelection",
+        "title": "AbdoCode: Ask about selection…"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "abdocode.askSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@90"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AbdoCode",
+      "properties": {
+        "abdocode.enginePath": {
+          "type": "string",
+          "default": "",
+          "description": "Full path to abdocode.exe. Empty: the desktop app's install is found automatically."
+        },
+        "abdocode.mode": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "auto",
+            "full-access"
+          ],
+          "default": "auto",
+          "description": "Permission mode for tasks. Nobody approves inside the editor: a request that needs approval is refused and listed in the report."
+        },
+        "abdocode.timeoutSeconds": {
+          "type": "number",
+          "default": 1800,
+          "minimum": 10,
+          "maximum": 86400,
+          "description": "Wall-clock limit for one task."
+        },
+        "abdocode.profileDir": {
+          "type": "string",
+          "default": "",
+          "description": "The desktop app's profile folder (models, vault). Empty: %APPDATA%\\io.abdocode.desktop."
+        }
+      }
+    }
+  }
+}

@@ -88,6 +88,13 @@
       "entry": "packages/script/src/index.ts",
       "argv": [],
       "reachability": "production-imports"
+    },
+    "vscode-extension": {
+      "package": "@abdo/vscode-extension",
+      "kind": "ui",
+      "entry": "packages/vscode-extension/extension/package.json",
+      "argv": [],
+      "reachability": "manifest"
     }
   },
   "sourcesOfTruth": {
@@ -2039,6 +2046,37 @@
         "targetConsumer": "@abdo/engine",
         "completionCondition": "Production paths consume the package without a parallel implementation"
       }
+    },
+    "@abdo/vscode-extension": {
+      "path": "packages/vscode-extension",
+      "role": "ui",
+      "owner": "platform",
+      "status": "standalone",
+      "runtimeRoots": [
+        "vscode-extension"
+      ],
+      "capabilities": [
+        "vscode-editor-surface"
+      ],
+      "truth": {
+        "owns": [],
+        "consumes": []
+      },
+      "boundaries": {
+        "effects": "none",
+        "journal": "none",
+        "network": "local-only"
+      },
+      "proofs": [
+        {
+          "id": "vscode-extension-tests",
+          "kind": "unit",
+          "command": "bun --cwd packages/vscode-extension test",
+          "asserts": [
+            "tasks run through `abdocode exec` with the extension's own engine state; both commands register"
+          ]
+        }
+      ]
     }
   },
   "parallelImplementations": [],
