@@ -164,6 +164,8 @@ import { CheckpointStore, restoreReportLine } from "./turn-checkpoint"
 import { FileMutationQueue, queueWaitLine } from "./file-mutation-queue"
 import { buildReviewPrompt, judgeReview, parseReviewFindings, renderReviewReport, REVIEW_LENSES, REVIEW_SYSTEM, reviewDiffText, type ReviewChange } from "./review-lane"
 import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"
+import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./tool-availability"
+import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
 import { railProfile, type RailProfile, type RailSetting } from "./rail-policy"
@@ -237,6 +239,16 @@ const REACH = new RustReachEffects(TOOL_WORKER, HOST, JOURNAL, () => PROJECT_DIR
  * وخزنةُ المالك بعقدها عبر العامل كما كانت. سؤالٌ واحدٌ بجوابٍ واحد لقائمة النماذج
  * وحالةِ الخزنة وربطِ النموذج — كانت ثلاثتُها تُطلق PowerShell لكلّ مزوّد.
  */
+/** البند 12 — حقائقُ إتاحة الأدوات لحظةَ النداء: من الإعدادات والقرص وحدهما (tool-availability.ts). */
+const availabilityFacts = (): AvailabilityFacts => ({
+  desktopControl: loadSettings().desktopControlEnabled === true,
+  gitRepository: existsSync(join(PROJECT_DIR, ".git")),
+})
+/** مفتاحا البحث المنظّم في الخزنة المشحونة؛ خزنةُ المالك لا يُفترض شكلُها فتُعدّ حاضرةً (السلوكُ القديم). */
+const googleSearchReady = (): boolean => {
+  const presence = shippedVaultPresence(["abdocode-google-pse-api-key", "abdocode-google-pse-engine-id"], process.env)
+  return presence === undefined || [...presence.values()].every(Boolean)
+}
 const hasProviderKey = async (providerId: string): Promise<boolean> => {
   const vaultKey = Providers.provider(providerId)?.vaultKey
   const shipped = vaultKey === undefined ? undefined : shippedVaultPresence([vaultKey], process.env)
@@ -987,6 +999,8 @@ interface AskHooks {
   readonly onModelNotice?: (text: string) => void
   /** S1 (09-17) — إيصالُ طبقات النظام 🧾 (حجمُ كلّ طبقة)؛ الدورُ يبثّه مرّةً واحدة عند أوّل تركيب. */
   readonly onSystemComposed?: (receipt: string) => void
+  /** البند 10 — تفكيكُ نافذة السياق؛ المستدعي يبثّه مرّةً في الدور. */
+  readonly onContextBreakdown?: (line: string) => void
   /** الإطارُ الدلاليّ للدور (plugins.semanticFrame) — منه طبقتا البيئة (لغة/لهجة) والإطار في رسالة النظام. */
   readonly semanticFrame?: SemanticFrame
   /** دليلُ العمليّة: سطرٌ يسمّي عمليّةَ التشغيل وأداةَ `*_intent` التي تملك دليلَها — طبقةُ playbook-hint. */
@@ -1798,10 +1812,15 @@ const askOnce = async (
   // بالاسم) — غيابٌ صادق لا زرٌّ ميّت. ووكيلٌ مفوَّض لا يرى delegate أبداً، ويرى team
   // إن أعلنها في سقفه (09-16: الطفلُ القارئ يوازي قرّاءً؛ المُوزِّع يحكم القراءةَ والعمق).
   const delegationOn = delegationEnabled()
+  const toolAvailabilityOn = pluginOnNow("toolAvailability")
+  const toolFacts = availabilityFacts()
+  const searchReady = googleSearchReady()
   let toolDefinitions: HarnessToolDefinition[] = Tools.TOOLS
     .filter((tool) => (projectSelected || ["project-create","project-template","templates","project-locate","project-open"].includes(tool.name)) && tool.agentCallable && planningToolAllowed(tool.name, planningPhase) && (cloudModel(selected.provider) || tool.cloudOnly !== true))
     .filter((tool) => exposedByIntent(tool.name, turnFamilies))
     .filter((tool) => withinAllowlist(tool.name) && (tool.name !== DELEGATE_TOOL || (delegationOn && allowlist === undefined)) && (tool.name !== TEAM_TOOL || (delegationOn && (allowlist === undefined || allowlist.includes(TEAM_TOOL)) && workProfile(loadSettings().workMode).parallelAgents >= 2)))
+    // البند 12 — أداةٌ شرطُها غائبٌ لا تُعلَن (plugins.toolAvailability)؛ المُوزِّعُ يبقى يرفضها باسمها إن سُمّيت.
+    .filter((tool) => !toolAvailabilityOn || unavailableBecause(tool.name, toolFacts) === undefined)
     .map((tool) => {
       const acceptsInput = tool.usage !== tool.name
       return Object.freeze({
@@ -1820,6 +1839,9 @@ const askOnce = async (
         }),
       })
     })
+  // البند 12 — البحثُ بلا مفتاحَي PSE يُقال كما هو: يفتح المتصفّح فقط، والقراءةُ بـopen/page — لا وعدَ بنتائج منظّمة.
+  if (!searchReady) toolDefinitions = toolDefinitions.map((definition) => definition.legalName !== "search" ? definition
+    : Object.freeze({ ...definition, description: "بحث Google بلا مفتاح PSE في الخزنة: يفتح صفحةَ النتائج في متصفّح عبدو فقط ولا يعيد نتائجَ منظّمة — اقرأها بـopen ثمّ page." }))
   // S13.5 (الثغرة المقيسة «ب») — أدواتُ المزوّدين الخارجيّين الموصولين كانت
   // تُوزَّع ولا تُعلَن قطّ. تُلحق هنا بالكتالوج نفسه بأسمائها المنسوبة، وتمرّ
   // بسقف الوكيل كغيرها (وكيلٌ لا يعلن اسمها لا يراها).
@@ -1896,21 +1918,61 @@ const askOnce = async (
   let trimmed = [...history]
   const historyTokens = () => trimmed.reduce((sum, m) => sum + tokensOf(m.content + JSON.stringify(m.toolCalls ?? [])) + (m.images?.length??0)*4096, 0)
   const estimatedSystem = system.replace("{{tool-catalogue}}", toolDefinitions.map((tool) => `- ${tool.usage} — ${tool.description}`).join("\n"))
-  const fixedTokens = tokensOf(estimatedSystem + question + (hooks.attachments?.text??'') + (nativeTools ? JSON.stringify(toolDefinitions) : "")) + (hooks.attachments?.images.length??0)*4096
+  // الطلبُ الحاليّ قد يكون نتيجةَ أداةٍ كبيرة (البروتوكولُ النصّيّ يحملها طلباً لا تاريخاً) — فيُقصّ هو أيضاً في السلّم.
+  let requestText = question
+  const fixedOf = (request: string) => tokensOf(estimatedSystem + request + (hooks.attachments?.text??'') + (nativeTools ? JSON.stringify(toolDefinitions) : "")) + (hooks.attachments?.images.length??0)*4096
+  let fixedTokens = fixedOf(requestText)
   let estimated = fixedTokens + historyTokens()
   // النسبةُ من التقدير قبل القصّ: بعده لا يتجاوز الميزانيةَ بالبناء فكان الرقمُ لا ينزل تحت النصف (مراجعة 09-14).
   lastContextLeft = contextLeftOf(estimated, contextTokens)
+  // البند 10 — ما يملأ النافذة، بالمقدِّر نفسِه الذي يقرّر القصّ (plugins.contextBreakdown؛ سطرٌ واحد في الدور).
+  if (hooks.onContextBreakdown !== undefined && pluginOnNow("contextBreakdown")) {
+    const catalogueTokens = tokensOf(toolDefinitions.map((tool) => `- ${tool.usage} — ${tool.description}`).join("\n"))
+    hooks.onContextBreakdown(contextBreakdownLine({
+      system: Math.max(0, tokensOf(estimatedSystem) - catalogueTokens),
+      catalogue: catalogueTokens,
+      history: historyTokens(),
+      toolResults: trimmed.filter(isToolResult).reduce((sum, m) => sum + tokensOf(m.content), 0),
+      request: tokensOf(question),
+      attachments: tokensOf(hooks.attachments?.text ?? "") + (hooks.attachments?.images.length ?? 0) * 4096,
+    }, contextTokens))
+  }
+  // البند 9 — سلّمُ الفائض (plugins.overflowLadder): قصُّ الرسائل الكبيرة القديمة **قبل** إسقاط تبادلاتٍ كاملة،
+  // وما وقع يُقال بأرقامه — كان الإسقاطُ صامتاً فتنسى المحادثةُ الطويلة أوّلَها ولا يُقال لأحد.
+  const beforeLadder = estimated
+  let clippedMessages = 0, clippedTokens = 0, droppedExchanges = 0
+  if (estimated > inputBudgetTokens && pluginOnNow("overflowLadder")) {
+    const clip = clipForWindow(trimmed, estimated - inputBudgetTokens, tokensOf)
+    trimmed = clip.messages
+    clippedMessages = clip.clipped
+    clippedTokens = clip.savedTokens
+    estimated = fixedTokens + historyTokens()
+    // ثمّ نتيجةُ الأداة الحاليّة — لا كلامُ المستخدم أبداً — قبل إسقاط أيّ تبادلٍ يحمل طلبَه الأوّل (مقيس 09-27:
+    // الإسقاطُ أخذ الطلبَ الأصليّ واستدعاءَه وأبقى النتيجةَ الكبيرة وحدها فوق الميزانيّة).
+    if (estimated > inputBudgetTokens && requestText.trimStart().startsWith("نتيجة الأداة")) {
+      const own = clipForWindow([{ role: "user", content: requestText }], estimated - inputBudgetTokens, tokensOf, { keepRecent: 0 })
+      if (own.clipped > 0) {
+        requestText = own.messages[0]!.content
+        fixedTokens = fixedOf(requestText)
+        clippedMessages += own.clipped
+        clippedTokens += own.savedTokens
+        estimated = fixedTokens + historyTokens()
+      }
+    }
+  }
   while (estimated > inputBudgetTokens && trimmed.length > 0) {
     trimmed = dropOldestExchange(trimmed)
+    droppedExchanges += 1
     estimated = fixedTokens + historyTokens()
   }
+  if (clippedMessages > 0 || droppedExchanges > 0) hooks.onModelNotice?.(overflowLine(beforeLadder, estimated, inputBudgetTokens, clippedMessages, clippedTokens, droppedExchanges))
   if (estimated > inputBudgetTokens) {
     if(hooks.conversationMode==='chat')throw Error('The message and attachments exceed this model’s context limit. Use smaller files or start a new conversation.')
     return `السياق ${estimated} توكيناً يتجاوز ميزانية المدخل ${inputBudgetTokens} من نافذة ${contextTokens} — قسّم المهمة إلى حقب`
   }
 
   const prov = Providers.provider(selected.provider) ?? Providers.provider("ollama")!
-  const messages: ModelMessage[] = [...trimmed, { role: "user", content: question + (hooks.attachments?.text??''), ...(hooks.attachments?.images.length ? {images:hooks.attachments.images} : {}) }]
+  const messages: ModelMessage[] = [...trimmed, { role: "user", content: requestText + (hooks.attachments?.text??''), ...(hooks.attachments?.images.length ? {images:hooks.attachments.images} : {}) }]
   if(messages.some(message=>message.images?.length)&&!await acceptsImages(prov,selected.model,hooks.signal))throw Error(imageRefusalMessage(selected.ref, selected.vision === true))
 
   // القضبان نفسها لكلّ مزوّد؛ والمصادقة من الخزنة وقتَ النداء — السحابيّ بلا
@@ -3662,6 +3724,10 @@ const runServeShell = async (): Promise<void> => {
           const ok = await gate(turnId, spec.effect, `بحث Google: ${request.query}`)
           if (!ok) return denied(`رُفض بحث Google — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
           if (shellKind === "desktop") emit({ kind: "browse", url })
+          // بلا مفتاحَي PSE لا يُطلب العاملُ نداءً سيفشل حتماً (مقيس 09-27: رحلةٌ كاملة ثمّ «تعذّرت») — البديلُ فوراً.
+          if (!googleSearchReady()) {
+            return { output: `فُتح البحث في المتصفّح؛ لا مفتاحَ بحثٍ منظّم (PSE) في الخزنة فلا نتائجَ منظّمة.\nالبديلُ بلا مفتاح: نفّذ: open ${url} ثمّ نفّذ: page`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "google_pse_not_configured" } }
+          }
           try {
             const input = GoogleSearch.normaliseRequest(request)
             const response = await REACH.googleSearch({
@@ -5050,11 +5116,19 @@ const runServeShell = async (): Promise<void> => {
     }
     if (decoder.pendingBytes !== 0) throw new Error("قناة سطح المكتب انتهت بإطار ناقص")
   }
-  const emitEvent = async (turnId: string, payload: string): Promise<void> => {
-    const event = await serveJournal.emitOutput(turnId, payload)
-    eventSeq = event.seq
-    log.push(event)
-    emit({ kind: "event", ...event })
+  // 🔴 مقيس 2026-09-27: حدثان أُطلقا معاً بلا انتظار (إيصالُ النظام 🧾 وسطرُ النافذة 📏، وكذلك إشعاراتُ إعادة
+  // المحاولة) تسابقا على تسلسل الدفتر، فرُفض الثاني «serve_output_sequence_gap:4->4» وضاع بصمت — `.catch` يبتلعه.
+  // الأحداثُ تُكتب الآن بترتيب ندائها واحداً بعد واحد؛ فشلُ حدثٍ لا يُسقط ما بعده.
+  let eventChain: Promise<unknown> = Promise.resolve()
+  const emitEvent = (turnId: string, payload: string): Promise<void> => {
+    const run = eventChain.then(async () => {
+      const event = await serveJournal.emitOutput(turnId, payload)
+      eventSeq = event.seq
+      log.push(event)
+      emit({ kind: "event", ...event })
+    })
+    eventChain = run.catch(() => undefined)
+    return run
   }
 
   const runBody: typeof executeBody = (body, hooks) => {
@@ -6056,7 +6130,16 @@ const runServeShell = async (): Promise<void> => {
           await emitEvent(turn.id, `🧭 عمليّةُ تشغيل «${frame.ops.action}» — الدليلُ عند ${intentTool}`)
         }
       }
-      { const callable = Tools.TOOLS.filter((t) => t.agentCallable); await emitEvent(turn.id, exposureLine(callable.filter((t) => exposedByIntent(t.name, turnFamilies)).length, callable.length, turnFamilies)) }
+      // البند 12 — ما أُخفي لغياب شرطه يُقال مرّةً في الدور بسببه (المفتاحُ نفسُه يُسأل عند كلّ نداءٍ في ask).
+      {
+        // البند 12 — ما أُخفي لغياب شرطه يُقال مرّةً في الدور بسببه، والعدُّ المعروض لا يحسبه (المفتاحُ نفسُه يُسأل في ask).
+        const availabilityOn = pluginOnNow("toolAvailability"), facts = availabilityFacts()
+        const callable = Tools.TOOLS.filter((t) => t.agentCallable)
+        const byIntent = callable.filter((t) => exposedByIntent(t.name, turnFamilies))
+        const hidden = availabilityOn ? hiddenToolsLine(byIntent.map((t) => t.name), facts) : ""
+        if (hidden.length > 0) await emitEvent(turn.id, hidden)
+        await emitEvent(turn.id, exposureLine(byIntent.filter((t) => !availabilityOn || unavailableBecause(t.name, facts) === undefined).length, callable.length, turnFamilies))
+      }
       const { action, kind, target } = frame.intent
       // المتابعةُ («كمل مشروع X») فتحٌ ثم استئناف: تُخدم بالعثور نفسه، والاستئنافُ يتكفّل به مسارُ resumeIntent.
       if ((action === "find" || action === "open" || action === "resume") && (kind === "project" || kind === "folder") && target !== undefined) {
@@ -6108,6 +6191,8 @@ const runServeShell = async (): Promise<void> => {
     // قيمة مشوَّهة = عدّاد في حالة «غير صالح» يرفض كل نداء سحابي باسم المتغيّر —
     // سقفُ مالٍ لا يُوسَّع صامتاً إلى افتراض («الغياب رفضٌ لا إذن»).
     const turnBudgetOn = plugins.read("turnBudget", "turn")
+    // البند 25 (حارس الإكمال الفارغ): محاولةٌ ثانيةٌ واحدة بتنبيهٍ قبل الإنهاء المسمّى — نداءٌ إضافيّ، فمطفأٌ افتراضاً.
+    const emptyGuardOn = plugins.read("emptyGuard", "turn")
     // السقفُ من الإعدادات أوّلاً (0 = بلا سقف)، ثمّ متغيّرُ البيئة، ثمّ الافتراضُ 400k — لا يعود جهازُ العميل بلا سقفٍ ولا يبقى سقفُ المطوّر خفيّاً.
     const turnCapSetting = loadSettings().turnTokenCap
     const turnCap = turnBudgetOn ? (typeof turnCapSetting === "number" ? (turnCapSetting === 0 ? undefined : turnCapSetting) : (turnTokenCap() ?? DEFAULT_TURN_TOKEN_CAP)) : undefined
@@ -6124,6 +6209,7 @@ const runServeShell = async (): Promise<void> => {
     const projectInstructions = loadSettings().projectInstructions
     // S1 — إيصالُ طبقات النظام مرّةً في الدور (النداءاتُ التالية في الدور نفسه تركّب النظامَ نفسَه).
     let systemReceiptSent = false
+    let contextBreakdownSent = false
     const hooks: AskHooks = {
       conversationMode:modeAtTurn,
       attachments:attached,
@@ -6136,6 +6222,7 @@ const runServeShell = async (): Promise<void> => {
       // مقيس 09-17: إعادةُ المحاولة والصعودُ على ازدحام المزوّد يُقالان في الدفتر لا في stderr وحده.
       onModelNotice: (text) => { void emitEvent(turn.id, text).catch(() => undefined) },
       onSystemComposed: (receipt) => { if (systemReceiptSent) return; systemReceiptSent = true; void emitEvent(turn.id, `🧾 ${receipt}`).catch(() => undefined) },
+      onContextBreakdown: (line) => { if (contextBreakdownSent) return; contextBreakdownSent = true; void emitEvent(turn.id, line).catch(() => undefined) },
       // مِقبضٌ لا لقطة: الطبقةُ الرابعة (الاستنتاج) تُدمج في الإطار بعد بناء الخطّافات، فالنظامُ يقرأ الإطارَ لحظةَ التركيب.
       get semanticFrame() { return semanticFrameValue },
       ...(playbookHint === undefined ? {} : { playbookHint }),
@@ -6624,7 +6711,7 @@ const runServeShell = async (): Promise<void> => {
       }
       let lastAnswer = ""
       // "turn_budget" بمفرداته من RUN_STOP_REASONS (contracts/src/session.ts) — مفردةٌ واحدة تغلب أسلوباً واحداً.
-      let lastStop: "complete" | "round-limit" | "duplicate" | "uncallable" | "invalid-command" | "tool-failed" | "acceptance-pending" | "tool_budget" | "wall_clock_budget" | "stuck" | "turn_budget" = "complete"
+      let lastStop: "complete" | "empty-reply" | "round-limit" | "duplicate" | "uncallable" | "invalid-command" | "tool-failed" | "acceptance-pending" | "tool_budget" | "wall_clock_budget" | "stuck" | "turn_budget" = "complete"
       // كاشف الجدران (فكرة Anton الممتصة): جدار بيئةٍ خارجيٌّ تكرر ببصمته
       // مرتين = STUCK — تسليمٌ صادق باسم الجدار بدل حرق الحقب حتى السقف.
       // خلف مفتاح إعدادات (plugins.walls، الافتراض مفعَّل) بقاعدة المالك.
@@ -6704,6 +6791,7 @@ const runServeShell = async (): Promise<void> => {
       let duplicateReplaysUsed = 0
       let emptyStalls = 0
       let fabricatedStalls = 0
+      let emptyReplies = 0
       let epochs = 0
       for (let epoch = 1; epoch <= MAX_AGENT_EPOCHS; epoch++) {
         // بوابة سقف الدور عند حدّ الحقبة (قبل عدّها): أكبر طلبٍ مقدَّر في هذا الدور هو
@@ -7043,6 +7131,36 @@ const runServeShell = async (): Promise<void> => {
         if (loop.commands.length === 0 && loop.stopReason === "complete") {
           await emitEvent(turn.id, `⚠ رد النموذج بلا أداة (ليس إيصال إنجاز):\n${loop.answer.slice(0, 700)}`)
         }
+        // البند 25 من جرد هيرمس/أوبن‑كلاو — حارسُ الإكمال الفارغ. مقيس 2026-09-27: ردٌّ فارغٌ بلا أداة
+        // (نموذجٌ لا يُخرج شيئاً) كان يُنهي الدور «مكتملاً» بصفر أدوات وجوابٍ فارغ. الفراغُ ليس جواباً:
+        // يُسمّى ولا يُقبل، ولا يُعاد السياقُ نفسُه إلى الطريق نفسِه بلا حدّ — محاولةٌ ثانيةٌ واحدة بتنبيه
+        // حين يُفعَّل plugins.emptyGuard، ثمّ توقّفٌ باسمه.
+        // سطرُ «— المقيس» يُلحقه المحرّكُ بكلّ جواب — ليس كلاماً من النموذج؛ الفراغُ يُقاس بدونه.
+        const spokenAnswer = loop.answer.split("\n").filter((line) => !line.startsWith("— المقيس")).join("\n").trim()
+        if (loop.stopReason === "complete" && loop.commands.length === 0 && spokenAnswer.length === 0) {
+          emptyReplies += 1
+          if (emptyGuardOn && emptyReplies === 1) {
+            // الردُّ الفارغ لا يُعاد إرساله رسالةً: المرمِّز يرفض رسالةَ مساعدٍ فارغة («empty assistant message»)
+            // فيموت النداءُ الثاني قبل أن يُرسل (مقيس 2026-09-27). يُنزع من ذيل التاريخ قبل المحاولة.
+            while (epochHistory.length > 0) {
+              const last = epochHistory[epochHistory.length - 1]!
+              const text = typeof last.content === "string" ? last.content : ""
+              const spoken = text.split("\n").filter((line) => !line.startsWith("— المقيس")).join("").trim()
+              if (last.role !== "assistant" || spoken.length > 0 || (last as { toolCalls?: readonly unknown[] }).toolCalls?.length) break
+              epochHistory.pop()
+            }
+            lastStop = "acceptance-pending"
+            pending = undefined
+            continuationHint = "ردُّك السابق كان فارغاً تماماً. أجب عن المهمّة، أو نفّذ أداةً بسطرٍ يبدأ بـ«نفّذ:». لا ترسل ردّاً فارغاً."
+            await emitEvent(turn.id, "↻ ردٌّ فارغ من النموذج — يُعاد النداء مرّةً واحدة بتنبيه (plugins.emptyGuard)")
+            continue
+          }
+          lastAnswer = ""
+          lastStop = "empty-reply"
+          pending = undefined
+          // سطرُ السبب يحمله الجوابُ الخاتم وحده (كسابقة الرجوع: سطرٌ واحدٌ لا مكرَّر).
+          break
+        }
         // مقيس 09-16 على لوحة القياس (b3، nemotron): ردٌّ بلا أداةٍ يحمل سطوراً بشكل إيصالات المحرّك («⚙ open …») مرّ «مكتملاً»
         // بصفر أدوات. الاختلاقُ الذي كان يُسمّى فقط يُحاسَب هنا: لا اكتمالَ على إيصالاتٍ لم يكتبها المحرّك — تصحيحٌ ونداءٌ آخر، مرّتين.
         // ومقيس 09-16 على 4.0.44: «تم تنفيذ desk click … وإيصاله: نقرتُ عند …» مع أداةٍ أخرى نُفّذت (read) — الاكتمالُ على إيصالٍ مختلَق
@@ -7321,7 +7439,8 @@ const runServeShell = async (): Promise<void> => {
         if (/بالكامل|تمّ? (?:إنجاز|انجاز|إكمال|اكمال)|اكتمل|مكتمل(?!ة بعد)|fully (?:complete|done)|completed successfully/iu.test(lastAnswer)) answer += `\n⚠ ادّعى النموذجُ الاكتمالَ ونقضته البوّابات (التوقّف: ${lastStop}) — العبرةُ بإيصالات البوّابات أدناه لا بالخلاصة.`
         // تسليم سقف الدور: صادق بالأرقام، ولا يدّعي اكتمالاً؛ «اكمل» طريقٌ قائم (plugins.resumeIntent).
         const turnSpend = lastStop === "turn_budget" && turnMeter !== undefined ? turnMeter.snapshot() : undefined
-        answer += lastStop === "stuck" && stuckWall !== undefined
+        if (lastStop === "empty-reply") answer += "\n⚠ ردّ النموذج فراغاً — لا جوابَ ولا أداة. لا يُرسَل السياقُ نفسُه إليه ثانيةً؛ اختر نموذجاً آخر من شريحة النموذج أو أعد المحاولة."
+        else answer += lastStop === "stuck" && stuckWall !== undefined
           ? `\n⛔ توقّفٌ صادق بجدار خارجي متكرر — لا يعالجه مزيد المحاولة:\n${stuckWall.evidence}\nالمطلوب من المشغّل: اعتماد/تنصيب/صلاحية، ثم أعد الإطلاق والتقدم محفوظ.`
           : turnSpend !== undefined
             ? `\n⏱ توقّفٌ صادق بسقف الدور: فعّال=${turnSpend.spent}/${renderCap(turnSpend.cap)} في ${turnSpend.calls} نداءً${turnSpend.graceUsed ? " (بعد سماحة واحدة)" : ""} — لم يُدّعَ الاكتمال. التقدم محفوظ؛ الاستمرار قرار المالك: ارفع ABDO_TURN_TOKEN_CAP أو أطلق دوراً جديداً بـ«اكمل».`

@@ -18,7 +18,8 @@ describe("tool exposure wiring", () => {
     const exposure = source.indexOf(".filter((tool) => exposedByIntent(tool.name, turnFamilies))")
     const allow = source.indexOf(".filter((tool) => withinAllowlist(tool.name) && (tool.name !== DELEGATE_TOOL", exposure)
     expect(exposure).toBeGreaterThan(0); expect(allow).toBeGreaterThan(exposure); expect(allow - exposure).toBeLessThan(120)
-    expect(source).toContain("await emitEvent(turn.id, exposureLine(callable.filter((t) => exposedByIntent(t.name, turnFamilies)).length, callable.length, turnFamilies))")
+    // البند 12 (2026-09-27): العدُّ المعروض يُسقط ما أُخفي لغياب شرطه، والإخفاءُ يُقال بسطرٍ قبله.
+    expect(source).toContain("await emitEvent(turn.id, exposureLine(byIntent.filter((t) => !availabilityOn || unavailableBecause(t.name, facts) === undefined).length, callable.length, turnFamilies))")
     // 🔴 والتوسيعُ من **نتيجة** أداةٍ آمرة — عند المخرج الواحد لا عند عشرين return.
     // قِيس: مهمّةٌ تقول «اقرأ TASK.md ونفّذ» وفي الملفّ طلبُ لقطةٍ — فبقيت عائلةُ
     // المتصفّح مغلقةً طوال الدور، وما لا يُعرَض لا يُطلَب.

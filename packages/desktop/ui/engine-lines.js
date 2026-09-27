@@ -19,6 +19,14 @@ const EXACT = [
   [/^— المقيس: دخل (\S+) توكيناً \(قدّرنا (\S+)\)، خرج (\S+)، في (\S+) ثانية، والسياق فهارس L0 كلّها\.$/u,
     (m) => `— Measured: ${m[1]} tokens in (estimated ${m[2]}), ${m[3]} out, in ${m[4]} s; context: all L0 indexes.`],
   [/^— حقب التنفيذ: (\d+) · الأدوات: (\d+) · التوقف: (.+)$/u, (m) => `— Epochs: ${m[1]} · tools: ${m[2]} · stop: ${m[3]}`],
+  [/^— المهمة غير مكتملة بعد\. حقب التنفيذ: (\d+) · الأدوات المنفذة فعلياً: (\d+) · التوقف: (\S+)$/u,
+    (m) => `— Not complete yet. Epochs: ${m[1]} · tools actually run: ${m[2]} · stop: ${m[3]}`],
+  [/^⚠ بلغت المهمة نقطة حفظ آمنة\. الأدلة محفوظة؛ يمكن الاستمرار في الجلسة نفسها من دون ادعاء الاكتمال\.$/u,
+    () => "⚠ The task reached a safe checkpoint. The evidence is kept; you can continue in this session without claiming completion."],
+  [/^⚠ ردّ النموذج فراغاً — لا جوابَ ولا أداة\. لا يُرسَل السياقُ نفسُه إليه ثانيةً؛ اختر نموذجاً آخر من شريحة النموذج أو أعد المحاولة\.$/u,
+    () => "⚠ The model replied with nothing — no answer and no tool. The same context is not sent to it again; pick another model from the model chip, or retry."],
+  [/^↻ ردٌّ فارغ من النموذج — يُعاد النداء مرّةً واحدة بتنبيه \(plugins\.emptyGuard\)$/u,
+    () => "↻ The model replied with nothing — asking once more with a nudge (plugins.emptyGuard)"],
   [/^قرأت النواةُ الملفَّ وتحقّقت منه — بصمة المحتوى (\S+)… والأطوار السبعة في دفتر النواة \(صفوفه الآن: (\d+)\)\.$/u,
     (m) => `The kernel read and verified the file — content digest ${m[1]}…, all seven phases in the kernel ledger (rows now: ${m[2]}).`],
   [/^…\[قُصّ: عُرض (\d+) من (\d+) حرفاً\]$/u, (m) => `…[clipped: showing ${m[1]} of ${m[2]} characters]`],
@@ -28,6 +36,11 @@ const EXACT = [
   [/^النواة: (حاضرة \(نسخة الـ72 ساعة\)|غائبة) · دفتر النواة: (\d+) صفّاً · قدرات المنتج: (\S+)$/u,
     (m) => `Kernel: ${m[1] === "غائبة" ? "missing" : "available (72-hour build)"} · kernel ledger: ${m[2]} rows · product capabilities: ${m[3]}`],
   [/^(\u2068?)بلا نموذج — نواةٌ وفهرس(\u2069?)( · .*)$/u, (m) => `${m[1]}No model — kernel and index${m[2]}${m[3]}`],
+  // نافذةُ السياق (context-window.ts) — سطرا التفكيك والسلّم بقواعدَ كاملة: مقاطعُ عامّةٌ مثل « من » كانت ستمسّ نصَّ المستخدم في غيرها.
+  [/^📏 نافذة السياق: نظام (\S+) · كتالوج (\S+) · تاريخ (\S+) \(نتائج أدوات (\S+)\) · الطلب (\S+) · مرفقات (\S+) = (\S+) من (\S+) \((\d+)%\)$/u,
+    (m) => `📏 context window: system ${m[1]} · catalogue ${m[2]} · history ${m[3]} (tool results ${m[4]}) · request ${m[5]} · attachments ${m[6]} = ${m[7]} of ${m[8]} (${m[9]}%)`],
+  [/^📏 السياقُ تجاوز ميزانيّةَ المدخل \((\S+) من (\S+)\): (.+) ⇦ (\S+)$/u,
+    (m) => `📏 the context exceeded the input budget (${m[1]} of ${m[2]}): ${m[3].replace(/قُصّت (\d+) رسائل كبيرة \((\S+)\)/u, "clipped $1 large messages ($2)").replace(/أُسقط (\d+) تبادلاً قديماً/u, "dropped $1 old exchanges").replace("، ثمّ ", ", then ")} ⇦ ${m[4]}`],
   // إعادةُ المحاولة (cli.ts requestWithBoundedRetry) — تظهر للمستخدم أثناء الانتظار نفسِه.
   [/^⏳ المزوّد (\S+) مزدحم \(HTTP (\d+)\) — المحاولة (\d+)\/(\d+)، أعيد بعد (\d+) ث$/u,
     (m) => `⏳ Provider ${m[1]} busy (HTTP ${m[2]}) — attempt ${m[3]}/${m[4]}, retrying in ${m[5]} s`],
@@ -40,6 +53,8 @@ const EXACT = [
 const FRAGMENTS = [
   ["✓ نقطة حفظ الحقبة", "✓ epoch checkpoint"], ["↻ حقبة", "↻ epoch"], ["📐 أحكام الأدوات ح", "📐 tool verdicts e"],
   ["⏱ سقف الدور (حقبة", "⏱ turn cap (epoch"], ["💳 السحابة:", "💳 cloud:"], ["🚪 البوابة:", "🚪 gate:"],
+  ["🧰 مخفيّةٌ لغياب شرطها:", "🧰 hidden, prerequisite missing:"], ["تحكّمُ سطح المكتب مطفأ في الإعدادات", "desktop control is off in Settings"],
+  ["المشروعُ ليس مستودعَ git", "the project is not a git repository"],
   ["🧰 أدوات معروضة:", "🧰 tools shown:"], ["(الأساسيّة)", "(core)"], ["🧾 نظام:", "🧾 system:"], ["كتالوج", "catalogue"],
   ["📚 دروس المشروع:", "📚 project lessons:"], ["تُحقن قبل أوّل نداء", "injected before the first call"],
   ["استنتاج: لم يُشغَّل", "inference: not run"], ["هدفُ العمليّة:", "operation target:"], ["عمليّة:", "operation:"],
@@ -107,6 +122,7 @@ const READ_WHEN = new Map([
   ["حين يظهر سرٌّ في المحادثة", "when a secret appears in the conversation"],
   ["حين ينتج الإطارُ الدلاليُّ قيمة", "when the semantic frame yields a value"],
   ["حين يُحفظ مفتاحُ مزوّد", "when a provider key is saved"],
+  ["حين يتجاوز الطلبُ ميزانيّةَ المدخل", "when a request exceeds the input budget"],
 ])
 
 export function readWhenForDisplay(text, language) {

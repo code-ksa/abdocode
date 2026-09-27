@@ -36,6 +36,10 @@ export type PluginName =
   | "unattendedDeny"
   | "denialBreaker"
   | "providerProbe"
+  | "emptyGuard"
+  | "toolAvailability"
+  | "overflowLadder"
+  | "contextBreakdown"
   | "tasksPanel"
   | "walls"
   | "verifier"
@@ -118,6 +122,52 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     site: "call",
     wired: true,
     readWhen: "حين يُحفظ مفتاحُ مزوّد",
+    requiresVault: Object.freeze([]),
+  }),
+  // البند 12 — إتاحةُ الأدوات: أداةٌ شرطُها غائبٌ لا تُعلَن. مفعَّلٌ لأنّه يوفّر ولا يُنفق، ولا يفتح ولا يغلق قدرة.
+  Object.freeze({
+    name: "toolAvailability",
+    label: "إخفاءُ الأدوات التي ينقصها شرطها",
+    description: "أداةٌ لا يمكن أن تنجح الآن لا تُعرض على النموذج: تحكّمُ سطح المكتب مطفأ ⇦ لا desk، والمشروعُ بلا git ⇦ لا git وأخواتها — ويُقال ما أُخفي ولماذا مرّةً في الدور. المعطَّل = تُعرض كلُّها ويرفضها المُوزِّع عند النداء. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // البند 9 — سلّمُ الفائض. مفعَّلٌ: لا يعمل إلا حين كان الطلبُ سيُسقط تاريخاً كاملاً، فيحفظ أكثرَ ممّا كان يُحفظ.
+  Object.freeze({
+    name: "overflowLadder",
+    label: "سلّمُ فائض السياق",
+    description: "حين يتجاوز الطلبُ نافذةَ النموذج تُقصّ الرسائلُ الكبيرة القديمة (رأسٌ وذيلٌ وعلامةٌ ظاهرة) قبل إسقاط أيّ تبادلٍ كامل، ويُقال ما قُصّ وما أُسقط بالأرقام. المعطَّل = تُسقط التبادلاتُ الأقدم كاملةً كما كان (ويُقال ذلك أيضاً). يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    readWhen: "حين يتجاوز الطلبُ ميزانيّةَ المدخل",
+    requiresVault: Object.freeze([]),
+  }),
+  // البند 10 — تفكيكُ نافذة السياق: سطرُ تشخيصٍ واحد في الدور، لا يُنفق توكناً ولا يغيّر طلباً — مفعَّل.
+  Object.freeze({
+    name: "contextBreakdown",
+    label: "تفكيكُ نافذة السياق",
+    description: "سطرٌ واحد في تفاصيل التنفيذ لكلّ دور: كم يأخذ النظامُ والكتالوجُ والتاريخُ (ومنه نتائجُ الأدوات) والطلبُ والمرفقات من نافذة النموذج — بالمقدِّر نفسِه الذي يقرّر القصّ. المعطَّل = لا سطر. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // البند 25 — حارسُ الإكمال الفارغ. الإنهاءُ المسمّى للردّ الفارغ آليّةٌ بلا مفتاح (عطلُ صدق)؛ هذا المفتاحُ
+  // للمحاولة الثانية بتنبيه، ومطفأٌ لأنّها نداءٌ إضافيّ.
+  Object.freeze({
+    name: "emptyGuard",
+    label: "محاولةٌ ثانية للردّ الفارغ",
+    description: "حين يردّ النموذج فراغاً بلا جوابٍ ولا أداة يُعاد النداء مرّةً واحدة بتنبيهٍ قصير قبل أن يتوقّف الدور باسمه. المعطَّل = يتوقّف الدور فوراً بسببٍ مسمّى («ردّ النموذج فراغاً») ولا يُعاد السياق. في الحالتين لا يُحسب الفراغُ إنجازاً. يسري من الدور التالي.",
+    defaultOn: false,
+    applies: "next-turn",
+    site: "turn",
+    wired: true,
     requiresVault: Object.freeze([]),
   }),
   // S13.5 — المفتاحان الميتان أُعطيا قارئَين حقيقيَّين، واسمُ الأوّل صُحّح إلى

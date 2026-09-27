@@ -5,6 +5,8 @@ import { gateEventLine } from "../src/front-gate"
 import { epochReceiptLine } from "../src/receipt-ledger-line"
 import { renderLedgerLine } from "../src/token-budget"
 import { exposureLine } from "../src/tool-exposure"
+import { hiddenToolsLine } from "../src/tool-availability"
+import { contextBreakdownLine, overflowLine } from "../src/context-window"
 import { renderTurnBudgetLine, TurnSpendMeter } from "../src/turn-budget"
 import { describeWorkProfile, workProfile } from "../src/work-mode"
 import { engineLineForDisplay, engineOutputForDisplay, providerLabelsForDisplay, readWhenForDisplay } from "../../desktop/ui/engine-lines.js"
@@ -33,6 +35,11 @@ test("the engine's own generators render fully in English, and unchanged in Arab
     `🧭 ${describeFrame(semanticFrame("احذف ملف من نحن"))}`,
     exposureLine(38, 68, new Set()),
     exposureLine(40, 68, new Set(["web", "git"])),
+    hiddenToolsLine(["desk", "git", "git-commit"], { desktopControl: false, gitRepository: false }),
+    contextBreakdownLine({ system: 4200, catalogue: 7800, history: 34000, toolResults: 28000, request: 300, attachments: 0 }, 65536),
+    overflowLine(60000, 48000, 49152, 3, 9000, 2),
+    overflowLine(52000, 47000, 49152, 0, 0, 1),
+    overflowLine(6300, 4500, 5616, 1, 1900, 0),
     renderLedgerLine({ calls: 3, inputTokens: 900, cachedInputTokens: 300, outputTokens: 50, effectiveTokens: 700, cacheHitRate: 1 / 3 }, 100_000),
     renderTurnBudgetLine(meter.snapshot(), 1),
     verdicts.line(1),
@@ -52,13 +59,18 @@ test("the engine's own generators render fully in English, and unchanged in Arab
     // مقيسٌ حيّاً 2026-09-27 (خطّةُ Qwen بلغت حدَّها): سطرُ الانتظار نفسُه كان عربيّاً في واجهةٍ إنجليزيّة.
     "⏳ المزوّد qwen-token-plan مزدحم (HTTP 429) — المحاولة 1/7، أعيد بعد 2 ث",
     "⏳ المزوّد nvidia: transport failed before response — المحاولة 2/7، أعيد بعد 4 ث",
+    // البند 25 (2026-09-27) وسطرا الدور غير المكتمل — ظهرا عربيَّين في واجهةٍ إنجليزيّة.
+    "— المهمة غير مكتملة بعد. حقب التنفيذ: 1 · الأدوات المنفذة فعلياً: 0 · التوقف: empty-reply",
+    "⚠ بلغت المهمة نقطة حفظ آمنة. الأدلة محفوظة؛ يمكن الاستمرار في الجلسة نفسها من دون ادعاء الاكتمال.",
+    "⚠ ردّ النموذج فراغاً — لا جوابَ ولا أداة. لا يُرسَل السياقُ نفسُه إليه ثانيةً؛ اختر نموذجاً آخر من شريحة النموذج أو أعد المحاولة.",
+    "↻ ردٌّ فارغ من النموذج — يُعاد النداء مرّةً واحدة بتنبيه (plugins.emptyGuard)",
   ]
   for (const line of lines) {
     fullyEnglish(line)
     expect(engineLineForDisplay(line, "ar")).toBe(line)
   }
   // «نفي» كلمةٌ قائمة، ولا تُطابَق داخل «التنفيذ».
-  expect(fullyEnglish(lines[14]!)).toContain("exec compactions=0")
+  expect(fullyEnglish(lines.find((line) => line.startsWith("✓ نقطة حفظ الحقبة"))!)).toContain("exec compactions=0")
   // هدفُ المستخدم المقتبَس يبقى كما كتبه.
   expect(fullyEnglish(lines[1]!)).toContain("«")
 })

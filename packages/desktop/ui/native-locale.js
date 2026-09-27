@@ -3704,6 +3704,30 @@ const referencePairs = [
   ]
 ];
 const pluginTranslations = {
+"overflowLadder": {
+"label": "سلّمُ فائض السياق",
+"description": "حين يتجاوز الطلبُ نافذةَ النموذج تُقصّ الرسائلُ الكبيرة القديمة (رأسٌ وذيلٌ وعلامةٌ ظاهرة) قبل إسقاط أيّ تبادلٍ كامل، ويُقال ما قُصّ وما أُسقط بالأرقام. المعطَّل = تُسقط التبادلاتُ الأقدم كاملةً كما كان (ويُقال ذلك أيضاً). يسري فوراً.",
+"englishLabel": "Context overflow ladder",
+"englishDescription": "When a request exceeds the model window, clip the largest old messages (head, tail and a visible marker) before dropping any whole exchange, and state what was clipped and dropped with numbers. Disabled means the oldest exchanges are dropped whole, as before (and that is stated too). Applies immediately."
+  },
+"contextBreakdown": {
+"label": "تفكيكُ نافذة السياق",
+"description": "سطرٌ واحد في تفاصيل التنفيذ لكلّ دور: كم يأخذ النظامُ والكتالوجُ والتاريخُ (ومنه نتائجُ الأدوات) والطلبُ والمرفقات من نافذة النموذج — بالمقدِّر نفسِه الذي يقرّر القصّ. المعطَّل = لا سطر. يسري فوراً.",
+"englishLabel": "Context window breakdown",
+"englishDescription": "One line per turn in Execution details: how much of the model window the system text, tool catalogue, history (and its tool results), the request and attachments take — measured by the same estimator that decides clipping. Disabled means no line. Applies immediately."
+  },
+"toolAvailability": {
+"label": "إخفاءُ الأدوات التي ينقصها شرطها",
+"description": "أداةٌ لا يمكن أن تنجح الآن لا تُعرض على النموذج: تحكّمُ سطح المكتب مطفأ ⇦ لا desk، والمشروعُ بلا git ⇦ لا git وأخواتها — ويُقال ما أُخفي ولماذا مرّةً في الدور. المعطَّل = تُعرض كلُّها ويرفضها المُوزِّع عند النداء. يسري فوراً.",
+"englishLabel": "Hide tools whose prerequisite is missing",
+"englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
+  },
+"emptyGuard": {
+"label": "محاولةٌ ثانية للردّ الفارغ",
+"description": "حين يردّ النموذج فراغاً بلا جوابٍ ولا أداة يُعاد النداء مرّةً واحدة بتنبيهٍ قصير قبل أن يتوقّف الدور باسمه. المعطَّل = يتوقّف الدور فوراً بسببٍ مسمّى («ردّ النموذج فراغاً») ولا يُعاد السياق. في الحالتين لا يُحسب الفراغُ إنجازاً. يسري من الدور التالي.",
+"englishLabel": "Retry an empty reply once",
+"englishDescription": "When the model replies with nothing — no answer and no tool — ask once more with a short nudge before the turn stops by name. Disabled means the turn stops at once with a named reason (the model replied with nothing) and the context is not resent. Either way an empty reply never counts as done. Applies from the next turn."
+  },
 "providerProbe": {
 "label": "اختبارُ المفتاح بعد حفظه",
 "description": "بعد حفظ مفتاح مزوّدٍ يُرسل نداءٌ صغيرٌ واحد (16 توكن إخراج) عبر عامل Rust نفسِه، فتقول البطاقةُ «يعمل» أو سببَ الرفض المسمّى بدل «محفوظ» وحدها. المعطَّل = يبقى زرُّ «اختبار الاتصال» وحده، ولا نداءَ بلا ضغطة. يسري فوراً.",
