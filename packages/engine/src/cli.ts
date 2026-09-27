@@ -53,7 +53,7 @@ import { negativeOnlySuite } from "./negative-only-suite"
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { createHash, timingSafeEqual } from "node:crypto"
 import { stackStatus } from "./stack"
-import { allow as allowEgress, install as installEgressGuard } from "@abdo/egress"
+import { allow as allowEgress, allowWhile as allowEgressWhile, install as installEgressGuard } from "@abdo/egress"
 import type { HarnessToolDefinition, ModelMessage } from "@abdo/harness"
 import { CHAT_SYSTEM, acceptsImages, conversationMode, resolveAttachments, type ConversationMode, type ResolvedAttachments } from './conversation-attachments'
 import { BoundedWireDecoder, classifyModelFailure } from "@abdo/model-gateway"
@@ -167,6 +167,7 @@ import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToo
 import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./tool-availability"
 import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
 import { formatKeyless, KEYLESS_HOST, KEYLESS_SOURCE, keylessSearchUrl, parseKeylessResults } from "./mind/keyless-search"
+import { formatResearch, pageTextOf, parseResearchCommand, selectEvidence, type ResearchSource } from "./mind/research"
 import { editsCode, isProjectTestRun, projectTestCommand, VERIFY_AFTER_EDIT_RUNS, verifyDemandLine, verifyGaveUpLine } from "./verify-after-edit"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
@@ -3289,6 +3290,23 @@ const runServeShell = async (): Promise<void> => {
     } finally { delegationDepth -= 1 }
   }
 
+  // نتائجُ الويب بلا مفتاح — مالكٌ واحد لأداتَي search وresearch (الفجوتان #1 و#2). DuckDuckGo عبر محوّل النواة، والوجهةُ
+  // تُعلن لحارس الخروج لحظةَ الطلب الصريح وحدها (مقيس حيّاً 2026-09-27: رفضها الحارسُ «never declared» — صواباً).
+  const keylessResults = async (input: import("./mind/google-search").GoogleSearchRequest, turnId: string, signal?: AbortSignal): Promise<{ readonly items: readonly import("./mind/google-search").GoogleSearchItem[]; readonly why?: string }> => {
+    allowEgress(KEYLESS_HOST, "keyless web search — explicitly invoked search tool (plugins.keylessSearch)")
+    const fetched = await runAdapterV("network", "network_fetch", { url: keylessSearchUrl(input.query, input.site) }, `search_${turnId}_${nextToolSeq()}`, signal)
+    const items = fetched.verdict?.ok === false ? [] : parseKeylessResults(fetched.output, input.count!)
+    return items.length > 0 ? { items } : { items, why: fetched.verdict?.ok === false ? fetched.output.split("\n", 1)[0]!.slice(0, 200) : "الصفحةُ بلا نتائج مقروءة" }
+  }
+  // ونتائجُ PSE حين يوجد مفتاحاها — المُشغِّلُ الذي يعرف الرمز والسرّ عاملُ Rust، لا المحرّك.
+  const pseResults = async (input: import("./mind/google-search").GoogleSearchRequest, signal?: AbortSignal) => {
+    const { GoogleSearch } = await import("./mind/google-search")
+    const response = await REACH.googleSearch({
+      query: input.query, count: input.count!, site: input.site, language: input.language!, country: input.country!, safe: input.safe!, kind: input.kind, timeoutMs: 15_000,
+    }, signal)
+    return GoogleSearch.decodeWorkerResponse(input, response.status, response.body)
+  }
+
   const dispatchToolV = async (word: string, body: string, turnId: string, hooks: AskHooks, nativeCall?: NativeAgentCall): Promise<DispatchResultV> => {
     const result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)
     // ما قرأه الوكيلُ من ملفٍّ آمرٍ نيّةُ المهمّة كذلك: تُفتح عائلاتُه فيرى أدواتِها في
@@ -3744,21 +3762,14 @@ const runServeShell = async (): Promise<void> => {
               try { input = GoogleSearch.normaliseRequest(request) } catch (cause) { return invalid(String(cause instanceof Error ? cause.message : cause)) }
               // مقيس حيّاً 2026-09-27: حارسُ الخروج رفضها «destination was never declared» — صواباً؛ فتُعلَن هنا وحدها، بعد البوّابة
               // ولحظةَ الطلب الصريح (سابقةُ project-templates). ولا تُفتح وجهةٌ غيرها: fetch إلى مواقع النتائج يبقى مرفوضاً، والقراءةُ بـopen.
-              allowEgress(KEYLESS_HOST, "keyless web search — explicitly invoked search tool (plugins.keylessSearch)")
-              const fetched = await runAdapterV("network", "network_fetch", { url: keylessSearchUrl(input.query, input.site) }, `search_${turnId}_${nextToolSeq()}`, hooks.signal)
-              const items = fetched.verdict?.ok === false ? [] : parseKeylessResults(fetched.output, input.count!)
+              const { items, why } = await keylessResults(input, turnId, hooks.signal)
               if (items.length > 0) return okText(formatKeyless(input.query, items))
-              const why = fetched.verdict?.ok === false ? fetched.output.split("\n", 1)[0]!.slice(0, 200) : "الصفحةُ بلا نتائج مقروءة"
               return { output: `تعذّر البحثُ بلا مفتاح (${KEYLESS_SOURCE}): ${why}\nالبديل: نفّذ: open ${url} ثمّ نفّذ: page`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "keyless_search_empty" } }
             }
             return { output: `فُتح البحث في المتصفّح؛ لا مفتاحَ بحثٍ منظّم (PSE) في الخزنة فلا نتائجَ منظّمة.\nالبديلُ بلا مفتاح: نفّذ: open ${url} ثمّ نفّذ: page`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "google_pse_not_configured" } }
           }
           try {
-            const input = GoogleSearch.normaliseRequest(request)
-            const response = await REACH.googleSearch({
-              query: input.query, count: input.count!, site: input.site, language: input.language!, country: input.country!, safe: input.safe!, kind: input.kind, timeoutMs: 15_000,
-            }, hooks.signal)
-            return okText(GoogleSearch.format(GoogleSearch.decodeWorkerResponse(input, response.status, response.body)))
+            return okText(GoogleSearch.format(await pseResults(GoogleSearch.normaliseRequest(request), hooks.signal)))
           } catch (cause) {
             // «تعذّرت» بلا «فشل» — كانت تُحكم نجاحاً بالتشمّم.
             const message = String(cause instanceof Error ? cause.message : cause)
@@ -3766,6 +3777,36 @@ const runServeShell = async (): Promise<void> => {
             const fallback = `\nالبديلُ بلا مفتاح: نفّذ: open ${url} ثمّ نفّذ: dismiss (يغلق نافذةَ اللغة/الكوكيز إن ظهرت) ثمّ نفّذ: page لقراءة النتائج وروابطها. ولتفعيل النتائج المنظّمة: مفتاحُ Programmable Search (key + cx) في الخزنة «abdocode-google» من الإعدادات ▸ المفاتيح.`
             return { output: `فُتح البحث في المتصفّح، وتعذّرت النتائج المنظّمة: ${message}${fallback}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: message.slice(0, 160) } }
           }
+        }
+        if (spec.name === "research") {
+          // الفجوة #2 (2026-09-27) — بحثٌ معمّق حتميّ: بحثٌ ⇦ قراءةُ أعلى الصفحات عبر النواة ⇦ مقاطعُ مرتّبةٌ بالصلة ⇦ أدلّةٌ مرقّمة.
+          if (!pluginOnNow("research")) return denied("رُفض research: البحثُ المعمّق مطفأ (plugins.research) — فعّله من الإعدادات أو استعمل search.", "tool_not_permitted")
+          let request: ReturnType<typeof parseResearchCommand>
+          try { request = parseResearchCommand(rest) } catch (cause) { return invalid(String(cause instanceof Error ? cause.message : cause)) }
+          const ok = await gate(turnId, spec.effect, `بحثٌ معمّق: ${request.question}`)
+          if (!ok) return denied(`رُفض البحثُ المعمّق — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
+          const { GoogleSearch } = await import("./mind/google-search")
+          const input = GoogleSearch.normaliseRequest({ query: request.question, count: 10 })
+          let found: { readonly items: readonly import("./mind/google-search").GoogleSearchItem[]; readonly why?: string }
+          let via: string
+          if (googleSearchReady()) {
+            try { found = { items: (await pseResults(input, hooks.signal)).items }; via = "Google" } catch (cause) { found = { items: [], why: String(cause instanceof Error ? cause.message : cause).slice(0, 200) }; via = "Google" }
+          } else if (pluginOnNow("keylessSearch")) { found = await keylessResults(input, turnId, hooks.signal); via = `${KEYLESS_SOURCE} بلا مفتاح` }
+          else return denied("رُفض research: لا مفتاحَ PSE والبحثُ بلا مفتاح مطفأ (plugins.keylessSearch).", "tool_not_permitted")
+          const targets = found.items.filter((item) => /^https:\/\//iu.test(item.url)).slice(0, request.pages)
+          if (targets.length === 0) return { output: `تعذّر البحثُ المعمّق عن «${request.question}»: ${found.why ?? "لا نتائج"}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "research_no_results" } }
+          const sources: ResearchSource[] = []
+          for (const item of targets) {
+            // مضيفُ النتيجة يُفتح لحارس الخروج طولَ قراءتها وحدها ثمّ يُغلق: الوجهةُ من نتيجة هذا البحث لا من النموذج.
+            const release = allowEgressWhile(new URL(item.url).hostname, `research — a result of this explicit research call`)
+            try {
+              const page = await runAdapterV("network", "network_fetch", { url: item.url }, `research_${turnId}_${nextToolSeq()}`, hooks.signal)
+              sources.push(page.verdict?.ok === false ? { title: item.title, url: item.url, failure: page.output.split("\n", 1)[0]!.replace(/^رُفض\/فشل المحوّل: /u, "").slice(0, 120) } : { title: item.title, url: item.url, text: pageTextOf(page.output) })
+            } finally { release() }
+          }
+          const evidence = selectEvidence(sources, request.question)
+          const text = formatResearch(request.question, via, sources, evidence)
+          return evidence.length > 0 ? okText(text) : { output: text, verdict: { ok: false, reason: "tool_failed", denied: false, detail: sources.some((s) => s.text !== undefined) ? "research_no_matching_passage" : "research_no_page_read" } }
         }
         return unknownTool(`أداة شبكة غير معروفة: ${spec.name}`)
       }

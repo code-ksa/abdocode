@@ -39,6 +39,7 @@ export type PluginName =
   | "emptyGuard"
   | "verifyAfterEdit"
   | "keylessSearch"
+  | "research"
   | "toolAvailability"
   | "overflowLadder"
   | "contextBreakdown"
@@ -189,6 +190,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     name: "keylessSearch",
     label: "بحثٌ بلا مفتاح",
     description: "بلا مفتاحَي Google PSE يعيد search نتائجَ منظّمة (عنوان ورابط ومقتطف، حتى 10) من DuckDuckGo عبر محوّل الشبكة في النواة — فحصُ DNS/SSRF والأثرُ في الدفتر، والاستعلامُ يُرسل إلى DuckDuckGo. الصورُ تحتاج PSE. المعطَّل = بلا مفتاح يفتح search المتصفّحَ فقط ويقرأ النموذجُ الصفحةَ بنفسه. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // الفجوة #2 من جدول 2026-09-27 — بحثٌ معمّق. مفعَّل: لا يعمل إلّا حين يستدعيه النموذجُ صراحةً وبالبوّابة نفسِها.
+  Object.freeze({
+    name: "research",
+    label: "بحثٌ معمّق",
+    description: "أداةُ research: تبحث ثمّ تقرأ أعلى الصفحات (حتى 6) عبر محوّل الشبكة في النواة، وتقطّعها مقاطعَ تُرتَّب بالصلة بالسؤال (BM25 بتطبيعٍ عربيّ)، وتعيد أدلّةً مرقّمة [n] بمصادرها ليُكتب جوابٌ مستشهَد — بلا نموذجٍ في الأنبوب. مضيفُ كلّ نتيجةٍ يُفتح لحارس الخروج طولَ قراءتها وحدها. المعطَّل = الأداةُ ترفض باسمها ويبقى search. يسري فوراً.",
     defaultOn: true,
     applies: "immediate",
     site: "call",

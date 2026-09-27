@@ -54,11 +54,14 @@ test("wiring: without PSE keys the search runner goes through the kernel network
   expect(start).toBeGreaterThan(0)
   const branch = cli.slice(start, start + 1600)
   expect(branch).toContain('if (pluginOnNow("keylessSearch") && request.kind !== "image") {')
-  expect(branch).toContain('runAdapterV("network", "network_fetch", { url: keylessSearchUrl(input.query, input.site) }')
+  // الجلبُ في المالك المشترك مع research (keylessResults)، والفرعُ يناديه.
+  expect(branch).toContain("const { items, why } = await keylessResults(input, turnId, hooks.signal)")
+  const helper = cli.slice(cli.indexOf("const keylessResults = async ("), cli.indexOf("const pseResults = async ("))
+  expect(helper).toContain('runAdapterV("network", "network_fetch", { url: keylessSearchUrl(input.query, input.site) }')
   // الوجهةُ تُعلن لحارس الخروج قبل الجلب مباشرةً — ووحدها.
-  expect(branch.indexOf("allowEgress(KEYLESS_HOST,")).toBeGreaterThan(0)
-  expect(branch.indexOf("allowEgress(KEYLESS_HOST,")).toBeLessThan(branch.indexOf('runAdapterV("network", "network_fetch"'))
-  expect(branch.match(/allowEgress\(/gu)).toHaveLength(1)
+  expect(helper.indexOf("allowEgress(KEYLESS_HOST,")).toBeGreaterThan(0)
+  expect(helper.indexOf("allowEgress(KEYLESS_HOST,")).toBeLessThan(helper.indexOf('runAdapterV("network", "network_fetch"'))
+  expect(cli.match(/allowEgress\(KEYLESS_HOST/gu)).toHaveLength(1)
   // الرفضُ يُقال — لا نجاحَ بلا نتائج.
   expect(branch).toContain('detail: "keyless_search_empty"')
   // والتوافقُ مع البوّابة: الموافقةُ تُطلب قبل هذا الفرع لا بعده.

@@ -3722,6 +3722,12 @@ const pluginTranslations = {
 "englishLabel": "Hide tools whose prerequisite is missing",
 "englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
   },
+"research": {
+"label": "بحثٌ معمّق",
+"description": "أداةُ research: تبحث ثمّ تقرأ أعلى الصفحات (حتى 6) عبر محوّل الشبكة في النواة، وتقطّعها مقاطعَ تُرتَّب بالصلة بالسؤال (BM25 بتطبيعٍ عربيّ)، وتعيد أدلّةً مرقّمة [n] بمصادرها ليُكتب جوابٌ مستشهَد — بلا نموذجٍ في الأنبوب. مضيفُ كلّ نتيجةٍ يُفتح لحارس الخروج طولَ قراءتها وحدها. المعطَّل = الأداةُ ترفض باسمها ويبقى search. يسري فوراً.",
+"englishLabel": "Deep research",
+"englishDescription": "The research tool searches, reads the top pages (up to 6) through the kernel network adapter, splits them into passages ranked by relevance to the question (BM25 with Arabic normalisation), and returns numbered evidence [n] with its sources so the answer can cite them — no model in the pipeline. Each result host is opened to the egress guard only while that page is read. Disabled means the tool refuses by name and search remains. Applies immediately."
+  },
 "keylessSearch": {
 "label": "بحثٌ بلا مفتاح",
 "description": "بلا مفتاحَي Google PSE يعيد search نتائجَ منظّمة (عنوان ورابط ومقتطف، حتى 10) من DuckDuckGo عبر محوّل الشبكة في النواة — فحصُ DNS/SSRF والأثرُ في الدفتر، والاستعلامُ يُرسل إلى DuckDuckGo. الصورُ تحتاج PSE. المعطَّل = بلا مفتاح يفتح search المتصفّحَ فقط ويقرأ النموذجُ الصفحةَ بنفسه. يسري فوراً.",

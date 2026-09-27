@@ -134,6 +134,21 @@ export function allow(host: string, why: string): void {
 }
 
 /**
+ * Permit a destination for the length of one explicit operation, and take it back after.
+ *
+ * `research` reads the pages its own search returned: those hosts are chosen by
+ * the search result, not by the model, and they are reachable only while that
+ * one call runs. A host that was already permitted stays permitted — the release
+ * removes only what this call added.
+ */
+export function allowWhile(host: string, why: string): () => void {
+  const key = host.toLowerCase()
+  if (!key || state.allowed.has(key)) return () => undefined
+  state.allowed.set(key, why)
+  return () => { if (state.allowed.get(key) === why) state.allowed.delete(key) }
+}
+
+/**
  * Permit every provider endpoint in a catalogue.
  *
  * Called with the compiled-in catalogue once a provider is resolved. The

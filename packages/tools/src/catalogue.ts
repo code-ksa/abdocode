@@ -105,6 +105,8 @@ export const TOOLS: readonly ToolSpec[] = [
 
   // شبكة بلا متصفّح — جلبُ صفحةٍ نصّاً (فكرة webfetch من 2.1 بأبسط كود، حارس SSRF واحد)
   { name: "fetch", effect: "network", usage: "fetch <رابط HTTPS>", summary: "جلب نص HTTPS عبر DNS/SSRF وحدود تحويل وحجم وعامل Rust", agentCallable: true, runner: "adapter" },
+  // الفجوة #2 (2026-09-27): بحثٌ معمّق — يقرأ الصفحاتِ التي أعادها بحثُه هو ويعيد أدلّةً مرقّمة بمصادرها.
+  { name: "research", aliases: ["deep_research", "بحث_معمق"], effect: "network", usage: "research <سؤال> [--pages 4]", summary: "بحثٌ معمّق: يبحث ثمّ يقرأ أعلى الصفحات عبر النواة ويعيد المقاطعَ الأوثقَ صلةً مرقّمةً [n] بمصادرها ليُكتب جوابٌ مستشهَد", agentCallable: true, runner: "net" },
   { name: "search", aliases: ["google", "google_search", "بحث"], effect: "network", usage: "search <عبارة> [--count 5] [--site example.com] [--images]", summary: "بحث Google منظّم؛ يفتح النتائج في متصفّح عبدو ويعيد العناوين والروابط عند ضبط PSE", agentCallable: true, runner: "net" },
 
   // T15–T18 — السطح: التصنيف من العقد لا من هنا؛ هذه المداخل فقط

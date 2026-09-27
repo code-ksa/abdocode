@@ -106,3 +106,22 @@ describe("egress guard", () => {
     }
   })
 })
+
+describe("allowWhile — one explicit operation, then closed again", () => {
+  test("the host is reachable during the call and refused after it; a host permitted before stays permitted", () => {
+    Egress.reset()
+    expect(Egress.decide("docs.example.org").decision).toBe("denied")
+    const release = Egress.allowWhile("Docs.Example.org", "research result")
+    expect(Egress.decide("docs.example.org").decision).toBe("allowed")
+    release()
+    expect(Egress.decide("docs.example.org")).toEqual({ decision: "denied", reason: "destination was never declared" })
+    Egress.allow("api.example.org", "provider the user chose")
+    Egress.allowWhile("api.example.org", "research result")()
+    expect(Egress.decide("api.example.org")).toEqual({ decision: "allowed", reason: "provider the user chose" })
+    // والمحظورُ يبقى محظوراً ولو سُمح به لحظةً.
+    const forbidden = Egress.allowWhile("opncd.ai", "research result")
+    expect(Egress.decide("opncd.ai").decision).toBe("denied")
+    forbidden()
+    Egress.reset()
+  })
+})
