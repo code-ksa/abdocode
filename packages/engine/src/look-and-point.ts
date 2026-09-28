@@ -47,3 +47,26 @@ export const afterClickLine = (before: string, after: string): string =>
   before === after
     ? "⚠ لقطةُ التحقّق بعد النقر مطابقةٌ للتي قبله — الفعلُ لم يقع؛ لا تكرّر النقرةَ نفسها: أعد desk ui، أو desk point بوصفٍ آخر، أو اسأل المستخدم."
     : "✓ تغيّرت الشاشةُ بعد النقر (لقطةُ التحقّق تختلف عمّا قبلها) — اقرأ الحالةَ الجديدة بـdesk ui أو desk shot."
+
+/**
+ * كلُّ لقطةٍ تُقارن بسابقتها حين وقع بينهما إدخال — لا نقرةُ الإشارة وحدها (برنامج 2026-09-28، البند 6 «لقطتان متطابقتان»).
+ * نقرةٌ أو مفتاحٌ أو كتابةٌ لم تُغيّر بكسلاً في النافذة المربوطة فعلٌ لم يقع ظاهراً، والنموذجُ يفترض النجاح ويكرّر أعمى. المقارنةُ
+ * لنافذةٍ واحدة (hwnd) وبصمةِ الصورة كلِّها؛ لقطةٌ لنافذةٍ أخرى أو بلا إدخالٍ قبلها لا تقول شيئاً (والمؤشّرُ الوامض قد يُخفي
+ * «لم يتغيّر» — سلبٌ كاذبٌ مقبول، والإيجابُ الكاذب مستحيل: البصمةُ لا تتطابق لصورتين مختلفتين).
+ */
+export interface ShotWatch { digest?: string; hwnd?: number; input?: string }
+
+/** إدخالٌ نجح على النافذة المربوطة — يُنتظر أثرُه في اللقطة التالية. */
+export function noteDeskInput(watch: ShotWatch, what: string): void { watch.input = what.slice(0, 80) }
+
+/** لقطةُ نافذة: سطرُ «لم يتغيّر شيء» إن طابقت سابقتها بعد إدخال — أو فراغ؛ وتصير هي المرجعَ التالي. */
+export function watchShot(watch: ShotWatch, hwnd: number, digest: string): string {
+  const unchanged = watch.input !== undefined && watch.digest === digest && watch.hwnd === hwnd
+  const line = unchanged
+    ? `⚠ اللقطةُ مطابقةٌ للّقطة التي قبل «${watch.input}» — الفعلُ لم يُحدث أثراً مرئيّاً في النافذة. لا تفترض النجاح ولا تكرّره أعمى: اقرأ الحالةَ بـdesk ui، أو جرّب طريقاً آخر (desk press/set بمرجع عنصر، أو مفتاحاً).`
+    : ""
+  watch.digest = digest
+  watch.hwnd = hwnd
+  watch.input = undefined
+  return line
+}

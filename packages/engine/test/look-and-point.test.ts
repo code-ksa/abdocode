@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { afterClickLine, parsePointReply, pointBody, pointReceipt, pointSystem, shotDigest } from "../src/look-and-point"
+import { afterClickLine, noteDeskInput, parsePointReply, pointBody, pointReceipt, pointSystem, shotDigest, watchShot, type ShotWatch } from "../src/look-and-point"
 
 // ن7 (09-16) — look-and-point: الجوابُ يُقرأ بصرامة (JSON واحد، أعدادٌ صحيحة داخل الصورة) فلا نقرَ على تخمين؛ وبوّابةُ الإقفال
 // تقول «الفعلُ لم يقع» حين تتطابق لقطتا قبل/بعد — بدل تكرارٍ أعمى يستهلك الدور.
@@ -60,5 +60,26 @@ describe("wiring", () => {
     expect(cli).toContain("afterClickLine(pointed.digest, shotDigest(")
     const catalogue = readFileSync(join(import.meta.dir, "..", "..", "tools", "src", "catalogue.ts"), "utf8")
     expect(catalogue).toContain("desk point <وصفُ عنصرٍ في اللقطة>")
+  })
+})
+
+describe("two identical shots around an input — the action did not land (2026-09-28)", () => {
+  test("an input between two identical shots of the same window is named; a changed shot is silent", () => {
+    const w: ShotWatch = {}
+    expect(watchShot(w, 7, "aaa")).toBe("")
+    noteDeskInput(w, "desk click 10 20")
+    expect(watchShot(w, 7, "aaa")).toContain("«desk click 10 20»")
+    noteDeskInput(w, "desk key Enter")
+    expect(watchShot(w, 7, "bbb")).toBe("")
+  })
+
+  test("the twins: no input between shots says nothing, and another window is not compared", () => {
+    const w: ShotWatch = {}
+    watchShot(w, 7, "aaa")
+    expect(watchShot(w, 7, "aaa")).toBe("")
+    noteDeskInput(w, "desk type hi")
+    expect(watchShot(w, 9, "aaa")).toBe("")
+    // المرجعُ صار النافذةَ الأخرى — والإدخالُ استُهلك فلا يُنسب لاحقاً.
+    expect(watchShot(w, 7, "aaa")).toBe("")
   })
 })

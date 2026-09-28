@@ -3742,6 +3742,15 @@ const runServeShell = async (): Promise<void> => {
         if (result.measure !== undefined && result.measure.process.length > 0) desktopBoundProcess = result.measure.process
         if (result.frame !== undefined) desktopFrame = result.frame
         if (result.ok && result.shot?.scope === "window") desktopLastShot = result.shot.path
+        let unchangedLine = ""
+        try {
+          const { noteDeskInput, shotDigest, watchShot } = await import("./look-and-point")
+          if (result.ok && ["click", "type", "key", "scroll", "set", "press", "drag"].includes(action.kind)) noteDeskInput(desktopShotWatch, `desk ${rest.trim()}`)
+          if (result.ok && result.shot?.scope === "window" && desktopBound !== undefined) {
+            const line = watchShot(desktopShotWatch, desktopBound.hwnd, shotDigest(readFileSync(result.shot.path).toString("base64")))
+            if (line !== "") unchangedLine = `\n${line}`
+          }
+        } catch { /* المقارنةُ مساعِدة؛ الفعلُ نفسُه رُوي بحكمه */ }
         // S8 — الاستعادة عند open/focus: لاياوتٌ محفوظ لهذه العمليّة (المقيَّدُ بالعنوان أوّلاً) يُعاد بـplace ويُقاس بعده؛ الحفظُ لا يُلمس هنا أبداً.
         let restoredLine = ""
         if (result.ok && (action.kind === "open" || action.kind === "focus") && result.bound !== undefined && result.measure !== undefined && result.measure.process.length > 0) {
@@ -3788,7 +3797,7 @@ const runServeShell = async (): Promise<void> => {
           } catch { /* اللقطةُ على القرص تكفي؛ العرضُ مساعِد */ }
         }
         // ب1 — الإيصالُ يسمّي القناة (مرّةً عند عدّ النوافذ لا في كلّ فعل).
-        return result.ok ? okText(action.kind === "windows" ? `${result.text}\n(القناة: ${backend.label})` : `${result.text}${restoredLine}`) : invalid(result.text)
+        return result.ok ? okText(action.kind === "windows" ? `${result.text}\n(القناة: ${backend.label})` : `${result.text}${restoredLine}${unchangedLine}`) : invalid(result.text)
       }
       case "framed": {
         const framedBody = `${spec.name} ${rest}`.trim()
@@ -4198,6 +4207,8 @@ const runServeShell = async (): Promise<void> => {
   let desktopBoundProcess = ""
   let desktopFrame: import("./viewport-map").ViewportFrame | undefined
   let desktopLastShot: string | undefined
+  // لقطتان متطابقتان حولَ إدخال = فعلٌ لم يقع (look-and-point.ts watchShot).
+  const desktopShotWatch: import("./look-and-point").ShotWatch = {}
   // د7ب — نطاقُ الدور للكتابة: ما قرأه النموذجُ وما أنشأه في هذا الدور (بمفتاح scopeKey)، ولحظةُ بدء الدور لقياس «الطازج» على القرص.
   const turnReadPaths = new Set<string>()
   const turnCreatedPaths = new Set<string>()
