@@ -60,6 +60,8 @@ import { CHAT_SYSTEM, acceptsImages, conversationMode, resolveAttachments, type 
 import { BoundedWireDecoder, classifyModelFailure } from "@abdo/model-gateway"
 import { ModelRequestFailure, modelRequestFailure } from "./model-request-failure"
 import { earlyAttemptBudgetMs } from "./attempt-budget"
+import { fallbackLadder, spentRefs } from "./outage-ladder"
+import { definedCssClasses, tailwindUtilityCount, TAILWIND_REFUSAL_THRESHOLD } from "./jsx-class-guard"
 import { globalInstallRefused } from "./global-install-guard"
 import { admitShell, beginShellEffect, settleShellEffect, unknownShellEffect, type ShellAdmission } from "./shell-admission"
 import { INSTALLER_BUNDLE_DIR, installerNameAt } from "./installer-bundle"
@@ -314,6 +316,12 @@ const warmDiscoveredModels = (status?: readonly { readonly provider: string; rea
   }
 }
 
+/** حضورُ مفتاح مزوّدٍ سحابيّ من ملفّ الخزنة المشحونة وحده (متزامن، بلا عامل) — للسلّم التلقائيّ؛ المحلّيُّ لا يُعدّ بديلاً للانقطاع. */
+const providerKeyKnown = (providerId: string): boolean => {
+  const p = Providers.provider(providerId)
+  if (p === undefined || p.local || p.vaultKey === undefined) return false
+  return shippedVaultPresence([p.vaultKey], process.env)?.get(p.vaultKey) === true
+}
 const hasProviderKey = async (providerId: string): Promise<boolean> => {
   const vaultKey = Providers.provider(providerId)?.vaultKey
   const shipped = vaultKey === undefined ? undefined : shippedVaultPresence([vaultKey], process.env)
@@ -1857,7 +1865,9 @@ const ask = async (
     const onClimbedRung = outageRoute !== undefined && sel.ref === outageRoute.to && sel.ref !== selected.ref
     const climbable = error instanceof ModelRequestFailure && (error.failure.retry === "bounded-backoff" || error.failure.kind === "quota-exhausted" || (onClimbedRung && error.failure.kind === "credential"))
     if (!(error instanceof ModelRequestFailure) || !climbable || hooks.signal?.aborted === true) throw error
-    const ladder = ownerLadder()
+    // سلّمُ المالك إن ضُبط؛ وإلا سلّمٌ تلقائيّ من البدائل المتاحة بمفتاح، الأقدرُ أوّلاً، بلا ما سقط في هذا الدور (أمر المالك 2026-09-28).
+    const owner = ownerLadder()
+    const ladder = owner.length > 0 ? owner : fallbackLadder(sel.ref, new Set([...spentRefs(outageSpent), ...(outageRoute === undefined ? [] : [outageRoute.from])]), { keyKnown: providerKeyKnown, parseRef: (ref) => Providers.parseRef(ref) })
     const evidence = { kind: "provider_unavailable" as const, detail: `${error.provider}: ${error.failure.reason}${error.failure.status === undefined ? "" : ` (HTTP ${error.failure.status})`}`, attemptId: `outage:${sel.ref}` }
     const outcome = climb({ ref: sel.ref, spentAttempts: outageSpent }, ladder, evidence)
     if (outcome.kind !== "already_spent") hooks.onModelNotice?.(`⛰ ${receiptLine(outcome)}`)
@@ -3119,8 +3129,9 @@ const runServeShell = async (): Promise<void> => {
       return refused("رُفض CSS: المشروع لا يعلن tailwindcss لكن الملف يستخدم @tailwind/@apply. اكتب CSS عادياً أو ثبّت Tailwind صراحةً إذا طلبه المستخدم.")
     }
     if (!hasTailwind && /\.[jt]sx$/iu.test(target)) {
-      const utilityCount = after.match(/\b(?:bg|text|px|py|mx|my|gap|rounded|shadow|grid-cols|items|justify)-(?:[a-z0-9[\]-]+)/giu)?.length ?? 0
-      if (utilityCount >= 5) {
+      // 2026-09-28: أسماءٌ دلاليّة (text-muted/items-list/bg-card) كانت تُعدّ Tailwind فتُرفض الصفحةُ ثلاثاً — الحارسُ يعدّ قواعدَ Tailwind بسُلَّمها ويُسقط ما عرّفه CSS المشروع.
+      const utilityCount = tailwindUtilityCount(after, definedCssClasses(PROJECT_DIR))
+      if (utilityCount >= TAILWIND_REFUSAL_THRESHOLD) {
         return refused("رُفض JSX: يحتوي أصناف Tailwind كثيرة بينما tailwindcss غير مثبت. استخدم أسماء أصناف دلالية وعرّفها في CSS عادي.")
       }
     }
