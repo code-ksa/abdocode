@@ -11,7 +11,10 @@
  */
 
 export type GateName = "build" | "typecheck" | "tests" | "audit"
-export type GateState = "passed" | "failed" | "unverified"
+/** `unproven` (09-28): الفحصُ نُفّذ وخرج برمز 0 لكنّ خرجَه لا يحمل دليلاً (اختبارٌ يطبع «ok» بلا عدّ) — ليس «فشل» فيُطلب
+ * إصلاحُ ما لم يسقط، ولا «نجح» فالغيابُ رفضٌ لا إذن؛ المطلوبُ دليلٌ في الخرج. مقيس: نموذجٌ أعاد ادّعاءَ الاكتمال مرّتين
+ * بلا أداة حين قيل له إنّ `node test.js` (رمز 0، «ok») **فشل**. */
+export type GateState = "passed" | "failed" | "unverified" | "unproven"
 
 export interface GateReceipt {
   readonly gate: GateName
@@ -25,14 +28,17 @@ export interface GateTrack {
   readonly ran: boolean
   readonly passed: boolean
   readonly evidence?: string
+  /** نُفّذ وخرج برمز 0 لكنّ الخرجَ بلا دليل (لا عدَّ نجاحٍ ولا فشل) — يُروى «بلا دليل» لا «فشل». */
+  readonly unproven?: boolean
 }
 
 const LABEL: Readonly<Record<GateName, string>> = Object.freeze({ build: "البناء", typecheck: "الأنواع", tests: "الاختبارات", audit: "التدقيق" })
-const STATE_LABEL: Readonly<Record<GateState, string>> = Object.freeze({ passed: "✓ نجح", failed: "✗ فشل", unverified: "○ لم يُفحص" })
+const STATE_LABEL: Readonly<Record<GateState, string>> = Object.freeze({ passed: "✓ نجح", failed: "✗ فشل", unverified: "○ لم يُفحص", unproven: "△ بلا دليل" })
 
 export function gateState(track: GateTrack): GateState {
   if (!track.ran) return "unverified"
-  return track.passed ? "passed" : "failed"
+  if (track.passed) return "passed"
+  return track.unproven === true ? "unproven" : "failed"
 }
 
 /** إيصالٌ لكلّ بوّابةٍ **مطلوبة** — غيرُ المطلوبة لا تُذكر (لا ضجيج، ولا ادّعاءَ فحصٍ لم يُطلب). */
@@ -43,7 +49,7 @@ export function gateReceipts(required: Readonly<Partial<Record<GateName, boolean
     if (required[gate] !== true) continue
     const track = tracks[gate] ?? { ran: false, passed: false }
     const state = gateState(track)
-    out.push(Object.freeze({ gate, state, ...(state === "failed" && track.evidence !== undefined && track.evidence.length > 0 ? { evidence: track.evidence } : {}) }))
+    out.push(Object.freeze({ gate, state, ...((state === "failed" || state === "unproven") && track.evidence !== undefined && track.evidence.length > 0 ? { evidence: track.evidence } : {}) }))
   }
   return Object.freeze(out)
 }
@@ -64,6 +70,12 @@ export function acceptanceLine(receipts: readonly GateReceipt[]): string {
 
 /** ما يُقال للنموذج عند بوّابةٍ لم تُرضَ: يفرّق الفشلَ عن الغياب كي لا يعيد فحصاً لم يفشل. */
 export function gateShortfall(receipt: GateReceipt): string {
+  if (receipt.state === "unproven") {
+    const ask = receipt.gate === "tests"
+      ? "اجعل الاختبارَ يطبع عددَ ما نجح (مثل «6 passed») أو استخدم `node --test`/عدّاءَ المشروع، ثمّ أعد التشغيل"
+      : "اجعل الفحصَ يطبع نتيجتَه صراحةً ثمّ أعده"
+    return `آخرُ فحصٍ لـ${LABEL[receipt.gate]} خرج برمز 0 لكن **بلا دليلٍ في الخرج**${receipt.evidence !== undefined ? ` (${clip(receipt.evidence, 120)})` : ""} — لم يفشل، لكنّ الغيابَ ليس نجاحاً: ${ask}`
+  }
   return receipt.state === "failed"
     ? `آخرُ فحصٍ لـ${LABEL[receipt.gate]} **فشل** على الشيفرة الحاليّة${receipt.evidence !== undefined ? ` (${clip(receipt.evidence, 120)})` : ""} — أصلح السبب ثم أعد الفحص`
     : `${LABEL[receipt.gate]} **لم يُفحص** على الشيفرة الحاليّة — نفّذ الفحص أوّلاً، ولا تدّعِ نجاحاً لم يُقس`

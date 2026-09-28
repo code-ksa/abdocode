@@ -27,6 +27,22 @@ export const TURN_CAP_ENV = "ABDO_TURN_TOKEN_CAP"
 /** السقفُ الافتراضيّ للدور (فعّال) حين لا إعدادَ ولا متغيّرَ بيئة — مقيس 2026-09-13: 150k كان متغيّرَ بيئةٍ على جهاز المطوّر لا افتراضَ منتَج، فجهازُ العميل بلا سقفٍ البتّة. */
 export const DEFAULT_TURN_TOKEN_CAP = 400_000
 
+/** تجديدُ سقف الدور تلقائياً — مقيس 2026-09-28 على مهمّة «تطبيق مثل OpenRouter» بنيموترون 550b: 19 نداءً بلا كاشٍ
+ * أنفقت 359k من 400k، ففشل البناءُ ورُفض نداءُ الإصلاح بالسقف وانتهى الدور «غير مكتمل» — المستخدمُ أراد «بلا توقّف».
+ * السقفُ يبقى حارسَ المال لكنّه يُجدَّد بعدد مرّاتٍ محدود في الدور الواحد ما دامت المهمّةُ لم تكتمل والتقدّمُ محفوظاً؛
+ * الإعدادُ `turnRenewals` أوّلاً ثمّ `ABDO_TURN_RENEWALS` ثمّ الافتراض. قيمةٌ مشوَّهة = صفر تجديد (لا يُوسَّع مالٌ بافتراض). */
+export const TURN_RENEWALS_ENV = "ABDO_TURN_RENEWALS"
+export const DEFAULT_TURN_RENEWALS = 2
+export const MAX_TURN_RENEWALS = 9
+
+/** غياب/فراغ ⇦ undefined (الافتراض يقرّره المضيف)؛ رقمٌ واحد 0–9 ⇦ العدد؛ غير ذلك ⇦ 0 (رفضٌ لا إذن). */
+export function turnRenewals(raw = process.env[TURN_RENEWALS_ENV]): number | undefined {
+  if (raw === undefined) return undefined
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return undefined
+  return /^\d$/u.test(trimmed) ? Number(trimmed) : 0
+}
+
 /** عدد صحيح موجب = السقف؛ "invalid" = قيمة مشوَّهة (رفضٌ لا افتراض). */
 export type TurnCap = number | "invalid"
 
@@ -55,10 +71,12 @@ export interface TurnBudgetSnapshot {
   /** رُفض نداءٌ بهذا السقف (أو السقف غير صالح) — الدور يُسلَّم بصدق. */
   readonly tripped: boolean
   readonly refusals: number
+  /** كم مرّةً جُدِّد السقفُ في هذا الدور (كلّ تجديدٍ يضيف السقفَ الأصليّ). */
+  readonly renewals: number
 }
 
 export class TurnSpendMeter {
-  private readonly cap: TurnCap
+  private cap: TurnCap
   private readonly discount: number
   private readonly rawCap: string
   private spent = 0
@@ -72,9 +90,12 @@ export class TurnSpendMeter {
   private epoch: number | undefined
   private tripped = false
   private refusals = 0
+  private renewals = 0
+  private readonly baseCap: number
 
   constructor(cap: TurnCap, discount = cacheDiscount(), rawCap = process.env[TURN_CAP_ENV] ?? "") {
     this.cap = cap
+    this.baseCap = cap === "invalid" ? 0 : cap
     this.discount = discount
     this.rawCap = rawCap
   }
@@ -139,12 +160,22 @@ export class TurnSpendMeter {
     return this.graceTokens
   }
 
+  /** تجديدُ السقف: يضيف السقفَ الأصليّ إلى السقف الجاري ويفتح البوّابة من جديد (المنفَق والنداءات تبقى مجمَّعةً
+   * فيبقى سطرُ ⏱ صادقاً بالمجموع). سقفٌ غير صالح لا يُجدَّد — يعود صفراً. */
+  renew(): number {
+    if (this.cap === "invalid" || this.baseCap <= 0) return 0
+    this.cap = this.cap + this.baseCap
+    this.tripped = false
+    this.renewals += 1
+    return this.baseCap
+  }
+
   snapshot(): TurnBudgetSnapshot {
     return {
       cap: this.cap, spent: this.spent, calls: this.calls, peakCall: this.peakCall, peakRequest: this.peakRequest,
       graceTokens: this.graceTokens, graceUsed: this.graceUsed,
       ...(this.graceEpoch === undefined ? {} : { graceEpoch: this.graceEpoch }),
-      tripped: this.tripped, refusals: this.refusals,
+      tripped: this.tripped, refusals: this.refusals, renewals: this.renewals,
     }
   }
 }

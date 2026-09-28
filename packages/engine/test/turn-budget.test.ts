@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { chargeableUsage } from "../src/token-budget"
-import { TURN_CAP_ENV, TurnSpendMeter, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "../src/turn-budget"
+import { DEFAULT_TURN_RENEWALS, MAX_TURN_RENEWALS, TURN_CAP_ENV, TURN_RENEWALS_ENV, TurnSpendMeter, closeToDone, renderCap, renderTurnBudgetLine, turnRenewals, turnTokenCap } from "../src/turn-budget"
 
 // الأرقام المقيسة نفسها التي يثبت بها token-budget.test الفعّال: 43 + (4558−4224) + 4224×0.25 = 1433.
 const PROBE = { inputTokens: 4558, outputTokens: 43, cachedInputTokens: 4224 }
@@ -297,5 +297,54 @@ describe("OFF paths — the hooks object is byte-identical to a meterless turn (
     const { hooks, turnMeter } = buildHooks(true)
     expect(turnMeter).toBeInstanceOf(TurnSpendMeter)
     expect(Object.keys(hooks)).toEqual(["signal", "onDelta", "turnMeter"])
+  })
+})
+
+// 2026-09-28 — تجديدُ السقف تلقائياً: مهمّةُ «تطبيق مثل OpenRouter» بنيموترون 550b أنفقت 359k/400k في 19 نداءً بلا كاش،
+// فرُفض نداءُ إصلاح البناء الفاشل وانتهى الدورُ «غير مكتمل». السقفُ حارسُ المال لا حارسُ الإنجاز.
+describe("turn cap renewals — bounded automatic renewal keeps a big task going", () => {
+  test("ABDO_TURN_RENEWALS: absent = undefined (host default), a digit = that number, malformed = 0 (never a loosened default)", () => {
+    for (const raw of [undefined, "", "  "]) expect(turnRenewals(raw)).toBeUndefined()
+    expect(turnRenewals("0")).toBe(0)
+    expect(turnRenewals(" 3 ")).toBe(3)
+    expect(turnRenewals("9")).toBe(9)
+    for (const raw of ["10", "-1", "abc", "2.5", "1e1", "+2"]) expect(turnRenewals(raw)).toBe(0)
+    expect(DEFAULT_TURN_RENEWALS).toBe(2)
+    expect(MAX_TURN_RENEWALS).toBe(9)
+    process.env[TURN_RENEWALS_ENV] = "4"
+    expect(turnRenewals()).toBe(4)
+    delete process.env[TURN_RENEWALS_ENV]
+  })
+
+  test("renew() adds one base cap, reopens a tripped meter, keeps spent/calls cumulative, and counts renewals", () => {
+    const meter = new TurnSpendMeter(2000)
+    meter.charge({ inputTokens: 1500, outputTokens: 400, cachedInputTokens: 0 })
+    expect(meter.verdict(500).allowed).toBe(false)
+    expect(meter.snapshot().tripped).toBe(true)
+    expect(meter.gate(2)).toBe("exhausted")
+    expect(meter.renew()).toBe(2000)
+    const s = meter.snapshot()
+    expect(s.cap).toBe(4000)
+    expect(s.spent).toBe(1900)
+    expect(s.calls).toBe(1)
+    expect(s.tripped).toBe(false)
+    expect(s.renewals).toBe(1)
+    expect(s.refusals).toBe(1)
+    expect(meter.gate(2)).toBe("open")
+    expect(meter.verdict(500).allowed).toBe(true)
+    expect(meter.renew()).toBe(2000)
+    expect(meter.snapshot().cap).toBe(6000)
+    expect(meter.snapshot().renewals).toBe(2)
+  })
+
+  test("an invalid cap never renews — money is not widened by a malformed variable", () => {
+    const meter = new TurnSpendMeter("invalid")
+    expect(meter.renew()).toBe(0)
+    expect(meter.snapshot().cap).toBe("invalid")
+    expect(meter.snapshot().renewals).toBe(0)
+  })
+
+  test("a fresh meter reports zero renewals", () => {
+    expect(new TurnSpendMeter(300000).snapshot().renewals).toBe(0)
   })
 })

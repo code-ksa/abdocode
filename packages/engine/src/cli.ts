@@ -115,6 +115,7 @@ import { bridgeCallArgs, parseBrowserAction, uploadPathVerdict } from "./browser
 import { goalAsksForTestWork, goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck } from "./acceptance-goal-words"
 import { surfaceVerdict } from "./surface-receipt-verdict"
 import { BUDGET_NOTICE_RATIO, DEFAULT_TURN_TOKEN_CAP, TURN_CAP_ENV, TurnSpendMeter, budgetNoticeLine, closeToDone, renderCap, renderTurnBudgetLine, turnTokenCap } from "./turn-budget"
+import { DEFAULT_TURN_RENEWALS, MAX_TURN_RENEWALS, turnRenewals } from "./turn-budget"
 import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, normalizeArabic, parseGateMode, type GateDecision } from "./front-gate"
 import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"
 import { SqliteFactStore, validFor, type FactKind } from "@abdo/memory"
@@ -1285,6 +1286,8 @@ type Settings = {
   autoCompact?: boolean
   /** سقفُ إنفاق الدور بالتوكن الفعّال (0 = بلا سقف؛ الغيابُ = متغيّرُ البيئة ثمّ الافتراض 400k) — مقيس 09-13: مهمّةٌ «مشروع + صفحة + تحقّق» تُقطع عند 150k مرّتين. */
   turnTokenCap?: number
+  /** كم مرّةً يُجدَّد سقفُ الدور تلقائياً قبل التوقّف الصادق (0 = لا تجديد؛ الغيابُ = ABDO_TURN_RENEWALS أو الافتراض 2). */
+  turnRenewals?: number
   /** إشعارُ نظامٍ حين يتوقّف الدور والنافذةُ ليست في المقدّمة (09-14) — الافتراض مفعَّل، ويُطفأ من الإعدادات. */
   turnNotifications?: boolean
   /** فحصُ وثيقة الإصدار عند التشغيل (نداءُ شبكةٍ إلى مستودع التوزيع) — مفعَّل، ويُطفأ من الإعدادات؛ Help ▸ التحقّق اليدويّ يبقى (09-14). */
@@ -1311,7 +1314,7 @@ const SECRETISH = /sk-[A-Za-z0-9]{12,}|Bearer\s|[A-Za-z0-9_-]{40,}/
 // غير معروف» (سطر التحقّق أدناه). فشلٌ صامتٌ مزدوج: المِرساةُ تتحرّك في الشاشة
 // ولا تنجو من إعادة التشغيل، والرفضُ يظهر إشعاراً لا يربطه المستخدمُ بالسحب.
 // **حارسٌ يُفحص بعائده يمرّ وهو ينسى حقلاً — الفحصُ الحاكم يقرأ الملفّ.**
-const SETTINGS_KEYS = new Set<keyof Settings>(["model", "chatModel", "agentModel", "modelRole", "mode", "theme", "project", "railPolicy", "routerGate", "gateModel", "plugins", "language", "customProviders", "panelDocks", "mcpServers", "approvalTimeoutSeconds", "superAbdo", "projectInstructions", "computerUseEnabled", "desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled", "semanticMemoryEnabled", "sensitiveMemoryEnabled", "projectRoots", "inferredMemoryEnabled", "modelLadder", "visionModel", "imageGenModel", "workMode", "priceTable", "sellPlan", "sessionAffinity"])
+const SETTINGS_KEYS = new Set<keyof Settings>(["model", "chatModel", "agentModel", "modelRole", "mode", "theme", "project", "railPolicy", "routerGate", "gateModel", "plugins", "language", "customProviders", "panelDocks", "mcpServers", "approvalTimeoutSeconds", "superAbdo", "projectInstructions", "computerUseEnabled", "desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnRenewals", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled", "semanticMemoryEnabled", "sensitiveMemoryEnabled", "projectRoots", "inferredMemoryEnabled", "modelLadder", "visionModel", "imageGenModel", "workMode", "priceTable", "sellPlan", "sessionAffinity"])
 
 const loadSettings = (): Settings => {
   try {
@@ -1422,6 +1425,7 @@ const validateSettingsPatch = (value: Record<string, unknown>): Settings | strin
   if (value.remoteControlEnabled !== undefined && typeof value.remoteControlEnabled !== "boolean") return "remoteControlEnabled يحتاج قيمة منطقية"
   if (value.sessionAffinity !== undefined && typeof value.sessionAffinity !== "boolean") return "sessionAffinity يحتاج قيمة منطقية"
   if (value.turnTokenCap !== undefined && (typeof value.turnTokenCap !== "number" || !Number.isSafeInteger(value.turnTokenCap) || value.turnTokenCap < 0 || (value.turnTokenCap !== 0 && value.turnTokenCap < 10_000) || value.turnTokenCap > 5_000_000)) return "turnTokenCap يحتاج عدداً صحيحاً: 0 (بلا سقف) أو بين 10000 و5000000"
+  if (value.turnRenewals !== undefined && (typeof value.turnRenewals !== "number" || !Number.isSafeInteger(value.turnRenewals) || value.turnRenewals < 0 || value.turnRenewals > MAX_TURN_RENEWALS)) return `turnRenewals يحتاج عدداً صحيحاً بين 0 و${MAX_TURN_RENEWALS}`
   if (value.memorySearchEnabled !== undefined && typeof value.memorySearchEnabled !== "boolean") return "memorySearchEnabled يحتاج قيمة منطقية"
   if (value.semanticMemoryEnabled !== undefined && typeof value.semanticMemoryEnabled !== "boolean") return "semanticMemoryEnabled needs a boolean"
   if (value.inferredMemoryEnabled !== undefined && typeof value.inferredMemoryEnabled !== "boolean") return "inferredMemoryEnabled needs a boolean"
@@ -5359,7 +5363,9 @@ const runServeShell = async (): Promise<void> => {
       /** ShellFailureClass من run-command (isolation_refused / spawn reasonCode / timeout|aborted|nonzero_exit). */
       failureClass?: string
     }
-    const all = [output.stdout ?? "", output.stderr ?? ""].filter(Boolean).join("\n")
+    // ألوانُ ANSI تُنزع قبل أن يصير الخرجُ إيصالاً: مقيس 2026-09-28 أنّ خرجَ `next build` الملوّن وصل الدرسَ 📚
+    // وسطرَ بوّابات القبول محارفَ هروبٍ لا معنى لها («33m.\u001b[39mparse») — النموذجُ والمشغّل يقرآن نصّاً.
+    const all = [output.stdout ?? "", output.stderr ?? ""].filter(Boolean).join("\n").replace(/\u001b\[[0-9;?]*[A-Za-z]/gu, "")
     const rawLines = all.split("\n").map((line) => line.replace(/\r$/, ""))
     const dropped = Math.max(0, rawLines.length - CAP)
     const lines = rawLines.slice(-CAP)
@@ -6532,6 +6538,20 @@ const runServeShell = async (): Promise<void> => {
     const turnCapSetting = loadSettings().turnTokenCap
     const turnCap = turnBudgetOn ? (typeof turnCapSetting === "number" ? (turnCapSetting === 0 ? undefined : turnCapSetting) : (turnTokenCap() ?? DEFAULT_TURN_TOKEN_CAP)) : undefined
     const turnMeter = turnCap === undefined ? undefined : new TurnSpendMeter(turnCap)
+    // تجديدُ السقف تلقائياً (09-28): مهمّةٌ كبيرة بلا كاشٍ عند المزوّد تُنهك 400k في ~20 نداءً وتقف قبل إصلاح آخر فشل.
+    // السقفُ حارسُ المال لا حارسُ الإنجاز: يُجدَّد بعددٍ محدود (الإعداد ثمّ المتغيّر ثمّ 2) ما دامت المهمّة لم تكتمل،
+    // ويُعلَن كلُّ تجديدٍ بسطره؛ وسقفُ السحابة العام فوقه لا يُرفع.
+    const renewalsSetting = loadSettings().turnRenewals
+    let turnRenewalsLeft = turnMeter === undefined ? 0 : (typeof renewalsSetting === "number" ? renewalsSetting : (turnRenewals() ?? DEFAULT_TURN_RENEWALS))
+    const renewTurnCap = async (where: string): Promise<boolean> => {
+      if (turnMeter === undefined || turnRenewalsLeft <= 0) return false
+      const added = turnMeter.renew()
+      if (added === 0) return false
+      turnRenewalsLeft -= 1
+      const s = turnMeter.snapshot()
+      await emitEvent(turn.id, `↻ جُدِّد سقفُ الدور تلقائياً (${s.renewals}/${s.renewals + turnRenewalsLeft}) ${where}: +${added} فصار ${renderCap(s.cap)} والمنفَق ${s.spent} — المهمّة لم تكتمل والتقدّم محفوظ فلا توقّف (الإعداد turnRenewals).`)
+      return true
+    }
     // حقل النيّة (plugins.intentField — الافتراض معطَّل حتى يؤهَّل بجولةٍ محليّة؛ يُقرأ
     // مرةً لكل دور كبقيّة المفاتيح فيسري من الدور القادم لا وسطه). المعطَّل = السلوك
     // القديم حرفياً: لا خيار للحلقة، ولا حقل في مخطّطات الأدوات المنظَّمة، ولا جملة في
@@ -7155,7 +7175,7 @@ const runServeShell = async (): Promise<void> => {
       // الحكم الصريح يحكم إن وُجد؛ غيابه يعود إلى نصّ الإيصال (exitZero) — لا fail-open.
       const observeAcceptanceReceipt = (command: string, output: string, verdict?: ToolVerdict): string | undefined => {
         // ذ4 — الأعلامُ كما كانت حرفاً (لا تُطفأ هنا إلا اختباراتٌ فشلت)، والتتبّعُ الثلاثيّ يُكتب معها.
-        if (isTestCommand(command)) { successfulTests = projectTestPassed(output, verdict); gateTracks.tests = { ran: true, passed: successfulTests, evidence: gateEvidence(output) } }
+        if (isTestCommand(command)) { successfulTests = projectTestPassed(output, verdict); gateTracks.tests = { ran: true, passed: successfulTests, evidence: gateEvidence(output), ...(!successfulTests && exitZero(output, verdict) ? { unproven: true } : {}) } }
         if (isTypecheckCommand(command)) { const ok = exitZero(output, verdict); if (ok) successfulTypecheck = true; gateTracks.typecheck = { ran: true, passed: ok, evidence: gateEvidence(output) } }
         const buildProblem = isBuildCommand(command) ? projectBuildViolation(PROJECT_DIR, output, verdict) : undefined
         if (isBuildCommand(command)) { const ok = buildProblem === undefined && exitZero(output, verdict); if (ok) successfulBuild = true; gateTracks.build = { ran: true, passed: ok, evidence: buildProblem ?? gateEvidence(output) } }
@@ -7266,7 +7286,7 @@ const runServeShell = async (): Promise<void> => {
           const granted = graceDue ? turnMeter.grantGrace(epoch) : 0
           if (granted > 0 && turnMeter.gate(epoch) === "open") {
             await emitEvent(turn.id, `🕰 سماحة سقف الدور (مرة واحدة، حقبة ${epoch}): +${granted} فعّالاً لأن ${probePending ? `فحص القبول «${pending}» معلَّق` : "سبرنتاً واحداً بقي في الخطة"} — بعدها التوقف صادق.`)
-          } else {
+          } else if (!(await renewTurnCap(`قبل الحقبة ${epoch}`))) {
             const stop = turnMeter.snapshot()
             lastStop = "turn_budget"
             pending = undefined
@@ -7561,6 +7581,19 @@ const runServeShell = async (): Promise<void> => {
         if (turnMeter !== undefined) {
           const s = turnMeter.snapshot()
           await emitEvent(turn.id, renderTurnBudgetLine(s, epoch))
+          if (s.tripped && await renewTurnCap(`وسط الحقبة ${epoch}`)) {
+            // النداءُ المرفوض عاد نصّاً فدخل التاريخَ ردّاً بلا أداة — يُنزع كي لا يُعاد إلى النموذج، ثمّ تُكمَل الحقبةُ التالية من نقطة الحفظ.
+            while (epochHistory.length > 0) {
+              const last = epochHistory[epochHistory.length - 1]!
+              const text = typeof last.content === "string" ? last.content : ""
+              if (last.role !== "assistant" || !text.includes("سقف الدور")) break
+              epochHistory.pop()
+            }
+            lastStop = "acceptance-pending"
+            pending = undefined
+            continuationHint = "رُفض نداؤك السابق بسقف الدور ثمّ جُدِّد السقف. أكمل من نقطة الحفظ: أصلح سببَ آخر فشلٍ في الإيصالات ونفّذ الخطوة التالية بأقلّ نداءات."
+            continue
+          }
           if (s.tripped) {
             lastStop = "turn_budget"
             pending = undefined

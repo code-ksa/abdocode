@@ -38,7 +38,7 @@ describe("ح4 — a completion claim over red gates is refuted by name, never si
 describe("browser backend (owner 09-13): one setting, switchable from Settings and from chat, honoured before any surface is created", () => {
   test("setting key, validator, chat word, off-refusal and extension forwarding all exist in order", () => {
     expect(source).toContain('browserBackend?: "owned" | "extension" | "off"')
-    expect(source).toContain('"desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled"')
+    expect(source).toContain('"desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnRenewals", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled"')
     expect(source).toContain('return "browserBackend غير معروف (owned | extension | off)"')
     const runner = source.indexOf("const runSurfaceTool = async (name: string, rest: string, turnId: string): Promise<string> => {")
     const word = source.indexOf('if (name === "browser") {', runner)

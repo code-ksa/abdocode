@@ -258,3 +258,41 @@ describe("turn budget wiring in the live cli path", () => {
     expect(result.commands).toEqual([])
   })
 })
+
+// 2026-09-28 — تجديدُ سقف الدور تلقائياً في المسار الحيّ: عند البوّابة قبل الحقبة وعند الرفض وسط الحقبة، بعددٍ محدود
+// (الإعداد turnRenewals ثمّ ABDO_TURN_RENEWALS ثمّ 2)، مع سطرٍ يُعلن كلَّ تجديد؛ سقفُ السحابة العام لا يُمسّ.
+describe("turn cap renewal wiring", () => {
+  test("the renewal budget is read once per turn from settings → env → default, only when a meter exists", () => {
+    expect(source).toContain('import { DEFAULT_TURN_RENEWALS, MAX_TURN_RENEWALS, turnRenewals } from "./turn-budget"')
+    expect(source).toContain("const renewalsSetting = loadSettings().turnRenewals")
+    expect(source).toContain('let turnRenewalsLeft = turnMeter === undefined ? 0 : (typeof renewalsSetting === "number" ? renewalsSetting : (turnRenewals() ?? DEFAULT_TURN_RENEWALS))')
+    expect(source).toContain("if (turnMeter === undefined || turnRenewalsLeft <= 0) return false")
+    expect(source).toContain("const added = turnMeter.renew()")
+    expect(source.match(/turnMeter\.renew\(\)/gu)).toHaveLength(1)
+    expect(source).toContain("↻ جُدِّد سقفُ الدور تلقائياً")
+  })
+
+  test("both stop sites ask for a renewal before the honest turn_budget stop, and the mid-epoch site strips the refusal text from history", () => {
+    expect(source).toContain("} else if (!(await renewTurnCap(`قبل الحقبة ${epoch}`))) {")
+    expect(source).toContain("if (s.tripped && await renewTurnCap(`وسط الحقبة ${epoch}`)) {")
+    const mid = source.indexOf("if (s.tripped && await renewTurnCap(`وسط الحقبة ${epoch}`)) {")
+    const honest = source.indexOf("⏱ رُفض نداء سحابي وسط الحقبة")
+    expect(mid).toBeGreaterThan(0)
+    expect(mid).toBeLessThan(honest)
+    expect(source.slice(mid, honest)).toContain('if (last.role !== "assistant" || !text.includes("سقف الدور")) break')
+    expect(source.slice(mid, honest)).toContain("continue")
+    // the settings key is accepted and bounded
+    expect(source).toContain('"turnTokenCap", "turnRenewals", "turnNotifications"')
+    expect(source).toContain("value.turnRenewals > MAX_TURN_RENEWALS")
+  })
+
+  test("command output loses ANSI colour codes before it becomes a receipt, a lesson, or a gate line", () => {
+    expect(source).toContain('const all = [output.stdout ?? "", output.stderr ?? ""].filter(Boolean).join("\\n").replace(/\\u001b\\[[0-9;?]*[A-Za-z]/gu, "")')
+  })
+})
+
+describe("tests gate: exit 0 without a test count is 'unproven', not 'failed'", () => {
+  test("the receipt tracker sets the flag from exitZero on the same output and verdict", () => {
+    expect(source).toContain('gateTracks.tests = { ran: true, passed: successfulTests, evidence: gateEvidence(output), ...(!successfulTests && exitZero(output, verdict) ? { unproven: true } : {}) }')
+  })
+})

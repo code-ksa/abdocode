@@ -53,3 +53,27 @@ describe("القاعدةُ ذاتُ الأسنان", () => {
     expect(gateShortfall({ gate: "tests", state: "unverified" })).toContain("لا تدّعِ نجاحاً لم يُقس")
   })
 })
+
+// 2026-09-28 — الحالةُ الرابعة «بلا دليل»: `node test.js` خرج برمز 0 وطبع «ok» بلا عدّ، فقيل للنموذج إنّ الاختبارات **فشلت**
+// فأعاد ادّعاءَ الاكتمال مرّتين بلا أداة. الغيابُ ليس نجاحاً (البوّابة لا تُرضى) لكنّه ليس فشلاً (لا «أصلح السبب»).
+describe("unproven — ran, exit 0, no evidence in the output", () => {
+  test("gateState reads the flag only when the run did not pass", () => {
+    expect(gateState({ ran: true, passed: false, unproven: true })).toBe("unproven")
+    expect(gateState({ ran: true, passed: true, unproven: true })).toBe("passed")
+    expect(gateState({ ran: false, passed: false, unproven: true })).toBe("unverified")
+    expect(gateState({ ran: true, passed: false })).toBe("failed")
+  })
+
+  test("the receipt carries its evidence, is not satisfied, and the shortfall asks for evidence instead of a fix", () => {
+    const receipts = gateReceipts({ tests: true }, { tests: { ran: true, passed: false, unproven: true, evidence: "node test.js ok انتهى الأمر برمز 0" } })
+    expect(receipts.map((r) => `${r.gate}:${r.state}`)).toEqual(["tests:unproven"])
+    expect(receipts[0]!.evidence).toContain("ok")
+    expect(acceptanceSatisfied(receipts)).toBe(false)
+    expect(acceptanceLine(receipts)).toContain("الاختبارات △ بلا دليل")
+    const shortfall = gateShortfall(receipts[0]!)
+    expect(shortfall).toContain("بلا دليلٍ في الخرج")
+    expect(shortfall).toContain("6 passed")
+    expect(shortfall).not.toContain("**فشل**")
+    expect(shortfall).not.toContain("أصلح السبب")
+  })
+})
