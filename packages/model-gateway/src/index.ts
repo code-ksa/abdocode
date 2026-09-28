@@ -71,6 +71,8 @@ export type ModelFailureKind =
   | "cancelled"
   | "transport"
   | "rate-limited"
+  /** 429/402 whose body says the balance or quota is gone — waiting will not help; another provider or the owner will. */
+  | "quota-exhausted"
   | "provider-unavailable"
   | "credential"
   | "invalid-request"
@@ -86,6 +88,8 @@ export interface ModelFailure {
 }
 
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504])
+/** Provider phrasings of an exhausted balance or quota (z.ai 1113, OpenAI insufficient_quota, credit/billing wording, Qwen arrearage). */
+export const QUOTA_EXHAUSTED = /insufficient[ _](?:balance|quota|credits?|funds)|no resource package|"code"\s*:\s*"?1113\b|exceeded your current quota|credit balance is too low|billing (?:hard )?limit|quota (?:exceeded|exhausted)|arrearage|out of credits|payment required|recharge/iu
 
 /**
  * One fail-closed retry taxonomy for every provider family.
@@ -99,6 +103,8 @@ export function classifyModelFailure(input: {
   readonly error?: unknown
   readonly responseStarted?: boolean
   readonly retryAfter?: string | null
+  /** The first bytes of a refusal body (never logged by this function), to tell an exhausted quota from a busy provider. */
+  readonly body?: string
 }): ModelFailure {
   if (input.error instanceof DOMException && input.error.name === "AbortError") {
     return Object.freeze({ kind: "cancelled", retry: "never", reason: "request cancelled" })
@@ -136,6 +142,12 @@ export function classifyModelFailure(input: {
   const status = input.status
   if (status === 401 || status === 403) {
     return Object.freeze({ kind: "credential", retry: "operator-action", status, reason: "credential rejected" })
+  }
+  // 🔴 Measured 2026-09-25: z.ai answered 429 {"code":"1113","message":"Insufficient balance or no resource package"}, and every
+  // turn retried the same provider seven times (~2.5 min) under the label "busy", then looked like a product defect.
+  // An exhausted balance or quota is not transient: it is said once, never retried here, and the ladder moves on.
+  if ((status === 429 || status === 402) && typeof input.body === "string" && QUOTA_EXHAUSTED.test(input.body)) {
+    return Object.freeze({ kind: "quota-exhausted", retry: "operator-action", status, reason: "provider balance or quota exhausted" })
   }
   if (status === 413) {
     return Object.freeze({ kind: "context-limit", retry: "operator-action", status, reason: "request exceeds provider limit" })

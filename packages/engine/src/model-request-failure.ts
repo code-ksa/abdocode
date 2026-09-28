@@ -26,6 +26,8 @@ export class ModelRequestFailure extends Error {
       ? ar ? "تعذّر الاتصال بالمشغّل المحلي. تحقّق من تشغيله ومن عنوانه في الإعدادات ← المزوّدون، ثم أعد المحاولة." : "Could not connect to the local runtime. Check that it is running and verify its address in Settings → Providers, then retry."
       : this.failure.kind === "cancelled"
       ? ar ? "أُلغي الطلب. يمكنك المتابعة برسالة جديدة." : "The request was cancelled. You can continue with a new message."
+      : this.failure.kind === "quota-exhausted"
+      ? ar ? "نفد رصيدُ المزوّد أو حصّتُه — ليس ازدحاماً والانتظارُ لا يعيده. اشحن الرصيد أو اختر مزوّداً آخر؛ ولم تُكرَّر المحاولة." : "The provider's balance or quota is exhausted — not a busy provider, and waiting will not bring it back. Recharge or choose another provider; the request was not retried."
       : this.failure.kind === "rate-limited"
       ? ar ? "بلغ المزوّد حد الاستخدام. انتظر تجدد الحد أو اختر نموذجاً آخر ثم أعد المحاولة." : "The provider reached its usage limit. Wait for the limit to reset or choose another model, then retry."
       : this.failure.kind === "invalid-request"

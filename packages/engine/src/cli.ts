@@ -1804,7 +1804,10 @@ async function requestWithBoundedRetry(providerId: string, attempt: (n: number) 
       continue
     }
     if (response.ok) return response
-    const failure = classifyModelFailure({ status: response.status, retryAfter: response.headers.get("retry-after") })
+    // 429/402: رأسُ الجسد من نسخةٍ (الأصلُ يبقى للمنادي) — نفادُ الرصيد لا يُعاد عليه، والازدحامُ يُعاد.
+    const body = response.status === 429 || response.status === 402 ? await response.clone().text().then((t) => t.slice(0, 600)).catch(() => "") : undefined
+    const failure = classifyModelFailure({ status: response.status, retryAfter: response.headers.get("retry-after"), ...(body === undefined ? {} : { body }) })
+    if (failure.kind === "quota-exhausted") { options.onRetry?.(`⛔ المزوّد ${providerId}: نفد الرصيدُ أو الحصّة (HTTP ${response.status}) — لا إعادةَ على المزوّد نفسِه`); return response }
     if (failure.retry !== "bounded-backoff" || n >= MODEL_RETRY_ATTEMPTS || options.signal?.aborted === true) return response
     await response.body?.cancel().catch(() => undefined)
     const waitMs = Math.max(failure.retryAfterMs ?? 0, MODEL_RETRY_BACKOFF_MS[n - 1] ?? 4_000)
@@ -1835,7 +1838,8 @@ const ask = async (
   if (outageRoute !== undefined && sel.ref === outageRoute.from) sel = selectionOf(outageRoute.to, sel.lane) ?? sel
   try { return await askOnce(question, hooks, history, sel, onNativeReply) }
   catch (error) {
-    if (!(error instanceof ModelRequestFailure) || error.failure.retry !== "bounded-backoff" || hooks.signal?.aborted === true) throw error
+    // نفادُ الرصيد يصعد السلّمَ كالانقطاع — مزوّدٌ آخرُ في سلّم المالك هو العلاج، لا الانتظار.
+    if (!(error instanceof ModelRequestFailure) || (error.failure.retry !== "bounded-backoff" && error.failure.kind !== "quota-exhausted") || hooks.signal?.aborted === true) throw error
     const ladder = ownerLadder()
     const evidence = { kind: "provider_unavailable" as const, detail: `${error.provider}: ${error.failure.reason}${error.failure.status === undefined ? "" : ` (HTTP ${error.failure.status})`}`, attemptId: `outage:${sel.ref}` }
     const outcome = climb({ ref: sel.ref, spentAttempts: outageSpent }, ladder, evidence)
@@ -2134,7 +2138,7 @@ const askOnce = async (
     // رأسُ جسد الرفض إلى stderr وحده (العاملُ ينقّح السرّ منه) — التشخيصُ بلا تسريبٍ إلى الواجهة أو الدفتر.
     const refusalHead = await response.text().then((t) => t.replace(/\s+/gu, " ").slice(0, 400)).catch(() => "")
     process.stderr.write(`model ${prov.id} http ${response.status} at ${url}: ${refusalHead}\n`)
-    throw modelRequestFailure(prov.label, prov.local, { status: response.status, retryAfter: response.headers.get("retry-after") })
+    throw modelRequestFailure(prov.label, prov.local, { status: response.status, retryAfter: response.headers.get("retry-after"), body: refusalHead })
   }
 
   interface Tail {
