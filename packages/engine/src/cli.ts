@@ -161,6 +161,7 @@ import { surveyPush } from "./push-survey"
 import { parseSecurityScan, renderProjectScan, scanProject } from "./project-security-scan"
 import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
 import { readPdf } from "./pdf-read"
+import { folderInstructions, folderInstructionsLayer } from "./folder-instructions"
 import { diskEvidence, diskSnapshot, type GitRun } from "./disk-evidence"
 import { PlaybookMiner, type PlaybookCandidate } from "./playbook-miner"
 import { RecipeCollector, RecipeStore, describeRecipe, recipeBrief } from "./setup-recipes"
@@ -6408,6 +6409,8 @@ const runServeShell = async (): Promise<void> => {
     // الأدوات: كودٌ حتميّ قبل نداء نموذج). المعطَّل = لا إطار ولا سطر ولا موجز — بايتاً كما كان.
     const semanticOn = modeAtTurn !== 'chat' && plugins.read("semanticFrame", "turn")
     let semanticBrief = ""
+    // تعليماتُ المجلّدات المحمَّلة في هذا الدور (folder-instructions.ts) — كلٌّ مرّةً واحدة.
+    const folderLoaded = new Set<string>()
     let playbookHint: string | undefined
     let semanticFrameValue: SemanticFrame | undefined
     // نيّةُ الدور تُصفَّر هنا (قبل الإطار) لا عند بداية الحقبة — الحقبةُ تبدأ بعد حسابها فكانت تمحوها.
@@ -7382,8 +7385,14 @@ const runServeShell = async (): Promise<void> => {
           },
           dispatch: async (command, nativeCall) => {
             const toolWord = command.split(/\s+/)[0]!
-            const r = await dispatchToolV(toolWord, command, turn.id, hooks, nativeCall)
+            let r = await dispatchToolV(toolWord, command, turn.id, hooks, nativeCall)
             lastUnmapped = r.unmapped === true
+            // أوّلُ ما تمسّ أداةُ ملفٍّ مجلّداً فيه AGENTS.md/ABDO.md/CLAUDE.md: يُلحق بنتيجتها (مرّةً في الدور).
+            const touched = /^(?:read|write|edit|list)$/u.test(toolWord) ? command.split(/\s+/u)[1] : undefined
+            const inside = touched === undefined || touched.startsWith("<") ? undefined : resolveProjectPath(touched)
+            const layer = inside === undefined ? "" : folderInstructionsLayer(folderInstructions(PROJECT_DIR, inside, folderLoaded))
+            if (layer !== "") await emitEvent(turn.id, `📌 تعليماتُ مجلّد: ${[...layer.matchAll(/«([^»]+)»/gu)].map((m) => m[1]).join("، ")}`)
+            if (layer !== "") r = { ...r, output: `${r.output}${layer}` }
             // المعطَّل يسلّم الحلقة نصّاً عارياً — فتسلك المسار القديم حرفياً.
             return verdictOn ? r : r.output
           },
