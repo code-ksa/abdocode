@@ -43,6 +43,7 @@ export function buildVerifierPrompt(
   goal: string,
   answer: string,
   receipts: readonly { readonly command: string; readonly output: string }[],
+  disk?: string,
 ): string {
   const lines: string[] = []
   let spent = 0
@@ -66,6 +67,8 @@ export function buildVerifierPrompt(
     "## إيصالات الأدوات المنفَّذة فعلاً (الدليل)",
     lines.join("\n\n"),
     "",
+    // دليلُ القرص (disk-evidence.ts): ما تغيّر فعلاً في هذا الدور مقروءاً من git لحظةَ التحكيم — لا روايةُ الدور عن نفسه.
+    ...(disk === undefined ? [] : ["## ما تغيّر فعلاً على القرص في هذا الدور (من git لحظةَ التحكيم — الحَكَم عند التعارض)", disk, ""]),
     "## حكمك",
     "أول سطر من ردك يجب أن يكون كلمة واحدة فقط من: COMPLETE أو INCOMPLETE أو WAITING أو STUCK",
     "والسطر الثاني سبباً واحداً محدداً.",

@@ -159,6 +159,7 @@ import { addedLines, renderFindings, scanAdded } from "./diff-security-scan"
 import { parsePrCreate, prBlocker, prBody } from "./pr-create"
 import { surveyPush } from "./push-survey"
 import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
+import { diskEvidence, diskSnapshot, type GitRun } from "./disk-evidence"
 import { PlaybookMiner, type PlaybookCandidate } from "./playbook-miner"
 import { RecipeCollector, RecipeStore, describeRecipe, recipeBrief } from "./setup-recipes"
 import { describeStackGuide, stackGuideFor } from "./stack-guides"
@@ -7119,6 +7120,10 @@ const runServeShell = async (): Promise<void> => {
       let superRepairPasses = 0
       let superAccepted = !superActive
       let superStamp = ""
+      // دليلُ القرص للمحكّم: لقطةٌ الآن، وفرقُ ما تغيّر منذها عند التحكيم (ما كان متّسخاً قبل الدور ليس تسليمَه).
+      const diskGit: GitRun = (args) => { const r = Bun.spawnSync(["git", "-C", PROJECT_DIR, ...args], { stdout: "pipe", stderr: "pipe" }); return { ok: r.exitCode === 0, out: r.stdout.toString() } }
+      const diskBefore = verifierOn || (superActive && superAbdo.independentReview) ? diskSnapshot(PROJECT_DIR, diskGit) : undefined
+      const diskNow = () => diskEvidence(PROJECT_DIR, diskGit, diskBefore, (path, lines) => { try { return readFileSync(join(PROJECT_DIR, path), "utf8").split("\n").slice(0, lines).join("\n") } catch { return "(تعذّرت القراءة)" } })
       if (superActive) await emitEvent(turn.id, "Super Abdo: inspect → plan → execute → verify → review. Existing permissions and budgets remain in force.")
       // معدِّن الكتيّبات (فكرة ACC الممتصة): فشل متكرر لا يعرفه السجل
       // يُرشَّح كتيّباً للمشرف — ترشيح لا حفظ. plugins.miner (افتراض مفعَّل).
@@ -7748,7 +7753,7 @@ const runServeShell = async (): Promise<void> => {
             if (verificationProblem === undefined && superAbdo.independentReview) {
               await emitEvent(turn.id, "Super Abdo: reviewing execution evidence in a separate context, with no tools.")
               try {
-                const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts), {
+                const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), {
                   ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: SUPER_ABDO_REVIEW_SYSTEM,
                 }, [], selectedModel)
                 review = parseSuperAbdoReview(reply)
@@ -7806,7 +7811,7 @@ const runServeShell = async (): Promise<void> => {
           if (verifierOn && verifierRejections < 2) {
             let verdict: SemanticVerdict | undefined
             try {
-              const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts), hooks, [], selectedModel)
+              const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], selectedModel)
               verdict = parseVerdict(reply)
             } catch { verdict = undefined }
             // مقاطعة المشغّل أثناء التحكيم ليست «غير محكّم» — الدور يُحفظ
