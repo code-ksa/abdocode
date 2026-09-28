@@ -155,6 +155,7 @@ import { SUMMARY_KEY, buildAwarenessIndex, entriesFromFacts, entriesFromGeneral,
 import { EMPTY_GENERAL_STORE, GENERAL_STORE_FILE, PROMOTION_RULE, generalAwarenessBrief, inspectGeneralStore, projectTokensOf, promoteLessons, qualifiedPlaybookCandidates, serialiseGeneralStore, type GeneralStore, type GeneralStoreRead } from "./general-awareness"
 import { browserProofVerdict, httpEvidenceVerdict, localCopyInTestViolation, mockedAwayViolation, outputEvidenceVerdict } from "./closure-gate"
 import { exitZero, receiptFailed, wallFact, WallTracker, type WallVerdict } from "./failure-tiering"
+import { addedLines, renderFindings, scanAdded } from "./diff-security-scan"
 import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
 import { PlaybookMiner, type PlaybookCandidate } from "./playbook-miner"
 import { RecipeCollector, RecipeStore, describeRecipe, recipeBrief } from "./setup-recipes"
@@ -3823,6 +3824,21 @@ const runServeShell = async (): Promise<void> => {
         }
         if (spec.name === "git-commit") {
           if (!rest) return invalid("git-commit يحتاج رسالة")
+          // فحصُ الفرق قبل الإيداع (برنامج 2026-09-28، البند 3): الأسطرُ المُجهَّزة وحدها، قراءةً بلا أداة فرقٍ خارجيّة.
+          // الخطيرُ (سرٌّ، ملفُّ بيئة، اعتمادٌ مكتوب، TLS مطفأ) يُسأل عنه المالكُ صراحةً في كلّ مرّة — لا نمطٌ يمنحه ضمناً،
+          // ولا exec (لا مُوافِق فيه فيُرفض). وما دونه يُقال ولا يمنع. والقيمةُ لا تُعاد في أيّ سطر.
+          const staged = Bun.spawnSync(["git", "-C", PROJECT_DIR, "diff", "--cached", "-U0", "--no-color", "--no-ext-diff", "--no-textconv"], { stdout: "pipe", stderr: "pipe" })
+          if (staged.exitCode === 0) {
+            const findings = scanAdded(addedLines(staged.stdout.toString()))
+            if (findings.length > 0) {
+              const report = renderFindings(findings)
+              await emitEvent(turnId, report)
+              if (findings.some((f) => f.severity === "high")) {
+                const allowed = await gate(turnId, "command", `إيداعٌ فيه نتائجُ خطيرة من فحص الفرق:\n${report}\nأأودع رغم ذلك؟`, spec.name, { always: true })
+                if (!allowed) return denied(`رُفض الإيداع — فحصُ الفرق وجد ما لا يُودَع:\n${report}\nأخرج السرَّ إلى الخزنة (وعدَّه محروقاً إن كان حقيقيّاً) ثمّ أعد التجهيز.`, "policy_denied")
+              }
+            }
+          }
           return runAdapterV("git-change", "git_change", { action: "commit", message: rest }, `git_${turnId}_${nextToolSeq()}`, hooks.signal)
         }
         if (spec.name === "packages") {
