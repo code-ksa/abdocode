@@ -669,32 +669,34 @@ fn run_request(request: &Request, provider: &ResolvedBinding) -> Result<(u16, Ve
 /// «أظهر كلَّ نماذج إنفيديا لا الصغيرة فقط»). النقطةُ تُشتقّ من نقطة الدردشة المُجمَّعة أو المعلَنة نفسِها —
 /// لا عنوانَ ولا سرَّ يأتي من الطالب، والردُّ يُنقّى من السرّ كما في الدردشة.
 pub fn run_models(provider_id: &str) -> Result<Vec<u8>, String> {
-    let (chat_url, provider) = if let Some(fixed) = PROVIDERS.iter().find(|item| item.id == provider_id) {
-        (
-            fixed.url.to_string(),
-            ResolvedBinding {
-                vault_key: fixed.vault_key.into(),
-                credential: fixed.credential,
-                anthropic: fixed.anthropic,
-            },
-        )
-    } else if let Some(custom) = owner_custom_bindings()?
-        .into_iter()
-        .find(|item| item.id == provider_id)
-    {
-        (
-            custom.url.clone(),
-            ResolvedBinding {
-                vault_key: custom.vault_key,
-                credential: CredentialKind::Bearer,
-                anthropic: false,
-            },
-        )
-    } else {
-        return Err(
-            "provider identity is neither compiled into this worker nor declared by the owner".into(),
-        );
-    };
+    let (chat_url, provider) =
+        if let Some(fixed) = PROVIDERS.iter().find(|item| item.id == provider_id) {
+            (
+                fixed.url.to_string(),
+                ResolvedBinding {
+                    vault_key: fixed.vault_key.into(),
+                    credential: fixed.credential,
+                    anthropic: fixed.anthropic,
+                },
+            )
+        } else if let Some(custom) = owner_custom_bindings()?
+            .into_iter()
+            .find(|item| item.id == provider_id)
+        {
+            (
+                custom.url.clone(),
+                ResolvedBinding {
+                    vault_key: custom.vault_key,
+                    credential: CredentialKind::Bearer,
+                    anthropic: false,
+                },
+            )
+        } else {
+            return Err(
+                "provider identity is neither compiled into this worker nor declared by the owner"
+                    .into(),
+            );
+        };
     let base = chat_url
         .strip_suffix("/chat/completions")
         .or_else(|| chat_url.strip_suffix("/messages"))
