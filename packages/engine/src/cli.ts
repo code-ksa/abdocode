@@ -1852,7 +1852,11 @@ const ask = async (
   try { return await askOnce(question, hooks, history, sel, onNativeReply) }
   catch (error) {
     // نفادُ الرصيد يصعد السلّمَ كالانقطاع — مزوّدٌ آخرُ في سلّم المالك هو العلاج، لا الانتظار.
-    if (!(error instanceof ModelRequestFailure) || (error.failure.retry !== "bounded-backoff" && error.failure.kind !== "quota-exhausted") || hooks.signal?.aborted === true) throw error
+    // ودرجةُ صعودٍ لا يصحّ اعتمادُها (401/غائب) درجةٌ مستهلكة لا نهايةُ الدور — قياسٌ حيّ 2026-09-28: ازدحامُ glm ⇦ OpenRouter
+    // بلا مفتاح ⇦ الدورُ كلُّه «refused». الاعتمادُ على النموذج **المختار نفسِه** يبقى خطأً يُقال للمشغّل (لا صعودَ عنه صامتاً).
+    const onClimbedRung = outageRoute !== undefined && sel.ref === outageRoute.to && sel.ref !== selected.ref
+    const climbable = error instanceof ModelRequestFailure && (error.failure.retry === "bounded-backoff" || error.failure.kind === "quota-exhausted" || (onClimbedRung && error.failure.kind === "credential"))
+    if (!(error instanceof ModelRequestFailure) || !climbable || hooks.signal?.aborted === true) throw error
     const ladder = ownerLadder()
     const evidence = { kind: "provider_unavailable" as const, detail: `${error.provider}: ${error.failure.reason}${error.failure.status === undefined ? "" : ` (HTTP ${error.failure.status})`}`, attemptId: `outage:${sel.ref}` }
     const outcome = climb({ ref: sel.ref, spentAttempts: outageSpent }, ladder, evidence)
