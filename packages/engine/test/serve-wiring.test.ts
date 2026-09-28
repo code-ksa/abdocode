@@ -282,7 +282,7 @@ describe("serve convergence wiring", () => {
     // الحقيقة الموسومة لاستعلامٍ بلا جلسة — فالاستعلام بجلسة الدور وإلا لا هدف يُستأنف أبداً.
     // A session query also returns unscoped project facts. Privacy filtering
     // must precede goal selection so old shared goals cannot bypass the toggle.
-    expect(source).toContain("? (() => { try { return pickPriorGoal(factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts, memorySearchEnabled, currentSession)) } catch { return undefined } })()")
+    expect(source).toContain("? (() => { try { return pickPriorGoal(factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession)) } catch { return undefined } })()")
     expect(source).not.toContain("pickPriorGoal(durableMemory.query({ projectId: resolve(PROJECT_DIR), now: Date.now() })")
     expect(source).toContain("const effectiveGoal = priorGoal?.goal ?? turn.body")
     // بوابات القبول الأربع تُشتقّ من الهدف الفعليّ لا من نصّ الدور.
@@ -390,13 +390,13 @@ describe("serve convergence wiring", () => {
     // المُجاب: دلتا واحدة، سطر 🚪، ختم الحقيقة answered (0 حقب، 0 أوامر)، دفع المحادثة وقصّها، عودة مكتملة.
     // S14: الجملة الأمنية تسبق الجسد في مدخل البوابة أيضاً — وهي فارغة في
     // الدور العاديّ، والأهليّة تبقى محسوبةً على `turn.body` وحده.
-    expect(source).toContain("const gate = await gateAsk(`${secretNotice}${turn.body}`, conversation, gateModel, hooks, gateRecall)")
+    expect(source).toContain("const gate = await gateAsk(`${secretNotice}${turn.body}`, turnConversation, gateModel, hooks, gateRecall)")
     expect(source).toContain("mode: gateMode, lane: selectedModel.lane, body: turn.body,")
     expect(source).toContain("hooks.onDelta?.(gate.text)")
     expect(source).toContain('value: { goal: effectiveGoal, status: "answered", epochs: 0, commands: 0, stopReason: "gate-answered" },')
     expect(source).toContain('stopReason: "gate-answered"')
     expect(source).toContain('status: "answered"')
-    expect(source).toContain('conversation.push({ role: "user", content: turn.body }, { role: "assistant", content: gate.text })')
+    expect(source).toContain('turnConversation.push({ role: "user", content: turn.body }, { role: "assistant", content: gate.text })')
     expect(source).toContain("return { answer: gate.text, completed: true }")
     // R1-4 — الختم قبل التسليم، بالفهرس لا بالنيّة: supersede وverify ودفع المحادثة كلها
     // تسبق أوّل دلتا؛ وفشل الختم يُطفئ sealed فيسقط الدور إلى الحلقة بدل إعلان جوابٍ بحقيقةٍ running.
@@ -409,7 +409,7 @@ describe("serve convergence wiring", () => {
     expect(delta).toBeGreaterThan(0)
     expect(epilogue.indexOf("durableMemory.supersede(taskFact.id, {")).toBeLessThan(delta)
     expect(epilogue.indexOf("durableMemory.verify(answeredTask.id)")).toBeLessThan(delta)
-    expect(epilogue.indexOf('conversation.push({ role: "user", content: turn.body }, { role: "assistant", content: gate.text })')).toBeLessThan(delta)
+    expect(epilogue.indexOf('turnConversation.push({ role: "user", content: turn.body }, { role: "assistant", content: gate.text })')).toBeLessThan(delta)
     expect(epilogue.indexOf("durableMemory.supersede(taskFact.id, {")).toBeGreaterThan(epilogue.indexOf("let sealed = true"))
     expect(epilogue).toContain("sealed = false")
     expect(epilogue).toContain("if (sealed) {")
@@ -891,8 +891,12 @@ describe("serve convergence wiring", () => {
     const sessionNew = source.indexOf('if (frame.kind === "session-new") {')
     const sessionBody = source.slice(sessionNew, source.indexOf("currentSession = `s-${Date.now()}`", sessionNew))
     expect(sessionNew).toBeGreaterThan(0)
-    expect(sessionBody).toContain("if (running !== undefined) {")
-    expect(sessionBody).toContain("اقطعه قبل بدء محادثةٍ جديدة")
+    // انقلبت (أمر المالك 2026-09-28): محادثةٌ جديدة لا تقطع الدورَ الجاري ولا تُرفض — الدورُ يمسك جلستَه وتاريخَه
+    // (turnSession/turnConversation) ويكمل في الخلفية، والشاشةُ وحدها تنتقل؛ الموافقةُ المعلّقة تصل القشرةَ موسومةً بدورها.
+    expect(sessionBody).not.toContain("اقطعه قبل بدء محادثةٍ جديدة")
+    expect(source).toContain("const turnSession = currentSession")
+    expect(source).toContain("const turnConversation = conversation")
+    expect(source).toContain("conversation = conversationFor(currentSession)")
 
     // (ج) القرار يُكتب **قبل** الحلّ، فيسبق تسلسلُه إيصالَ الأثر المسموح.
     const decidedLine = source.indexOf('approvalDecidedLine({ request: entry.request, decision: frame.kind === "approve" ? "approved" : "denied" })')

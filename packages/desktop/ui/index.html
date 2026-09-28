@@ -448,19 +448,22 @@
   /* IDEA 6 — نقاط التعليق: المِرساة وغلافُ المساهمة بلا صندوق، فالتخطيط لا
      يتغيّر بدخولهما بين الأب والشجرة (المساهمة تبقى ابنَ الأب في الفلكس نفسه). */
   [data-anchor], [data-slot] { display: contents; }
-  #approvalseat { display: flex; flex-direction: column; gap: 8px; }
+  /* بطاقةُ الإذن (2026-09-28، بطلب المالك: كمظهر كلود وشات جي بي تي): بطاقةٌ هادئة، الأمرُ في صندوق، والقرارُ زرّان — أساسيٌّ ومحيط. */
+  #approvalseat { display: flex; flex-direction: column; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow); }
   #approvalseat[hidden] { display: none; }
   #composer.approving > #prompt, #composer.approving > .row { display: none; }
-  #composer.approving { border-color: var(--bad); }
-  #approvalseat .apv-strip { font-size: var(--fs-note); color: var(--bad); font-weight: 600; }
-  #approvalseat .apv-scroll { max-height: 160px; overflow: auto; white-space: pre-wrap; direction: ltr; text-align: left; font-family: Consolas, monospace; font-size: var(--fs-ui); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
-  #approvalseat .apv-row { display: flex; gap: 8px; align-items: center; }
-  #approvalseat button { border: 0; border-radius: 6px; padding: 5px 16px; cursor: pointer; font-family: inherit; }
-  #approvalseat .apv { background: var(--ok); color: #fff; }
-  #approvalseat .dny { background: var(--bad); color: #fff; }
-  #approvalseat .apv-preview { background: none; border: 1px solid var(--line); color: var(--fg); }
+  #composer.approving { border-color: var(--accent); }
+  #approvalseat .apv-strip { font-size: var(--fs-ui); color: var(--fg); font-weight: 600; }
+  #approvalseat .apv-scroll { max-height: 160px; overflow: auto; white-space: pre-wrap; direction: ltr; text-align: left; font-family: Consolas, monospace; font-size: var(--fs-ui); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  #approvalseat .apv-row { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+  #approvalseat button { border: 1px solid transparent; border-radius: 9px; padding: 7px 18px; cursor: pointer; font-family: inherit; font-weight: 600; font-size: var(--fs-ui); }
+  #approvalseat .apv { background: var(--accent); color: #fff; }
+  #approvalseat .apv:hover { filter: brightness(1.08); }
+  #approvalseat .dny { background: none; border-color: var(--line); color: var(--fg); }
+  #approvalseat .dny:hover { border-color: var(--bad); color: var(--bad); }
+  #approvalseat .apv-preview { background: none; border-color: var(--line); color: var(--dim); margin-inline-end: auto; }
   #approvalseat button:disabled { opacity: .55; cursor: default; }
-  #approvalseat .apv-state { font-size: var(--fs-chip); opacity: .7; }
+  #approvalseat .apv-state { font-size: var(--fs-chip); opacity: .7; width: 100%; text-align: end; }
   /* IDEA 8 — لسان المسار: منظرٌ ثانٍ فوق الأُطر نفسها، والمقعد يبقى واحداً */
   #trajectory { flex: 1; overflow-y: auto; padding: 8px 24px 16px; }
   #trajectory[hidden] { display: none; }
@@ -1711,7 +1714,7 @@
       }
       seat.hidden = false;
       composer.classList.add("approving");
-      seat.querySelector(".apv-strip").textContent = "⚠ موافقة مطلوبة — النمط: " + state.mode + " · الصنف: " + state.cls;
+      seat.querySelector(".apv-strip").textContent = (turnIsBackground(state.turnId) ? uiText("Another conversation asks for permission", "محادثةٌ أخرى تطلب إذنك") : uiText("AbdoCode asks for permission", "عبدو كود يطلب إذنك")) + " — " + uiText("mode: ", "النمط: ") + state.mode + " · " + uiText("class: ", "الصنف: ") + state.cls;
       seat.querySelector(".apv-scroll").textContent = state.request;
       const deciding = state.kind === "deciding";
       seat.querySelector(".apv").disabled = deciding;
@@ -1917,6 +1920,17 @@
         queueMicrotask(autoConnectServers);
       }
       queueMicrotask(() => window.AbdoDesktopShell?.frame(f));
+      // إطارُ دورٍ يعمل في محادثةٍ أخرى: يُحسم (working/الموافقة) ولا يُرسم في هذه اللوحة — حين تُستعاد محادثتُه تُعاد سطورُه من الأرشيف.
+      if (turnIsBackground(f.turnId) && f.kind !== "approval" && f.kind !== "trust-request" && f.kind !== "diff") {
+        if (f.kind === "interrupted") interruptedTurns.add(f.turnId);
+        if (f.kind === "done" || f.kind === "refused" || f.kind === "unresolved") {
+          if (f.kind === "done" && typeof f.contextLeft === "number") { contextLeft = Math.max(0, Math.min(1, f.contextLeft)); renderStatus(); }
+          approvalFold(f); delivFold(f);
+          settle(f.turnId, interruptedTurns.has(f.turnId), f.kind === "done" ? (interruptedTurns.has(f.turnId) ? "interrupted" : "done") : "refused");
+          notice(uiText("The background conversation finished.", "انتهت المحادثةُ التي كانت تعمل في الخلفية."));
+        }
+        return;
+      }
       // IDEA 8 — الطيّ أوّلاً: اللسان يرى كلّ إطارٍ يراه العرض، ولا يُعاد بناؤه
       // من عقد الشاشة. المعطَّل = لا طيّ ولا مخزن ولا مخزّن مؤقّت أصلاً.
       if (Trajectory !== null) { trajStore = Trajectory.fold(trajStore, f, Date.now()); trajTouch(); renderTaskRows(); }
@@ -1993,6 +2007,7 @@
         }
         el("composerwrap").classList.add("center");
         el("quickrow").style.display = "flex";
+        if (working !== undefined) notice(uiText("The previous conversation keeps working in the background; you can send here once it finishes.", "المحادثةُ السابقة تكمل عملها في الخلفية؛ يمكنك الإرسال هنا بعد انتهائها."));
         return;
       }
       if (f.kind === "archive") {
@@ -2012,6 +2027,8 @@
           }
         }
         refreshSessions();
+        // الدورُ الجاري يخصّ هذه المحادثة: لوحُه الحيّ يُفتح ثانيةً فتصله الأُطرُ القادمة.
+        if (outbox.kind === "offering" && turnSessions.get(outbox.turn.id) === currentSessionId && !blocks.has(outbox.turn.id)) openAnswerBlock(outbox.turn.id);
         return;
       }
       if (f.kind === "models") {
@@ -2267,6 +2284,8 @@
         return;
       }
       if (f.kind === "admission" && typeof f.turnId === "string" && typeof f.mode === "string") modeByTurn.set(f.turnId, f.mode);
+      // الدورُ يعرف جلستَه من إطار القبول (المحرّكُ يحمل sessionId) — الأساسُ لتوجيه أُطر المحادثات الخلفيّة.
+      if (f.kind === "admission" && typeof f.turnId === "string" && typeof f.sessionId === "string") turnSessions.set(f.turnId, f.sessionId);
       if (f.kind === "tool-result") {
         const entry = blocks.get(f.turnId);
         if(entry) transcript.result(entry,f);
@@ -3885,6 +3904,9 @@
     let sessionOrder = [];
     let sessionAt = -1;
     let currentSessionId = null;
+    // محادثاتٌ في الخلفية (2026-09-28): كلُّ دورٍ يعرف جلستَه وقتَ الإرسال؛ أُطرُ دورٍ لجلسةٍ غير المعروضة لا تُرسم هنا.
+    const turnSessions = new Map();
+    const turnIsBackground = (turnId) => typeof turnId === "string" && turnSessions.has(turnId) && turnSessions.get(turnId) !== currentSessionId;
     let sidebarCollapsed = false;
 
     const renderSessionHead = () => {

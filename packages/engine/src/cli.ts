@@ -2487,7 +2487,11 @@ const runServeShell = async (): Promise<void> => {
   const turnBodies = new Map([...admissions].map(([id, turn]) => [id, turn.body]))
   // ذاكرة المحادثة (D-wave «نفس الخصائص»): آخر الأدوار تُمرَّر للنموذج ضمن
   // الميزانية — «ماذا سألتك للتو؟» عند مستخدمٍ حقيقيّ كانت بلا جواب.
-  const conversation: ChatMessage[] = []
+  // محادثاتٌ في الخلفية (أمر المالك 2026-09-28): لكلّ جلسةٍ تاريخُها، والدورُ الجاري يمسك تاريخَ جلسته وقتَ القبول
+  // (turnConversation/turnSession) فلا يمحوه فتحُ محادثةٍ جديدة ولا استعادةُ أخرى — كما في كلود وشات جي بي تي.
+  const conversations = new Map<string, ChatMessage[]>()
+  const conversationFor = (id: string): ChatMessage[] => { let history = conversations.get(id); if (history === undefined) { history = []; conversations.set(id, history) } return history }
+  let conversation: ChatMessage[] = []
   /** الهدفُ الفعليّ للدور الجاري — يقرؤه حارسُ المانيفست ليعرف الكومةَ المطلوبة (Vite/Next/Tailwind). */
   let currentGoalText = ""
   /**
@@ -4890,7 +4894,14 @@ const runServeShell = async (): Promise<void> => {
       surfaceUrl = rest
       await paneShot()
       const note = await landed(rest)
-      return `انتقلتُ — الجيل ${surfaceGeneration}، والمراجع القديمة بطلت. استعمل page لقراءة الصفحة.${restored}${note}`
+      // بلاغُ المالك 2026-09-28: بعد الفتح يُقرأ ما يراه المتصفّحُ نفسُه (بلا رؤية): أخطاءُ طرفيّة الصفحة تُلحق بالإيصال
+      // فوراً — البياناتُ بعد الأداة — فيُصلحها النموذجُ قبل أن يعلن «تمّ» بدل أن يظنّ الصفحةَ سليمةً لأنّها فُتحت.
+      await Bun.sleep(350)
+      const consoleAfterOpen = surface.consoleTail(40).filter((m) => m.level === "error" || m.level === "warning" || m.level === "warn")
+      const consoleNote = consoleAfterOpen.length === 0
+        ? "\nطرفيّةُ الصفحة بعد الفتح: بلا أخطاء. اقرأ الصفحة بـpage وتحقّق أنّ ما طلبه المستخدم ظاهرٌ فعلاً قبل «تمّ»."
+        : `\n⚠ طرفيّةُ الصفحة بعد الفتح — ${consoleAfterOpen.length} خطأ/تحذير (أصلحها قبل أن تعلن «تمّ»؛ التفاصيل بـconsole):\n${consoleAfterOpen.slice(-8).map((m) => `• [${m.level}] ${m.text.replace(/\s+/g, " ").slice(0, 160)}`).join("\n")}`
+      return `انتقلتُ — الجيل ${surfaceGeneration}، والمراجع القديمة بطلت. استعمل page لقراءة الصفحة.${restored}${note}${consoleNote}`
     }
 
     if (name === "scroll") {
@@ -5737,26 +5748,20 @@ const runServeShell = async (): Promise<void> => {
       // `submit` ثانياً («واحدٌ في الطريق») يلزم هنا وأشدّ: بدونه كانت تُطوى
       // محادثةٌ والموافقةُ فيها معلّقة، فيفتح المقعدُ الحيّ ✓/✕ لدورٍ هُجر —
       // ونقرةُ السماح تنفّذ كتابته. القطعُ قرارٌ يُتَّخذ باسمه: `interrupt`.
-      if (running !== undefined) {
-        emit({ kind: "refused", why: `الدور ${running.turnId} ما يزال في الطريق — اقطعه قبل بدء محادثةٍ جديدة` })
-        continue
-      }
+      // دورٌ جارٍ يبقى جارياً في جلسته (يحمل turnSession/turnConversation)؛ الشاشةُ وحدها تنتقل.
       currentSession = `s-${Date.now()}`
       activeSessionId = currentSession
       sessionAffinityId = sessionAffinityFor(currentSession)
       currentConversationMode=conversationMode((frame as {conversationMode?:unknown}).conversationMode??currentConversationMode)
       currentSessionPersisted = false
-      conversation.length = 0
+      conversation = conversationFor(currentSession)
       emit({ kind: "session", id: currentSession, conversationMode:currentConversationMode })
       continue
     }
     if (frame.kind === "recall") {
       // Switching history would rebind the live turn's durable session and its
       // pending approval. Match session-new: interruption is a separate action.
-      if (running !== undefined) {
-        emit({ kind: "refused", why: `الدور ${running.turnId} ما يزال في الطريق — اقطعه قبل استعادة محادثة أخرى` })
-        continue
-      }
+      // الاستعادةُ أثناء دورٍ جارٍ مسموحة: الدورُ يكمل في جلسته والشاشةُ تعرض ما استُعيد.
       // الاستئناف: أدوار الجلسة بنصّها وسطورها، وذاكرة المحرّك تُستعاد
       // منها — فالدور التالي يكمل المحادثة لا يبدأ غريباً.
       const target = (frame as { session?: string }).session
@@ -5783,6 +5788,7 @@ const runServeShell = async (): Promise<void> => {
         catch(error){emit({kind:'refused',why:(error as Error).message});continue}
       }
       currentSession=target;currentConversationMode=restoredMode;currentSessionPersisted=sessionOrder.includes(target)
+      conversation = conversationFor(target)
       conversation.length = 0
       for (const t of turns.slice(-6)) {
         if (t.body.length > 0) {
@@ -6358,9 +6364,11 @@ const runServeShell = async (): Promise<void> => {
     }
     const admission = await serveJournal.admit({ turnId: turn.id, body: turn.body, sessionId: currentSession, attachments:turnAttachments })
     admissions.set(turn.id, { seq: admission.seq, body: turn.body, session: currentSession, attachments:turnAttachments })
-    emit({ kind: "admission", ...admission, mode: workProfile(loadSettings().workMode).label })
+    emit({ kind: "admission", ...admission, sessionId: currentSession, mode: workProfile(loadSettings().workMode).label })
     turnBodies.set(turn.id, turn.body)
     sessionOf.set(turn.id, currentSession)
+    const turnSession = currentSession
+    const turnConversation = conversation
     const controller = new AbortController()
     running = { turnId: turn.id, controller, steers: [] }
     // سجلّ الإضافات لهذا الدور: كل قراءة مفتاحٍ تمرّ من هنا فتُحسب بطبقاتها
@@ -6400,7 +6408,7 @@ const runServeShell = async (): Promise<void> => {
     // المستدعاة): حقائق الأدوار موسومة بجلستها، والاستعلام بلا جلسة يرفضها كلّها.
     const resumeOn = modeAtTurn!=='chat' && plugins.read("resumeIntent", "turn")
     const priorGoal = resumeOn && isResumeIntent(turn.body)
-      ? (() => { try { return pickPriorGoal(factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts, memorySearchEnabled, currentSession)) } catch { return undefined } })()
+      ? (() => { try { return pickPriorGoal(factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession)) } catch { return undefined } })()
       : undefined
     const effectiveGoal = priorGoal?.goal ?? turn.body
     desktopTaskText = `${turn.body}\n${priorGoal?.goal ?? ""}`
@@ -6479,7 +6487,7 @@ const runServeShell = async (): Promise<void> => {
     if (lessonsOn) {
       try {
         // الدرسُ حقيقةٌ بلا جلسة، فمفتاحُ «البحث في المحادثات السابقة» يحكمه كما يحكم أخواته — كان هذا الموضعُ وحدَه يتجاوزه.
-        const projectLessons = lessonsOf(factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts, memorySearchEnabled, currentSession))
+        const projectLessons = lessonsOf(factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession))
         lessonsBrief = lessonBrief(projectLessons)
         if (projectLessons.length > 0) await emitEvent(turn.id, `📚 دروس المشروع: ${projectLessons.length} — تُحقن قبل أوّل نداء`)
       } catch {
@@ -6491,7 +6499,7 @@ const runServeShell = async (): Promise<void> => {
     if (lessonsOn) { try { recipesBrief = recipeBrief(recipeStore.all(), turn.body) } catch { /* مساعِدةٌ لا حاكمة */ } }
     const taskFact = remember({
       projectId: resolve(PROJECT_DIR),
-      sessionId: currentSession,
+      sessionId: turnSession,
       kind: "active_task",
       key: `turn:${turn.id}`,
       value: { goal: effectiveGoal, status: "running", project: resolve(PROJECT_DIR), ...(priorGoal !== undefined ? { body: turn.body, resumedFrom: priorGoal.turnId } : {}) },
@@ -6581,8 +6589,8 @@ const runServeShell = async (): Promise<void> => {
       const memoryCommand = turnAttachments.length === 0 ? parseMemoryCommand(turn.body) : undefined
       if (memoryCommand) {
         if (secretScan.carriesSecret) throw Error("Credentials cannot be saved in memory. Use Settings to configure the vault.")
-        const projectId = resolve(PROJECT_DIR), scope = ("session" in memoryCommand && memoryCommand.session) || !projectSelected ? currentSession : undefined
-        const notes = () => durableMemory.query({projectId,sessionId:currentSession,now:Date.now()}).facts.filter(f => f.kind === "project_fact" && f.key.startsWith("owner-note:"))
+        const projectId = resolve(PROJECT_DIR), scope = ("session" in memoryCommand && memoryCommand.session) || !projectSelected ? turnSession : undefined
+        const notes = () => durableMemory.query({projectId,sessionId:turnSession,now:Date.now()}).facts.filter(f => f.kind === "project_fact" && f.key.startsWith("owner-note:"))
         const english = settingsAtTurn.language === "en"
         let answer: string
         if (memoryCommand.action === "save") {
@@ -6597,7 +6605,7 @@ const runServeShell = async (): Promise<void> => {
           answer = notes().slice(-50).map(f => `${f.key.slice(11)}: ${recallExecutionFact(f.value)}`).join("\n") || (english?"No saved owner notes.":"لا توجد ملاحظات مالك محفوظة.")
         }
         emit(memoryNotesFrame())
-        const completed = durableMemory.supersede(taskFact.id,{projectId,sessionId:currentSession,kind:"active_task",key:`turn:${turn.id}`,value:{goal:turn.body,status:"answered",stopReason:"owner-memory-command"},sourceEventIds:[turn.id]})
+        const completed = durableMemory.supersede(taskFact.id,{projectId,sessionId:turnSession,kind:"active_task",key:`turn:${turn.id}`,value:{goal:turn.body,status:"answered",stopReason:"owner-memory-command"},sourceEventIds:[turn.id]})
         durableMemory.verify(completed.id)
         return {answer,completed:true}
       }
@@ -6609,7 +6617,7 @@ const runServeShell = async (): Promise<void> => {
         if (correction) {
           try {
             const projectId = resolve(PROJECT_DIR), key = `inferred:${correction.topic}`
-            const previous = durableMemory.query({ projectId, sessionId: currentSession, now: Date.now() }).facts.filter((f) => f.key === key && f.sessionId === undefined).at(-1)
+            const previous = durableMemory.query({ projectId, sessionId: turnSession, now: Date.now() }).facts.filter((f) => f.key === key && f.sessionId === undefined).at(-1)
             const input = { projectId, kind: "project_fact" as const, key, value: inferredValue(correction), confidence: correction.confidence, sourceEventIds: [`inferred:${turn.id}`] }
             const fact = previous ? durableMemory.supersede(previous.id, input) : durableMemory.record(input)
             emit({ kind: "memory-inferred", id: fact.id, topic: correction.topic, note: input.value.note, confidence: correction.confidence, turnId: turn.id })
@@ -6756,9 +6764,9 @@ const runServeShell = async (): Promise<void> => {
           let source = ""
           if (wanted === "git") { changes = gitChanges(PROJECT_DIR); source = "git (الشجرة مقابل HEAD)" }
           else {
-            const rows = checkpoints.list(currentSession, PROJECT_DIR).filter((c) => c.turnId !== turn.id)
+            const rows = checkpoints.list(turnSession, PROJECT_DIR).filter((c) => c.turnId !== turn.id)
             const chosen = wanted === "last" || wanted === "الأخير" ? rows[0]?.turnId : wanted
-            if (chosen !== undefined) { changes = checkpoints.changes(currentSession, chosen, PROJECT_DIR); source = `الدور ${chosen}` }
+            if (chosen !== undefined) { changes = checkpoints.changes(turnSession, chosen, PROJECT_DIR); source = `الدور ${chosen}` }
             else if (wanted === "last") { changes = gitChanges(PROJECT_DIR); source = "git (لا دورَ كاتبٌ في هذه الجلسة)" }
             else source = `الدور ${wanted}`
           }
@@ -6778,17 +6786,17 @@ const runServeShell = async (): Promise<void> => {
       }
       // م9ط — كلمتا المشغّل: «checkpoints/نقاط الرجوع» تسرد، و«rollback [معرّف|last]/ارجع إلى ما قبل الدور» تعيد ما قبل دورٍ سابق.
       if (/^\/?checkpoints$/iu.test(turn.body.trim()) || turn.body.trim() === "نقاط الرجوع") {
-        const rows = checkpoints.list(currentSession, PROJECT_DIR).filter((c) => c.turnId !== turn.id)
+        const rows = checkpoints.list(turnSession, PROJECT_DIR).filter((c) => c.turnId !== turn.id)
         return { answer: rows.length === 0 ? "لا نقاطَ رجوعٍ لهذا المشروع في هذه الجلسة بعد — تُحفظ قبل أوّل كتابةٍ في كلّ دور." : `نقاطُ الرجوع (الأحدثُ أوّلاً):\n${rows.slice(0, 20).map((c) => `• ${c.turnId} — ${c.createdAt} — ${c.files} ملفّاً${c.skipped > 0 ? ` (${c.skipped} متروك)` : ""}`).join("\n")}\nللرجوع: «rollback <معرّف الدور>» أو «rollback last».`, completed: true }
       }
       {
         const rollback = /^\/?rollback(?:\s+(\S+))?$/iu.exec(turn.body.trim()) ?? /^ارجع إلى ما قبل الدور(?:\s+(\S+))?$/u.exec(turn.body.trim())
         if (rollback !== null) {
           const wanted = rollback[1] ?? "last"
-          const rows = checkpoints.list(currentSession, PROJECT_DIR).filter((c) => c.turnId !== turn.id)
+          const rows = checkpoints.list(turnSession, PROJECT_DIR).filter((c) => c.turnId !== turn.id)
           const chosen = wanted === "last" || wanted === "الأخير" ? rows[0]?.turnId : wanted
           if (chosen === undefined) return { answer: "لا نقطةَ رجوعٍ بعد — لم يكتب أيُّ دورٍ ملفّاً في هذا المشروع خلال هذه الجلسة.", completed: true }
-          const report = checkpoints.restore(currentSession, chosen, PROJECT_DIR)
+          const report = checkpoints.restore(turnSession, chosen, PROJECT_DIR)
           const line = restoreReportLine(report)
           await emitEvent(turn.id, line)
           // مقيس على 4.0.11: السطرُ نفسُه كان يظهر مرّتين (حدثاً ثمّ جواباً) — الجوابُ يكتفي بالإحالة.
@@ -6796,19 +6804,19 @@ const runServeShell = async (): Promise<void> => {
         }
       }
       if (/^\/?compact$/iu.test(turn.body.trim()) || turn.body.trim() === "اضغط السياق") {
-        const storedSummary = [...durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts].reverse().find((f) => f.key === `session:${currentSession}:summary`)
+        const storedSummary = [...durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts].reverse().find((f) => f.key === `session:${turnSession}:summary`)
         const parsedSummary = storedSummary === undefined ? undefined : parseStoredSummary(storedSummary.value)
-        const before = conversation.length
+        const before = turnConversation.length
         const compacted = await compactIfNeeded(turn.id, parsedSummary === undefined ? "" : renderSessionSummary(parsedSummary), true)
-        return { answer: compacted ? `ضُغط السياق: ${before} رسالة ⇦ ${conversation.length} (خلاصةٌ موثَّقة + الأحدث). سطرُ 🧹 يحمل الأرقام.` : "لا شيءَ يُضغط — المحادثةُ قصيرةٌ بعد.", completed: true }
+        return { answer: compacted ? `ضُغط السياق: ${before} رسالة ⇦ ${turnConversation.length} (خلاصةٌ موثَّقة + الأحدث). سطرُ 🧹 يحمل الأرقام.` : "لا شيءَ يُضغط — المحادثةُ قصيرةٌ بعد.", completed: true }
       }
       if(modeAtTurn==='chat'){
         emit({kind:'model-route',turnId:turn.id,lane:'chat',ref:turnSelection.ref,...(turnSelection.vision?{vision:true}:{})})
-        const answer=await ask(secretNotice+turn.body,hooks,conversation,turnSelection)
+        const answer=await ask(secretNotice+turn.body,hooks,turnConversation,turnSelection)
         if(controller.signal.aborted)throw new DOMException('Chat interrupted','AbortError')
-        conversation.push({role:'user',content:turn.body+attached.text,...(attached.images.length?{images:attached.images}:{})},{role:'assistant',content:answer})
+        turnConversation.push({role:'user',content:turn.body+attached.text,...(attached.images.length?{images:attached.images}:{})},{role:'assistant',content:answer})
         await compactIfNeeded(turn.id,'',false)
-        const fact=durableMemory.supersede(taskFact.id,{projectId:resolve(PROJECT_DIR),sessionId:currentSession,kind:'active_task',key:`turn:${turn.id}`,value:{goal:turn.body,status:'answered',epochs:0,commands:0,stopReason:'chat-answer'},sourceEventIds:[turn.id]})
+        const fact=durableMemory.supersede(taskFact.id,{projectId:resolve(PROJECT_DIR),sessionId:turnSession,kind:'active_task',key:`turn:${turn.id}`,value:{goal:turn.body,status:'answered',epochs:0,commands:0,stopReason:'chat-answer'},sourceEventIds:[turn.id]})
         durableMemory.verify(fact.id)
         return {answer,completed:true}
       }
@@ -6848,7 +6856,7 @@ const runServeShell = async (): Promise<void> => {
       // يُبنى ولا تُقيَّم الأهلية أصلاً، والمسار بعد هذه الكتلة هو القديم بايتاً. البوابة لا
       // تزيد عملاً: المُجاب يُنهي الدور بلا حلقة (0 حقب، 0 أوامر، حالة answered لا تُستأنف)،
       // والمُصعَّد/المتروك يمضي بسطر 🚪 واحد ثم المسار القديم على selectedModel نفسه —
-      // ومبادلة البوابة لا تدخل epochHistory ولا conversation إلا عند الإجابة.
+      // ومبادلة البوابة لا تدخل epochHistory ولا turnConversation إلا عند الإجابة.
       const gateMode = parseGateMode(loadSettings().routerGate)
       if (gateMode !== "off") {
         const gateModel = resolveGateModel(selectedModel)
@@ -6862,8 +6870,8 @@ const runServeShell = async (): Promise<void> => {
         else {
           const gateRecall = await (async () => {
             try {
-              const facts = factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts, memorySearchEnabled, currentSession)
-              const result = await semanticMemory.recall({facts,query:effectiveGoal,scope:JSON.stringify([resolve(PROJECT_DIR),currentSession,memorySearchEnabled]),route:turnSelection.ref+'@'+Providers.provider(turnSelection.provider)?.baseUrl,enabled:settingsAtTurn.semanticMemoryEnabled!==false,allowSensitive:settingsAtTurn.sensitiveMemoryEnabled===true,signal:controller.signal,rank:(system,body,signal)=>memoryRankAsk(system,body,turnSelection,hooks,signal)})
+              const facts = factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession)
+              const result = await semanticMemory.recall({facts,query:effectiveGoal,scope:JSON.stringify([resolve(PROJECT_DIR),turnSession,memorySearchEnabled]),route:turnSelection.ref+'@'+Providers.provider(turnSelection.provider)?.baseUrl,enabled:settingsAtTurn.semanticMemoryEnabled!==false,allowSensitive:settingsAtTurn.sensitiveMemoryEnabled===true,signal:controller.signal,rank:(system,body,signal)=>memoryRankAsk(system,body,turnSelection,hooks,signal)})
               emit({kind:'memory-recall',turnId:turn.id,method:result.method,candidates:result.candidates,selected:result.selected})
               return result.brief + conflictsBrief(detectMemoryConflicts(withoutSensitive(facts, settingsAtTurn.sensitiveMemoryEnabled === true)))
             } catch { return "" }
@@ -6871,7 +6879,7 @@ const runServeShell = async (): Promise<void> => {
           // `secretNotice` فارغةٌ في كلّ دورٍ لا يحمل اعتماداً — فالمسار القديم
           // بايتاً بايت. ومع اعتمادٍ محجوب تسبق الجملةُ الجسدَ فيرى النموذجُ
           // أنّ ما وصله محجوبٌ محروق، لا نصّاً ناقصاً بلا سبب.
-          const gate = await gateAsk(`${secretNotice}${turn.body}`, conversation, gateModel, hooks, gateRecall)
+          const gate = await gateAsk(`${secretNotice}${turn.body}`, turnConversation, gateModel, hooks, gateRecall)
           await emitEvent(turn.id, gateEventLine({
             decision: gate.kind,
             ...(gate.kind === "escalated" ? { reason: gate.detail === undefined ? gate.reason : `${gate.reason}: ${gate.detail}` } : {}),
@@ -6887,15 +6895,15 @@ const runServeShell = async (): Promise<void> => {
             try {
               const answeredTask = durableMemory.supersede(taskFact.id, {
                 projectId: resolve(PROJECT_DIR),
-                sessionId: currentSession,
+                sessionId: turnSession,
                 kind: "active_task",
                 key: `turn:${turn.id}`,
                 value: { goal: effectiveGoal, status: "answered", epochs: 0, commands: 0, stopReason: "gate-answered" },
                 sourceEventIds: [turn.id],
               })
               durableMemory.verify(answeredTask.id)
-              conversation.push({ role: "user", content: turn.body }, { role: "assistant", content: gate.text })
-              while (conversation.length > 12) conversation.splice(0, 2)
+              turnConversation.push({ role: "user", content: turn.body }, { role: "assistant", content: gate.text })
+              while (turnConversation.length > 12) turnConversation.splice(0, 2)
             } catch (error) {
               sealed = false
               await emitEvent(turn.id, `🚪 البوابة: تعذّر ختم الحقيقة (${classifyModelFailure({ error }).kind}) — يمضي الدور بالحلقة كما هي`)
@@ -6926,7 +6934,7 @@ const runServeShell = async (): Promise<void> => {
       // loop cannot spend forever. An unreadable or out-of-range value keeps
       // the default rather than silently widening the bound.
       const MAX_AGENT_EPOCHS = agentEpochBudget(process.env.ABDO_MAX_AGENT_EPOCHS)
-      const epochHistory: ChatMessage[] = [...conversation]
+      const epochHistory: ChatMessage[] = [...turnConversation]
       const allCommands: string[] = []
       const allReceipts: ToolReceipt[] = []
       // أ5 — سجلُّ التقطير: إيصالاتُ هذا الدور (المرجعُ نفسُه فينمو معه)، وما قبله يبقى لـ«skill save» في الدور التالي.
@@ -6963,10 +6971,10 @@ const runServeShell = async (): Promise<void> => {
       // ثم كنسُ ما بقي) — مفردةٌ واحدة لا ثانية لها. الخلاصة تستقرّ في الذاكرة
       // الدائمة وتُحقن في كل حقبة، فهي أَولى بالحجب لا أدنى.
       const redactSummaryLine = (text: string): string => sweepResidualSecrets(redactSecretValues(text).text).text
-      const summaryKey = `session:${currentSession}:summary`
+      const summaryKey = `session:${turnSession}:summary`
       let sessionSummary: SessionSummary | undefined = !sessionAwarenessOn ? undefined : (() => {
         try {
-          const facts = factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts, memorySearchEnabled, currentSession)
+          const facts = factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession)
           const stored = [...facts].reverse().find((fact) => fact.key === summaryKey)
           return stored === undefined ? undefined : parseStoredSummary(stored.value)
         } catch { return undefined }
@@ -7005,8 +7013,8 @@ const runServeShell = async (): Promise<void> => {
       const priorRecall = await (async () => {
         if (!rails.factRecall) return ""
         try {
-          const facts = factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts, memorySearchEnabled, currentSession)
-          const result = await semanticMemory.recall({facts,query:effectiveGoal,scope:JSON.stringify([resolve(PROJECT_DIR),currentSession,memorySearchEnabled]),route:turnSelection.ref+'@'+Providers.provider(turnSelection.provider)?.baseUrl,enabled:settingsAtTurn.semanticMemoryEnabled!==false,allowSensitive:settingsAtTurn.sensitiveMemoryEnabled===true,signal:controller.signal,rank:(system,body,signal)=>memoryRankAsk(system,body,turnSelection,hooks,signal)})
+          const facts = factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession)
+          const result = await semanticMemory.recall({facts,query:effectiveGoal,scope:JSON.stringify([resolve(PROJECT_DIR),turnSession,memorySearchEnabled]),route:turnSelection.ref+'@'+Providers.provider(turnSelection.provider)?.baseUrl,enabled:settingsAtTurn.semanticMemoryEnabled!==false,allowSensitive:settingsAtTurn.sensitiveMemoryEnabled===true,signal:controller.signal,rank:(system,body,signal)=>memoryRankAsk(system,body,turnSelection,hooks,signal)})
           emit({kind:'memory-recall',turnId:turn.id,method:result.method,candidates:result.candidates,selected:result.selected})
           return result.brief + conflictsBrief(detectMemoryConflicts(withoutSensitive(facts, settingsAtTurn.sensitiveMemoryEnabled === true)))
         } catch { return "" }
@@ -7184,7 +7192,7 @@ const runServeShell = async (): Promise<void> => {
         if (failure === undefined) return ""
         try {
           const projectId = resolve(PROJECT_DIR), key = lessonKey(failure.taskKind, failure.signature)
-          const previous = durableMemory.query({ projectId, sessionId: currentSession, now: Date.now() }).facts.filter((f) => f.key === key && f.sessionId === undefined).at(-1)
+          const previous = durableMemory.query({ projectId, sessionId: turnSession, now: Date.now() }).facts.filter((f) => f.key === key && f.sessionId === undefined).at(-1)
           const lesson = recordLesson(lessonsOf(previous === undefined ? [] : [previous])[0], failure, turn.id, output)
           const input = { projectId, kind: "project_fact" as const, key, value: lesson, sourceEventIds: [`turn:${turn.id}:epoch:${epoch}`] }
           const fact = previous === undefined ? durableMemory.record(input) : durableMemory.supersede(previous.id, input)
@@ -7519,7 +7527,7 @@ const runServeShell = async (): Promise<void> => {
           const summaryVerdict = verifySummary(loop.summary, receipts)
           sessionSummary = mergeSessionSummary(sessionSummary, summaryVerdict, epoch, redactSummaryLine)
           try {
-            remember({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, kind: "project_fact", key: summaryKey, value: sessionSummary, sourceEventIds: [`turn:${turn.id}:epoch:${epoch}`] })
+            remember({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, kind: "project_fact", key: summaryKey, value: sessionSummary, sourceEventIds: [`turn:${turn.id}:epoch:${epoch}`] })
           } catch { /* الذاكرة مساعِدة لا حاكمة — لا تُسقِط الدور */ }
           await emitEvent(turn.id, summaryEventLine(epoch, summaryVerdict))
         }
@@ -7623,7 +7631,7 @@ const runServeShell = async (): Promise<void> => {
         }
         remember({
           projectId: resolve(PROJECT_DIR),
-          sessionId: currentSession,
+          sessionId: turnSession,
           kind: "project_fact",
           key: `turn:${turn.id}:epoch:${epoch}`,
           value: {
@@ -7926,7 +7934,7 @@ const runServeShell = async (): Promise<void> => {
       if (superStamp.length > 0) answer += `\n${superStamp}`
       const finishedTask = durableMemory.supersede(taskFact.id, {
         projectId: resolve(PROJECT_DIR),
-        sessionId: currentSession,
+        sessionId: turnSession,
         kind: "active_task",
         key: `turn:${turn.id}`,
         value: {
@@ -8006,7 +8014,7 @@ const runServeShell = async (): Promise<void> => {
         )
         answer = `${answer}\n${redirected}`
       }
-      conversation.push({ role: "user", content: turn.body }, { role: "assistant", content: answer })
+      turnConversation.push({ role: "user", content: turn.body }, { role: "assistant", content: answer })
       await compactIfNeeded(turn.id, sessionSummary !== undefined ? renderSessionSummary(sessionSummary) : "", false)
       return { answer, completed }
     })().then(async ({ answer, completed }) => {
@@ -8023,7 +8031,7 @@ const runServeShell = async (): Promise<void> => {
       // ولا يمسّ نصّاً يراه النموذج. المعطَّل (plugins.inventory) = لا إطار.
       if (currentPlugins !== undefined && currentPlugins.enabled) emit({ kind: "plugins", turnId: turn.id, entries: currentPlugins.snapshot(), context: currentPlugins.context })
       // وضعُ CI (exec): الجوابُ الخاتم في إطار done لقشرة «cli» وحدها — القشرةُ المكتبيّة تبنيه من الأحداث كما كانت.
-      emit({ kind: "done", turnId: turn.id, rerun: !completed, ...(shellKind === "cli" ? { answer: answer.slice(-8000) } : {}), outcome: completed ? "completed" : "checkpointed", ...(checkpoints.count(currentSession, turn.id) > 0 ? { checkpointFiles: checkpoints.count(currentSession, turn.id) } : {}), contextLeft: lastContextLeft })
+      emit({ kind: "done", turnId: turn.id, rerun: !completed, ...(shellKind === "cli" ? { answer: answer.slice(-8000) } : {}), outcome: completed ? "completed" : "checkpointed", ...(checkpoints.count(turnSession, turn.id) > 0 ? { checkpointFiles: checkpoints.count(turnSession, turn.id) } : {}), contextLeft: lastContextLeft })
       projectCreatedInTurn = undefined
       running = undefined
       nestedEffectObserver = undefined
@@ -8056,7 +8064,7 @@ const runServeShell = async (): Promise<void> => {
       failedTurns.set(turn.id, failureText)
       try {
         const failedTask = durableMemory.supersede(taskFact.id, {
-          projectId: resolve(PROJECT_DIR), sessionId: sessionOf.get(turn.id) ?? currentSession,
+          projectId: resolve(PROJECT_DIR), sessionId: sessionOf.get(turn.id) ?? turnSession,
           kind: "active_task", key: `turn:${turn.id}`,
           value: { goal: effectiveGoal, status: "failed", stopReason: providerFailure?.failure.kind ?? "error" },
           sourceEventIds: [turn.id],

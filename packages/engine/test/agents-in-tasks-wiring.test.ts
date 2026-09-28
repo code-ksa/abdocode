@@ -16,7 +16,7 @@ test("engine emits one agent frame per delegated or team member, closed by the r
   // فريق: التقدّم بالحقبة يمرّ من onEpoch الذي كان غائباً عن team.
   expect(cli).toContain('onEpoch: (childEpoch) => agentFrame("running", { epoch: childEpoch }),')
   // وضعُ العمل يركب القبول فيعرفه اللوحُ لكلّ دور، لا للجاري وحده.
-  expect(cli).toContain('emit({ kind: "admission", ...admission, mode: workProfile(loadSettings().workMode).label })')
+  expect(cli).toContain('emit({ kind: "admission", ...admission, sessionId: currentSession, mode: workProfile(loadSettings().workMode).label })')
 })
 
 test("shell folds agent frames and admission mode onto the task rows; sheet draws the blue dot and the square", () => {

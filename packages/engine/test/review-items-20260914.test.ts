@@ -48,8 +48,8 @@ describe("review items 09-14", () => {
   test("done frame carries checkpointFiles and the shell offers a rollback button from it", () => {
     expect(cli).toContain('emit({ kind: "done", turnId: turn.id, rerun: false, ...(checkpoints.count(currentSession, turn.id) > 0 ? { checkpointFiles: checkpoints.count(currentSession, turn.id) } : {}), contextLeft: lastContextLeft })')
     // مقيس على 4.0.12: الدورُ العاديّ يخرج من مسار done الثاني (outcome) — بلا الحقل لم يظهر الزرُّ؛ كلُّ done يحمله
-    expect(cli).toContain('outcome: completed ? "completed" : "checkpointed", ...(checkpoints.count(currentSession, turn.id) > 0 ? { checkpointFiles: checkpoints.count(currentSession, turn.id) } : {}), contextLeft: lastContextLeft })')
-    expect((cli.match(/kind: "done", turnId: turn\.id/gu) ?? []).length).toBe((cli.match(/checkpointFiles: checkpoints\.count\(currentSession, turn\.id\)/gu) ?? []).length)
+    expect(cli).toContain('outcome: completed ? "completed" : "checkpointed", ...(checkpoints.count(turnSession, turn.id) > 0 ? { checkpointFiles: checkpoints.count(turnSession, turn.id) } : {}), contextLeft: lastContextLeft })')
+    expect((cli.match(/kind: "done", turnId: turn\.id/gu) ?? []).length).toBe((cli.match(/checkpointFiles: checkpoints\.count\((?:currentSession|turnSession), turn\.id\)/gu) ?? []).length)
     const shell = at("../../desktop/ui/index.html")
     // 09-14 ظهراً: نهايةُ done تحمل سببَها (interrupted/done) — الوسمُ في القشرة من السبب لا من «ليست done».
     expect(shell).toContain('settle(f.turnId, interruptedTurns.has(f.turnId), interruptedTurns.has(f.turnId) ? "interrupted" : "done"); offerRollback(f); return; }')

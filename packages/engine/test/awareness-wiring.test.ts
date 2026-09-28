@@ -71,7 +71,7 @@ describe("S13.1 — لا تخزين لادّعاءٍ بلا إيصال", () => {
     expect(verify).toBeGreaterThan(0)
     expect(merge).toBeGreaterThan(verify)
     expect(store).toBeGreaterThan(merge)
-    expect(source).toContain("const summaryKey = `session:${currentSession}:summary`")
+    expect(source).toContain("const summaryKey = `session:${turnSession}:summary`")
     // الطفرة (أ): تخزينُ المسوّدة الخام بدل الحكم يسقط هذا السطر.
     expect(source).not.toContain("value: loop.summary")
   })
@@ -182,7 +182,7 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     // هـ2 (2026-09-07): العاشرُ والحادي عشر عن قصدٍ معلَن — الوكيلُ الموجِّه قبل الحقبة الأولى (الأوضاعُ فوق الأساسيّ) وأطفالُ team
     // المتوازون — كلاهما يمرّ من `ask` ودفتر الكلفة والعدّاد نفسها؛ الأساسيُّ لا يستدعيهما.
     expect(source).toContain("if(modeAtTurn==='chat'){")
-    expect(source).toContain('const answer=await ask(secretNotice+turn.body,hooks,conversation,turnSelection)')
+    expect(source).toContain('const answer=await ask(secretNotice+turn.body,hooks,turnConversation,turnSelection)')
     expect(source).toContain('return {answer,completed:true}')
     expect(source).toContain("const text = await ask(prompt, { ...hooks, toolAllowlist: allowlist }, history, childModel,")
     expect(source).toContain("ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), {")

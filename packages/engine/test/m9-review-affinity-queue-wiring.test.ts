@@ -52,7 +52,7 @@ describe("م9ح — review lane wiring", () => {
     const checkpointsWord = source.indexOf("if (/^\\/?checkpoints$/iu.test(turn.body.trim())")
     expect(review).toBeGreaterThan(0); expect(checkpointsWord).toBeGreaterThan(review)
     const block = source.slice(review, checkpointsWord)
-    expect(block).toContain("changes = checkpoints.changes(currentSession, chosen, PROJECT_DIR)")
+    expect(block).toContain("changes = checkpoints.changes(turnSession, chosen, PROJECT_DIR)")
     expect(block).toContain("changes = gitChanges(PROJECT_DIR)")
     expect(block).toContain("if (changes.length === 0) return { answer:")
     expect(block).toContain("REVIEW_LENSES.map(async (lens) => {")

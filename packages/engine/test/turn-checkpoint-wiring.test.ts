@@ -20,8 +20,8 @@ describe("turn checkpoints wiring", () => {
     const compact = source.indexOf('if (/^\\/?compact$/iu.test(turn.body.trim()) || turn.body.trim() === "اضغط السياق") {', rollback)
     expect(words).toBeGreaterThan(0); expect(rollback).toBeGreaterThan(words); expect(compact).toBeGreaterThan(rollback)
     // الدورُ الحاليّ لا يُستعاد، والتقريرُ يصل السجلَّ حدثاً ثمّ الجواب
-    expect(source).toContain("checkpoints.list(currentSession, PROJECT_DIR).filter((c) => c.turnId !== turn.id)")
-    expect(source).toContain("const report = checkpoints.restore(currentSession, chosen, PROJECT_DIR)")
+    expect(source).toContain("checkpoints.list(turnSession, PROJECT_DIR).filter((c) => c.turnId !== turn.id)")
+    expect(source).toContain("const report = checkpoints.restore(turnSession, chosen, PROJECT_DIR)")
     expect(source).toContain("await emitEvent(turn.id, line)")
     // مقيس على 4.0.11: الجوابُ لا يكرّر سطرَ الحدث (كان يظهر مرّتين في السجلّ)
     expect(source).toContain('return { answer: report.ok ? "↩ تمّ الرجوع — التفاصيل في السطر أعلاه." : line, completed: report.ok }')

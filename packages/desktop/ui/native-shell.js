@@ -47,6 +47,7 @@ export function settingsPatchConfirmed(actual, wanted) {
 export function mountNativeShell(bridge) {
   let lang='en', page='session', shellMode='code', metadata, saving=Promise.resolve(), sessions=[], pendingSettings=false;
   let sessionView='all', sessionSort='recent';
+  const turnSessions=new Map();const turnOwn=f=>!f?.turnId||!turnSessions.has(f.turnId)||turnSessions.get(f.turnId)===bridge.snapshot().sessionId;
   let modelGroups=[], usage=[], terminalOutput='', currentTurn=null, currentStage='idle', memoryNotes=[], memoryInferred=[], memoryConflicts=[];
   const producedFiles=new Set();
   let pendingTrustedProject=null;
@@ -90,23 +91,23 @@ export function mountNativeShell(bridge) {
       if(f.kind==='refused'){settingsWaiter?.(f.why||'Settings rejected');pendingSettings=false;if(f.turnId===currentTurn){setStage('error');touchSession('error');refreshOpenData();if(f.failure?.action==='provider-settings'||f.failure?.action==='local-runtime'){const fix=button(L('Open provider settings','فتح إعدادات المزوّدين'),()=>native.settings('providers'),'settings');fix.classList.add('ns-provider-failure-action');status.append(fix);}}}
       if(f.kind==='session'||f.kind==='archive')showPage('session');
       if(f.kind==='project'){bridge.send({kind:'memory-list'}).catch(()=>{});if(f.trusted)rememberTrustedProject(f.path);}
-      if(f.kind==='approval'||f.kind==='trust-request')setStage('waiting');
+      if(f.kind==='approval'||f.kind==='trust-request'){if(turnOwn(f))setStage('waiting');else touchSession('needs-input',turnSessions.get(f.turnId));}
       if(f.kind==='delta')setStage('responding');
       if(f.kind==='tool-result') {
         if(/^run\s/u.test(f.cmd||'')&&bridge.pluginOn('terminalPanel')) {terminalOutput=(terminalOutput+'\n> '+f.cmd+'\n'+String(f.output||'')+'\n').slice(-100000);renderTerminalOutput();}
         if(Array.isArray(f.locations))for(const location of f.locations){const path=typeof location==='string'?location:location?.path;if(path){producedFiles.add(path);recordArtifact(path);}}
       }
-      if(f.kind==='accepted') {currentTurn=f.turnId;setStage('working');touchSession('working');}
-      if(f.kind==='tool') {currentTurn=f.turnId;setStage('working');}
+      if(f.kind==='accepted') {if(turnOwn(f)){currentTurn=f.turnId;setStage('working');}touchSession('working',turnSessions.get(f.turnId));}
+      if(f.kind==='tool') {if(turnOwn(f)){currentTurn=f.turnId;setStage('working');}}
       if(f.kind==='event') { const text=String(f.text||f.payload||''); if(text.includes('Super Abdo:')){stageLabel.textContent=text.slice(0,220);setStage('working');} }
       if(f.kind==='token-ledger'||f.kind==='turn-spend'||f.kind==='router-gate')usage.push(f);
-      if(f.kind==='done'||f.kind==='unresolved'){const completed=f.kind==='done'&&(f.outcome==='completed'||f.outcome===undefined);setStage(completed?'complete':'waiting');touchSession(completed?'done':'needs-input');refreshOpenData();}
+      if(f.kind==='done'||f.kind==='unresolved'){const completed=f.kind==='done'&&(f.outcome==='completed'||f.outcome===undefined);if(turnOwn(f))setStage(completed?'complete':'waiting');touchSession(completed?'done':'needs-input',turnSessions.get(f.turnId));refreshOpenData();}
       if(f.kind==='model'||f.kind==='model-route'){const label=f.ref?modelDisplayLabel(f.ref):f.name;if(label)bridge.setModelLabel(label);}
       if(f.kind==='session') {const welcome=$('welcome')?.querySelector('h2');if(welcome)welcome.textContent=L('What should we work on?','بمَ نعمل اليوم؟');terminalOutput='';usage=[];producedFiles.clear();currentTurn=null;setStage('idle');queueMicrotask(()=>touchSession('ready'));}
       if(f.kind==='vault-status')renderProviderStatus(f.status||[]);
       native.surfaces?.frame?.(f);
     },
-    submitted(turn,submission) {currentTurn=turn.id;showPage('session');setStage('working');native.api?.chatWork?.submitted(turn,submission);},
+    submitted(turn,submission) {currentTurn=turn.id;turnSessions.set(turn.id,bridge.snapshot().sessionId);showPage('session');setStage('working');native.api?.chatWork?.submitted(turn,submission);},
     setShellMode(value) {shellMode=value==='chat'?'chat':'code';document.body.classList.toggle('ns-chat-mode',shellMode==='chat');dock.setConversationOnly(shellMode==='chat');renderSelectedModel();renderWelcome();renderNavigation();},
     settingsApplied(settings) {lang=settings.language==='ar'?'ar':'en';applyLocale(lang);renderNavigation();renderSessions();renderWelcome();document.documentElement.dir=lang==='ar'?'rtl':'ltr';if($('sessionname').dataset.appEn==='New conversation')$('sessionname').textContent=L('New conversation','محادثة جديدة');if(page!=='session')renderPage();native.surfaces?.settingsApplied?.(settings);},
     settingsPatch() {const superAbdo=readSuper();if(!Number.isInteger(superAbdo.maxRepairPasses)||superAbdo.maxRepairPasses<0||superAbdo.maxRepairPasses>5)throw Error(L('Repair attempts must be a whole number from 0 to 5.','محاولات الإصلاح عدد صحيح من 0 إلى 5.'));return {superAbdo};},
@@ -152,7 +153,7 @@ export function mountNativeShell(bridge) {
   function save(){if(!metadata)return Promise.resolve();const snapshot=structuredClone(metadata);saving=saving.catch(()=>{}).then(()=>bridge.invoke('workspace_store_set',{store:snapshot})).catch(e=>{error(e);throw e;});return saving;}
   // Recovery after a rejected save is explicit; no rejected promise poisons subsequent saves.
   const safeSave=()=>{saving=saving.catch(()=>{});return save();};
-  function touchSession(value){if(!metadata)return;const id=bridge.snapshot().sessionId;if(!id)return;const entry=sessionMeta(id);const project=metadata.projects.find(p=>p.path===bridge.snapshot().project);if(project)entry.projectId=project.id;entry.state=value;entry.updatedAt=new Date().toISOString();safeSave().then(renderSessions).catch(()=>{});}
+  function touchSession(value,sessionId){if(!metadata)return;const id=sessionId||bridge.snapshot().sessionId;if(!id)return;const entry=sessionMeta(id);const project=metadata.projects.find(p=>p.path===bridge.snapshot().project);if(project)entry.projectId=project.id;entry.state=value;entry.updatedAt=new Date().toISOString();safeSave().then(renderSessions).catch(()=>{});}
   function autoArchive(){const days=Number(metadata?.preferences?.autoArchiveDays||0);if(!days)return false;const cutoff=Date.now()-days*86400000;const active=bridge.snapshot().sessionId;let changed=false;for(const s of metadata.sessions){if(!s.archived&&!s.pinned&&s.id!==active&&s.updatedAt&&Date.parse(s.updatedAt)<cutoff){s.archived=true;changed=true;}}return changed;}
   function recordArtifact(path){if(!metadata)return;metadata.artifacts??=[];const normalized=String(path).replace(/\\/g,'/').toLowerCase();const projectId=metadata.projects.find(p=>normalized===p.path.replace(/\\/g,'/').toLowerCase()||normalized.startsWith(p.path.replace(/\\/g,'/').toLowerCase()+'/'))?.id;const existing=metadata.artifacts.find(item=>item.path.replace(/\\/g,'/').toLowerCase()===normalized);if(existing){existing.createdAt=new Date().toISOString();existing.sessionId=bridge.snapshot().sessionId||existing.sessionId;existing.projectId=projectId||existing.projectId;safeSave().catch(()=>{});return;}metadata.artifacts.unshift({id:uid(),title:String(path).split(/[\\/]/).pop()||L('Artifact','مخرج'),path:String(path),createdAt:new Date().toISOString(),sessionId:bridge.snapshot().sessionId||undefined,projectId,pinned:false});metadata.artifacts=metadata.artifacts.slice(0,2000);safeSave().catch(()=>{});}
   const navigation=make('nav','ns-navigation');aside.querySelector('.brand').after(navigation);
@@ -162,13 +163,13 @@ export function mountNativeShell(bridge) {
   const status=make('div','ns-agent-state');status.append(brand,stageLabel);$('sessionhead').after(status);
   function setStage(value){currentStage=value;status.dataset.state=value;status.querySelector('.ns-provider-failure-action')?.remove();if(!stageLabel.textContent?.startsWith('Super Abdo:')||['idle','complete','error','waiting'].includes(value))stageLabel.textContent=({idle:L('Ready to work','جاهز للعمل'),working:L('Working…','يعمل الآن…'),responding:L('Responding…','يكتب الرد…'),waiting:L('Needs attention','يحتاج انتباهك'),complete:L('Turn finished','انتهى الدور'),error:L('Could not finish','لم يكتمل')})[value];}
   function renderWelcome(){const welcome=$('welcome');if(!welcome)return;welcome.replaceChildren();welcome.classList.toggle('ns-home-code',shellMode==='code');const mark=make('img','ns-welcome-brand');mark.src='native-brand.svg';mark.alt='';welcome.append(mark,make('h2','',shellMode==='code'?L('What should we work on?','بمَ نعمل اليوم؟'):L('How can AbdoCode help?','كيف يساعدك عبدو كود؟')));}
-  // محادثةٌ جديدة من أيّ مدخل (زرّ «جديد»، قائمة الملف، Ctrl+N): دورٌ جارٍ يُقطع **بتأكيد المشغّل** ثمّ تُفتح — لا رفضٌ صامت.
+  // محادثةٌ جديدة من أيّ مدخل (زرّ «جديد»، قائمة الملف، Ctrl+N) — أمرُ المالك 2026-09-28: كما في كلود وشات جي بي تي، الدورُ الجاري
+  // **لا يُقطع**؛ يكمل في محادثته في الخلفية (المحرّكُ يمسك جلستَه وتاريخَه) وتنتقل الشاشةُ إلى محادثةٍ جديدة فوراً.
   function startNewConversation(){
     const chatWork=native.api?.chatWork;
     if(!chatWork)return Promise.resolve(bridge.send({kind:'session-new'})).catch(error);
-    if(!bridge.snapshot().working)return Promise.resolve(chatWork.newSession()).catch(error);
-    confirmDialog(L('Start a new conversation?','بدء محادثة جديدة؟'),L('The current turn is still running. Starting a new conversation interrupts it; what was finished so far is kept and marked interrupted.','الدور الحالي ما يزال يعمل. بدء محادثة جديدة يقطعه؛ ما أُنجز حتى الآن يُحفظ موسوماً بالمقاطعة.'),()=>chatWork.newSession({interrupt:true}),L('Interrupt and start new','اقطع وابدأ محادثة جديدة'));
-    return Promise.resolve();
+    const wasWorking=bridge.snapshot().working;
+    return Promise.resolve(chatWork.newSession()).then(()=>{if(wasWorking)info(L('The previous conversation keeps working in the background.','المحادثةُ السابقة تكمل عملها في الخلفية.'));}).catch(error);
   }
   function renderNavigation(){
     navigation.replaceChildren();const modes=make('div','ns-mode-switch');

@@ -17,7 +17,7 @@ export function mountChatWork(api) {
     host.replaceChildren();attachments.replaceChildren();host.dataset.mode=currentMode;
     const top=document.createElement('div');top.className='ncw-controls';
     const label=document.createElement('span');label.className='ncw-mode-label';label.textContent=currentMode==='chat'?L('Chat · conversation only','الدردشة · محادثة فقط'):L('Code · project agent','الكود · وكيل المشاريع');
-    const attach=document.createElement('button');attach.type='button';attach.className='ncw-attach ncw-attach-icon';attach.disabled=choosing||!!pendingSession||!sessionId||!!bridge.snapshot().working;attach.textContent=choosing?'…':'+';attach.title=L('Attach files: images, PDF, Word, Excel or code (or paste / drop)','إرفاق ملفات: صور أو PDF أو Word أو Excel أو كود (أو الصق/اسحب)');attach.setAttribute('aria-label',attach.title);attach.onclick=()=>void choose();
+    const attach=document.createElement('button');attach.type='button';attach.className='ncw-attach ncw-attach-icon';attach.disabled=choosing||!!pendingSession||!sessionId;attach.textContent=choosing?'…':'+';attach.title=L('Attach files: images, PDF, Word, Excel or code (or paste / drop)','إرفاق ملفات: صور أو PDF أو Word أو Excel أو كود (أو الصق/اسحب)');attach.setAttribute('aria-label',attach.title);attach.onclick=()=>void choose();
     top.append(label,attach);host.append(top);const hint=document.createElement('div');hint.className='ncw-hint';hint.textContent=L('Paste a screenshot or drop images, PDF, Word, Excel and code here.','الصق لقطة شاشة أو اسحب صورًا أو PDF أو Word أو Excel أو ملفات كود هنا.');host.append(hint);
     if(list().length){const chips=attachments;for(const file of list()){
       const chip=document.createElement('span');chip.className='ncw-attachment';chip.title=`${file.mime} · ${Math.ceil(file.bytes/1024)} KiB`;
@@ -28,7 +28,8 @@ export function mountChatWork(api) {
     }}
   }
   async function choose(loader){
-    if(choosing||pendingSession||bridge.snapshot().working||!sessionId)return;
+    // بلاغُ المالك 2026-09-28: الإرفاقُ أثناء دورٍ جارٍ كما في كلود — المرفقُ يُلحق بالمسودّة ويُرسل مع الرسالة التالية.
+    if(choosing||pendingSession||!sessionId)return;
     const selectedSession=sessionId;choosing=true;render();
     try{
       const selected=await (loader?loader(selectedSession):bridge.invoke('attachments_pick',{sessionId:selectedSession}));
@@ -40,7 +41,7 @@ export function mountChatWork(api) {
   }
   function importFiles(files){
     const items=Array.from(files||[]);if(!items.length)return;
-    if(choosing||pendingSession||bridge.snapshot().working||!sessionId){error(L('Wait for the current action before attaching files.','انتظر انتهاء الإجراء الحالي قبل إرفاق ملفات.'));return;}
+    if(choosing||pendingSession||!sessionId){error(L('Wait for the conversation to be ready before attaching files.','انتظر جاهزيّة المحادثة قبل إرفاق ملفات.'));return;}
     if(items.length+list().length>4||items.some(f=>!f.size||f.size>16*1024*1024)||items.reduce((n,f)=>n+f.size,0)>32*1024*1024){error(L('Attach up to four files, 16 MiB per source file and 32 MiB total.','أرفق حتى أربعة ملفات، بحد 16 ميجابايت للملف و32 ميجابايت إجمالًا.'));return;}
     return choose(async selectedSession=>{
       const encoded=[];
@@ -88,7 +89,7 @@ export function mountChatWork(api) {
   async function newSession(next=currentMode,options={}){
     if(!['chat','code'].includes(next))throw Error('Invalid conversation mode');
     if(bridge.snapshot().working&&options.interrupt===true&&!choosing&&!pendingSession)await interruptRunningTurn();
-    if(bridge.snapshot().working||choosing||pendingSession)throw Error(L('Finish the current action before starting another conversation.','أنه الإجراء الحالي قبل بدء محادثة أخرى.'));
+    if(choosing||pendingSession)throw Error(L('Finish the current action before starting another conversation.','أنه الإجراء الحالي قبل بدء محادثة أخرى.'));
     return new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{pendingSession=null;render();reject(Error(L('The engine did not confirm the new conversation.','لم يؤكد المحرك إنشاء المحادثة الجديدة.')));},10000);
       pendingSession={mode:next,previous:sessionId,resolve,reject,timer};render();

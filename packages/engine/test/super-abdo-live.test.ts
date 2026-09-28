@@ -214,7 +214,7 @@ describe("Super Abdo through native engine", () => {
     } finally { await wire.stop() }
   }, 60_000)
 
-  test("recall cannot rebind a running turn, and succeeds after the turn ends", async () => {
+  test("recall during a running turn shows the recalled history while the turn keeps running in its own session", async () => {
     const wire = await engine()
     try {
       await wire.send({ kind: "submit", turn: { id: "prior-session", body: "أجب بكلمة جاهز فقط." } })
@@ -230,9 +230,10 @@ describe("Super Abdo through native engine", () => {
       expect(empty.turns).toEqual([])
       await wire.send({ kind: "submit", turn: { id: "running-session", body: "hold-for-session-check" } })
       await wire.until((f) => f.kind === "admission" && f.turnId === "running-session")
+      // انقلب العقد (أمر المالك 2026-09-28): الاستعادةُ أثناء دورٍ جارٍ تنجح — الدورُ يكمل في جلسته (turnSession) والشاشةُ تعرض المستعادة.
       await wire.send({ kind: "recall", session: original })
-      await wire.until((f) => f.kind === "refused" && String(f.why).includes("استعادة محادثة"))
-      expect(wire.seen.some((f) => f.kind === "archive" && f.session === original)).toBe(false)
+      const during = await wire.until((f) => f.kind === "archive" && f.session === original)
+      expect((during.turns as { id: string }[]).map((turn) => turn.id)).toEqual(["prior-session"])
       await wire.until((f) => f.kind === "done" && f.turnId === "running-session")
       await wire.send({ kind: "recall", session: original })
       const archive = await wire.until((f) => f.kind === "archive" && f.session === original)
