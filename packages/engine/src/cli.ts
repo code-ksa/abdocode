@@ -195,6 +195,7 @@ import { TurnAwareness, projectMap } from "./turn-awareness"
 import { approvePlan, planApproved, planningToolAllowed, planningWriteViolation, projectDocumentReadLimit } from "./project-planning-phase"
 import { modelOutputViolation } from "./model-output-guard"
 import { excessiveMetadataDescription } from "./public-content-quality-guard"
+import { grepRegex } from "./grep-pattern"
 
 installEgressGuard()
 
@@ -2774,8 +2775,9 @@ const runServeShell = async (): Promise<void> => {
       const pattern = positional[0]
       if (!pattern) return "grep يحتاج نمطاً"
       const glob = positional[1] ?? (flags.type ? `**/*.${flags.type}` : "**/*")
-      const re = (() => { try { return new RegExp(pattern, flags.ignoreCase ? "i" : "") } catch { return undefined } })()
-      if (re === undefined) return "نمط regex غير صالح"
+      const compiled = grepRegex(pattern, flags.ignoreCase)
+      if (compiled === undefined) return "نمط regex غير صالح"
+      const re = compiled.re
       const hits: string[] = []
       const perFile = new Map<string, number>()
       for await (const p of new Bun.Glob(glob).scan({ cwd: PROJECT_DIR, onlyFiles: true })) {
@@ -2802,7 +2804,8 @@ const runServeShell = async (): Promise<void> => {
       }
       if (flags.files) { const files = [...perFile.keys()].slice(0, CAP); return files.length ? `${files.length} ملفّاً:\n${files.join("\n")}` : "لا مطابقة" }
       if (flags.count) { const rows = [...perFile.entries()].slice(0, CAP).map(([f, n]) => `${f}: ${n}`); const total = [...perFile.values()].reduce((a, b) => a + b, 0); return rows.length ? `${total} مطابقة في ${rows.length} ملفّاً:\n${rows.join("\n")}` : "لا مطابقة" }
-      return hits.length ? `${hits.length} سطراً:\n${hits.join("\n")}` : "لا مطابقة"
+      const note = compiled.translated ? "\nℹ `\\|` قُرئت «أو» كما في grep — والأنبوبُ الحرفيّ `[|]`." : ""
+      return (hits.length ? `${hits.length} سطراً:\n${hits.join("\n")}` : "لا مطابقة") + note
     }
     return `أداة قراءةٍ مجهولة: ${word}`
   }
