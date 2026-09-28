@@ -213,7 +213,7 @@ describe("turn budget wiring in the live cli path", () => {
   })
 
   test("TB-3: a turn-cap refusal of the semantic-verifier ask hands back turn_budget with its own ⏱ line instead of blaming the model", () => {
-    const verifierAsk = source.indexOf("const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts), hooks, [], selectedModel)")
+    const verifierAsk = source.indexOf("const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], selectedModel)")
     const trip = source.indexOf("if (turnMeter !== undefined && turnMeter.snapshot().tripped) {")
     const unjudged = source.indexOf("⚠ غير محكّم دلالياً: النموذج لم ينتج حكماً صالحاً")
     expect(verifierAsk).toBeGreaterThan(0)

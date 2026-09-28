@@ -25,7 +25,7 @@ async function run(body: string) {
     customProviders: [{ id: "fx", label: "fixture", baseUrl: `http://127.0.0.1:${server.port}/v1`, vaultKey: "", local: true, models: ["model"] }],
   }))
   const t0 = Date.now()
-  const child = Bun.spawn([process.execPath, "packages/engine/src/cli.ts", "exec", "say hi", "--json", "--quiet", "--project", project, "--no-extensions"], {
+  const child = Bun.spawn([process.execPath, "packages/engine/src/cli.ts", "exec", "say hi", "--json", "--quiet", "--project", project], {
     cwd: resolve(import.meta.dir, "../../.."),
     env: { ...stripChildEnv(process.env).env, ABDO_CODE_SETTINGS: settings, ABDO_CODE_STATE_DIR: join(home, "state"), USERPROFILE: home, HOME: home, ABDO_VAULT_HOME: home, ABDO_MAX_AGENT_EPOCHS: "2", ABDO_MODEL_RETRY_FAST: "1" },
     stdout: "pipe", stderr: "pipe",

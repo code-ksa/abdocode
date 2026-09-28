@@ -34,7 +34,7 @@ async function commitWith(content: string) {
     superAbdo: { enabled: false, inspectEnvironment: false, isolateChanges: false, verifyResults: false, independentReview: false, maxRepairPasses: 0 },
     customProviders: [{ id: "fx", label: "fixture", baseUrl: `http://127.0.0.1:${server.port}/v1`, vaultKey: "", local: true, models: ["model"] }],
   }))
-  const child = Bun.spawn([process.execPath, "packages/engine/src/cli.ts", "exec", "commit the config", "--project", project, "--mode", "full-access", "--json", "--no-extensions"], {
+  const child = Bun.spawn([process.execPath, "packages/engine/src/cli.ts", "exec", "commit the config", "--project", project, "--mode", "full-access", "--json"], {
     cwd: resolve(import.meta.dir, "../../.."),
     env: { ...stripChildEnv(process.env).env, ABDO_CODE_SETTINGS: settings, ABDO_CODE_STATE_DIR: join(home, "state"), USERPROFILE: home, HOME: home, ABDO_VAULT_HOME: home, ABDO_MAX_AGENT_EPOCHS: "3" },
     stdout: "pipe", stderr: "pipe",

@@ -90,7 +90,7 @@ describe("S7/S8 — مساميرُ الأسلاك في المُوزِّع وال
     expect(cli).toContain('if (result.ok && (action.kind === "open" || action.kind === "focus") && result.bound !== undefined && result.measure !== undefined && result.measure.process.length > 0) {')
     expect(cli).toContain('const placed = await runDesktop({ kind: "place", x: saved.x, y: saved.y, width: saved.width, height: saved.height, state: saved.state }')
     expect(cli).toContain("restoredLine = `\\n${layouts.restoreReceipt(saved, result.bound.title)}`")
-    expect(cli).toContain("`${result.text}${restoredLine}`")
+    expect(cli).toContain("`${result.text}${restoredLine}${unchangedLine}`")
     expect(cli).toContain('if (result.ok && action.kind === "ui" && result.elements !== undefined && desktopBound !== undefined) {')
     expect(cli).toContain('source: "desk", app: desktopBoundProcess.length > 0 ? desktopBoundProcess : desktopBound.title')
     expect(cli).toContain("await paneBook(surfaceRefs)")
@@ -101,7 +101,7 @@ describe("S7/S8 — مساميرُ الأسلاك في المُوزِّع وال
     // الترتيبُ جزءٌ من الميزة: الاستعادةُ بعد تحديث الحدّ، والدفترُ بعد تحديث الشجرة، وكلاهما قبل الإيصال النهائيّ
     expect(cli.indexOf("desktopBound = result.bound;")).toBeLessThan(cli.indexOf("let restoredLine = \"\""))
     expect(cli.indexOf("desktopUi = { depth: action.depth, elements: result.elements }")).toBeLessThan(cli.indexOf("book.treeFromDesk(result.elements)"))
-    expect(cli.indexOf("book.treeFromDesk(result.elements)")).toBeLessThan(cli.indexOf("`${result.text}${restoredLine}`"))
+    expect(cli.indexOf("book.treeFromDesk(result.elements)")).toBeLessThan(cli.indexOf("`${result.text}${restoredLine}${unchangedLine}`"))
   })
   test("الكتالوج: desk يعلن layout، وui-book أداةُ قراءةٍ بمنفّذ project-read", () => {
     const desk = TOOLS.find((t) => t.name === "desk")!

@@ -295,7 +295,7 @@ describe("serve convergence wiring", () => {
     expect(source.split("outputEvidenceVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor))").length - 1).toBe(2)
     expect(source).not.toContain("outputEvidenceVerdict(turn.body,")
     // R1-02: المحكّم الدلاليّ يحكم على الهدف الفعليّ لا على «اكمل» العارية.
-    expect(source).toContain("buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts)")
+    expect(source).toContain("buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow())")
     expect(source).not.toContain("buildVerifierPrompt(turn.body,")
     // مدخل الحقبة الأولى يحمل سطر الاستئناف قبل نصّ الدور؛ وحدث الاستئناف يُعلَن مرةً بحالة الهدف.
     // S14: `secretNotice` تُقحم بين سطر الاستئناف ونصّ الدور — وهي سلسلةٌ
