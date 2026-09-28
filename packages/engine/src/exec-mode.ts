@@ -108,7 +108,7 @@ export async function runExec(options: ExecOptions, engineArgv: readonly string[
         const stopMatch = /التوقف: (\S+)/u.exec(payload)
         if (stopMatch !== null) stop = stopMatch[1]
         if (payload.startsWith("بوابات القبول:")) gates = payload
-        if (/^(?:↻|⚠|🪝|✓ نقطة حفظ|—)/u.test(payload)) progress(payload.split("\n", 1)[0]!.slice(0, 240))
+        if (/^(?:↻|⚠|🪝|✓ نقطة حفظ|—|⏳|⛰|⛔)/u.test(payload)) progress(payload.split("\n", 1)[0]!.slice(0, 240))
       } else if (frame.kind === "done" || frame.kind === "refused" || frame.kind === "unresolved") {
         end = frame as typeof end
         // الجوابُ الخاتم من إطار done (يرسله المحرّكُ لقشرة «cli» وحدها)؛ والدلتا — وفيها نصُّ كلّ الحقب — احتياطٌ فقط.
