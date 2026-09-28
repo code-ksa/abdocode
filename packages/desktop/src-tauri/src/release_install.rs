@@ -13,7 +13,7 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     path::PathBuf,
-    process::Command,
+    process::{Command, Stdio},
     time::Duration,
 };
 use tauri::{AppHandle, Emitter, Manager};
@@ -194,28 +194,30 @@ fn download_installer(app: &AppHandle, version: &str) -> Result<PathBuf, String>
     Ok(target)
 }
 
-/// يشغّل المثبِّتَ بعد ثوانٍ (يمهل التطبيقَ الخروج) بوضع التقدّم ثمّ يعيد فتحَ التطبيق (`/P /R` من قالب NSIS).
+/// يشغّل المثبِّتَ مباشرةً (لا عبر PowerShell) بوضع التقدّم وإعادةِ فتح التطبيق (`/P /R` من قالب NSIS).
+///
+/// مقيس 2026-09-28 على التطبيق الحقيقيّ: وسيطُ PowerShell منفصلٌ كان يموت مع خروج التطبيق قبل أن يُطلق
+/// المثبِّت — التنزيلُ والبصمةُ نجحا و«يُعاد التشغيل» ظهرت ثمّ لم يُثبَّت شيء؛ والأمرُ نفسُه يدويّاً ثبّت وأعاد الفتح.
+/// المثبِّتُ يُطلق مباشرةً منفصلاً عن مجموعة العمليات وخارج أيّ Job (`CREATE_BREAKAWAY_FROM_JOB`، ويُعاد بلا الانفكاك
+/// إن رُفض)، بلا مقابض قياسيّة موروثة. والتطبيقُ الذي ما زال يعمل لحظةَ فحص المثبِّت يُغلقه مديرُ إعادة التشغيل في
+/// الوضع الصامت/التقدّميّ (RmShutdown في `CheckIfAppIsRunning`) — لا حوارَ ولا انتظار.
 fn launch_installer(path: &PathBuf) -> Result<(), String> {
-    let installer = path.to_string_lossy().replace('\'', "''");
-    let script = format!(
-        "Start-Sleep -Seconds 3; Start-Process -FilePath '{installer}' -ArgumentList '/P','/R'"
-    );
-    let mut cmd = Command::new("powershell.exe");
-    cmd.args([
-        "-NoProfile",
-        "-NonInteractive",
-        "-WindowStyle",
-        "Hidden",
-        "-Command",
-        &script,
-    ]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW: يعيش بعد خروج التطبيق.
-        cmd.creation_flags(0x0000_0008 | 0x0000_0200 | 0x0800_0000);
-    }
-    cmd.spawn()
+    let spawn = |flags: u32| {
+        let mut cmd = Command::new(path);
+        cmd.args(["/P", "/R"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(flags);
+        }
+        cmd.spawn()
+    };
+    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB، ثمّ بلا الانفكاك.
+    spawn(0x0000_0008 | 0x0000_0200 | 0x0100_0000)
+        .or_else(|_| spawn(0x0000_0008 | 0x0000_0200))
         .map(|_| ())
         .map_err(|e| format!("تعذّر تشغيل المثبِّت: {e}"))
 }

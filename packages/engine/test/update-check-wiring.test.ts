@@ -23,7 +23,7 @@ describe("update notifications — wiring", () => {
     expect(install).toContain('const RELEASE_BASE: &str = "https://github.com/code-ksa/abdocode/releases/download/";')
     expect(install).toContain("if actual != expected {")
     expect(install).toContain("crate::stop_engine(&app);")
-    expect(install).toContain("-ArgumentList '/P','/R'")
+    expect(install).toContain('cmd.args(["/P", "/R"])')
   })
   test("the feed is read from the public distribution repo only and foreign pages fall back", () => {
     expect(rust).toContain('pub(crate) const FEED_URL: &str = "https://raw.githubusercontent.com/code-ksa/abdocode-addons/main/release/abdocode-desktop.json";')
