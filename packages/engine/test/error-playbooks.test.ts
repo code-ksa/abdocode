@@ -62,3 +62,12 @@ describe("error playbooks — S6 registry", () => {
     expect(errorPlaybookHints("set NODE_TLS_REJECT_UNAUTHORIZED=0")).toContain("رُفض تعطيل")
   })
 })
+
+// 2026-09-28 — `.next` فسد تحت خادم dev حيّ بعد `next build` على المجلد نفسه.
+test("diagnoses a stale .next under a live dev server and names stop <pid>", () => {
+  const output = "Error: Cannot find module './787.js'\nRequire stack:\n- C:\\Users\\x\\Desktop\\app\\.next\\server\\webpack-runtime.js\n- C:\\Users\\x\\Desktop\\app\\.next\\server\\app\\api\\models\\route.js"
+  const hint = errorPlaybookHints(output)
+  expect(hint).toContain("next-stale-build-under-dev")
+  expect(hint).toContain("stop <pid>")
+  expect(errorPlaybookHints("Cannot find module 'lodash'")).not.toContain("next-stale-build-under-dev")
+})

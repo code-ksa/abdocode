@@ -190,3 +190,33 @@ describe("managed servers — real lifecycle", () => {
     expect(parseServerCommand("npm start -- -p 3001")?.port).toBe(3001)
   })
 })
+
+// 2026-09-28 — الإيصالُ يسمّي pid المُنصت، فـ`stop <pid>`/`logs <pid>` يجب أن يقبلا الاسمَ نفسَه (كان «لا تشغيلَ خلفيّاً»
+// فلجأ النموذجُ إلى Stop-Process الأعمى وأحرق حقبتين).
+describe("stop/logs by the pid the receipt named", () => {
+  test("unknown pid is undefined (the caller keeps its honest refusal)", () => {
+    const servers = new ManagedServers()
+    expect(servers.stopByPid(424242)).toBeUndefined()
+    expect(servers.logsByPid(424242)).toBeUndefined()
+  })
+
+  test("the pid printed in the start receipt stops the server and reads its tail", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "abdo-srv-pid-"))
+    const port = 3861
+    writeFileSync(join(dir, "server.mjs"), `console.log("booting"); Bun.serve({ port: ${port}, fetch: () => new Response("up") })`)
+    const servers = new ManagedServers()
+    const receipt = await servers.start({ launch: ["bun", "server.mjs"], port }, dir)
+    const pid = Number(/\(pid (\d+)\)/u.exec(receipt)?.[1])
+    expect(Number.isInteger(pid)).toBe(true)
+    expect(receipt).toContain(`stop ${pid}`)
+    expect(receipt).toContain(`logs ${pid}`)
+    const logs = servers.logsByPid(pid)
+    expect(logs).toBeDefined()
+    expect(logs).toContain(`pid ${pid}`)
+    const said = servers.stopByPid(pid)
+    expect(said).toContain("أُوقف")
+    expect(said).toContain(`pid ${pid}`)
+    expect(servers.active).toBe(0)
+    expect(servers.stopByPid(pid)).toBeUndefined()
+  }, 30_000)
+})

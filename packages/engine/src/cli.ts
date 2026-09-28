@@ -3586,7 +3586,7 @@ const runServeShell = async (): Promise<void> => {
       }
       case "exec": {
         // ذ9ب — logs/stop للتشغيلات الخلفيّة (قراءةٌ وإيقافُ ما بدأته الجلسة)، وrun --bg بعد البوّابة والحرّاس نفسِها.
-        if (spec.name === "logs") { const [id, n] = rest.split(/\s+/); return id ? okText(backgroundLogs(id, Math.min(400, Math.max(1, Number.parseInt(n ?? "60", 10) || 60)))) : invalid("الصيغة: logs <معرّف> [عدد الأسطر]") }
+        if (spec.name === "logs") { const [id, n] = rest.split(/\s+/); const managedLogs = id !== undefined && /^\d+$/u.test(id) ? (turnServers.logsByPid(Number(id)) ?? devServers.logsByPid(Number(id))) : undefined; if (managedLogs !== undefined) return okText(managedLogs); return id ? okText(backgroundLogs(id, Math.min(400, Math.max(1, Number.parseInt(n ?? "60", 10) || 60)))) : invalid("الصيغة: logs <معرّف> [عدد الأسطر]") }
         if (spec.name === "recipe") {
           // وصفاتُ الإعداد المتعلَّمة: قائمةٌ، أو وصفةٌ بخطواتها ومسارِ سكربتها، أو نسيان — قراءةٌ بلا بوّابة؛ التشغيلُ يبقى عبر run ببوّابته.
           const [verb, ...more] = rest.trim().split(/\s+/u)
@@ -3597,7 +3597,13 @@ const runServeShell = async (): Promise<void> => {
         }
         if (spec.name === "stop") {
           const run = backgroundRuns.get(rest.trim())
-          if (run === undefined) return invalid(`لا تشغيلَ خلفيّاً بالمعرّف «${rest.trim().slice(0, 16)}»`)
+          if (run === undefined) {
+            // خادمٌ مُدار (run --bg npm run dev) يُسمّى في إيصاله بـpid — الاسمُ المُعطى هو الاسمُ المقبول (09-28).
+            const pid = /^\d+$/u.test(rest.trim()) ? Number(rest.trim()) : undefined
+            const said = pid === undefined ? undefined : (turnServers.stopByPid(pid) ?? devServers.stopByPid(pid))
+            if (said !== undefined) return okText(said)
+            return invalid(`لا تشغيلَ خلفيّاً بالمعرّف «${rest.trim().slice(0, 16)}»`)
+          }
           if (run.exitCode !== undefined) return okText(`${run.id} انتهى أصلاً برمز ${run.exitCode}.`)
           run.stopped = true; run.kill()
           return okText(`أُوقف ${run.id} وشجرةُ عمليّاته.`)

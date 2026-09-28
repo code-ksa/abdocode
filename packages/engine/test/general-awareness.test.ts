@@ -298,8 +298,10 @@ describe("S13.3 — برهان العبور: مشروعان لا يتسرّب أ
     // والبنيويّ يرفض معها `package.json` و`Decimal.TryParse` — شكلٌ واحد لا
     // يفرّقه فحص. خسارةُ درسٍ عامّ أرخص من تسريب اسم عميل.
     // 2026-09-06: +1 كتيّب «cli-flag-not-registered» (علمٌ لا تعرفه الأداة الحيّة — سجلُّ المالك).
-    expect(PLAYBOOKS).toHaveLength(57)
-    expect(run.promoted).toHaveLength(23)
+    // 2026-09-28: +1 كتيّب «next-stale-build-under-dev» (بناءٌ كُتب فوق .next خادم dev حيّ).
+    expect(PLAYBOOKS).toHaveLength(58)
+    // 2026-09-28: next-stale-build-under-dev رُقّي — نصُّه عامٌّ بلا اسم عميلٍ ولا مسار.
+    expect(run.promoted).toHaveLength(24)
     // 2026-09-06: الكتيّبُ الجديد (cli-flag-not-registered) رُدّ عن الترقية — نصُّه يحمل أسماءَ أدواتٍ ومساراتٍ، والرفضُ الزائد هو الاتّجاه الآمن.
     expect(run.refusals).toHaveLength(34)
     for (const refusal of run.refusals) expect(refusal).toContain("رُفضت الترقية:")

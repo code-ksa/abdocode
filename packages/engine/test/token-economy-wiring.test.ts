@@ -296,3 +296,11 @@ describe("tests gate: exit 0 without a test count is 'unproven', not 'failed'", 
     expect(source).toContain('gateTracks.tests = { ran: true, passed: successfulTests, evidence: gateEvidence(output), ...(!successfulTests && exitZero(output, verdict) ? { unproven: true } : {}) }')
   })
 })
+
+describe("stop/logs reach kernel-managed servers by pid", () => {
+  test("stop falls through to turnServers/devServers.stopByPid before the honest refusal; logs likewise", () => {
+    expect(source).toContain("const said = pid === undefined ? undefined : (turnServers.stopByPid(pid) ?? devServers.stopByPid(pid))")
+    expect(source).toContain("(turnServers.logsByPid(Number(id)) ?? devServers.logsByPid(Number(id)))")
+    expect(source.indexOf("turnServers.stopByPid(pid)")).toBeLessThan(source.indexOf("return invalid(`لا تشغيلَ خلفيّاً بالمعرّف «${rest.trim().slice(0, 16)}»`)"))
+  })
+})

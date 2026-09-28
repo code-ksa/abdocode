@@ -93,6 +93,8 @@ interface ManagedProcess {
    * npm.cmd ← node ← next تنقطع على ويندوز فلا يصل قتل الشجرة بالنسب
    * إلى الأحفاد المنبتّين (قيس حياً: أبوا الناجين ميتان). */
   listenerPid?: number
+  /** ذيلُ مخرجي الخادم — يُقرأ بـ`logs <pid>` (09-28: كان الإيصالُ يسمّي pid لا تعرفه logs/stop). */
+  tail?: { readonly text: () => string; readonly receipt: () => string }
 }
 
 /** مَن يُنصت على المنفذ فعلاً — ملكية بالقياس لا بالنسب. */
@@ -253,7 +255,7 @@ export class ManagedServers {
     const ours = this.#running.find((p) => p.port === command.port)
     if (ours !== undefined) {
       if (await listening(command.port)) {
-        return `⚙ خادمك يعمل فعلاً تحت إدارة النواة: «${ours.display}» على http://127.0.0.1:${ours.port} (pid ${ours.proc.pid}). افحصه مباشرة — لا حاجة لإعادة تشغيله.`
+        return `⚙ خادمك يعمل فعلاً تحت إدارة النواة: «${ours.display}» على http://127.0.0.1:${ours.port} (pid ${ours.listenerPid ?? ours.proc.pid}). افحصه مباشرة — لا حاجة لإعادة تشغيله. لإعادة تشغيله بعد بناءٍ أو تغيير إعداد: stop ${ours.listenerPid ?? ours.proc.pid} ثمّ run --bg ${ours.display}.`
       }
       // ب10 — **«لا يُنصت» ليس «ميت»**: وضعُ «أوقاتٍ» يشغّل حتى اثني عشر أخاً متوازياً، فطلبُ أخٍ للمنفذ نفسِه كان
       // يقتل خادمَ أخيه **وهو في طور الإقلاع** ثمّ يشغّل مكانه ويحكم على ما قتله. القتلُ لِما مات وحده؛ والحيُّ
@@ -305,6 +307,7 @@ export class ManagedServers {
     const managed: ManagedProcess = { proc, port, display }
     this.#running.push(managed)
     const tail = tailOf(proc.stdout as ReadableStream<Uint8Array> | null, proc.stderr as ReadableStream<Uint8Array> | null)
+    managed.tail = tail
     // ٩٠ ثانية لا ٣٠ (مقيس 2026-09-13): أوّلُ تشغيلٍ لـVite يُجهّز الاعتمادات (optimizeDeps) فيتجاوز ٣٠ ثانية، فقُتل الخادمُ وهو يقوم؛
     // الخروجُ المبكّر يبقى فوريّاً — الانتظارُ الطويل للحيّ البطيء لا للميّت.
     for (let i = 0; i < 120; i += 1) {
@@ -314,7 +317,7 @@ export class ManagedServers {
         managed.listenerPid = listenerOf(port)
         return (
           `⚙ الخادم يعمل تحت إدارة النواة: «${display}» على http://127.0.0.1:${port} (pid ${managed.listenerPid ?? proc.pid}).${leaseNote}\n` +
-          `افحصه الآن بـInvoke-WebRequest -UseBasicParsing. سيُوقف تلقائياً عند نهاية الدور — لا توقفه بـStop-Process الأعمى.`
+          `افحصه الآن بـInvoke-WebRequest -UseBasicParsing. سيُوقف تلقائياً عند نهاية الدور — لا توقفه بـStop-Process الأعمى؛ لإيقافه أو إعادة تشغيله: stop ${managed.listenerPid ?? proc.pid}، وسجلّه: logs ${managed.listenerPid ?? proc.pid}.`
         )
       }
       if (proc.exitCode !== null) {
@@ -374,6 +377,26 @@ export class ManagedServers {
       }) as MeasuredServer)
     }
     return Object.freeze(rows)
+  }
+
+  /** `stop <pid>` من النموذج: الإيصالُ يسمّي pid المُنصت (أو الوسيط) — فالاسمُ الذي أُعطي هو الاسمُ الذي يُقبل.
+   * مقيس 2026-09-28: `.next` فسد تحت خادم dev حيّ، فأراد النموذجُ إعادةَ تشغيله؛ «stop 68044» ردّ «لا تشغيلَ خلفيّاً»
+   * فلجأ إلى Stop-Process الأعمى وأحرق حقبتين. */
+  stopByPid(pid: number): string | undefined {
+    const target = this.#running.find((p) => p.listenerPid === pid || p.proc.pid === pid)
+    if (target === undefined) return undefined
+    killTree(target)
+    this.#running = this.#running.filter((p) => p !== target)
+    return `أُوقف «${target.display}» (pid ${pid}) على المنفذ ${target.port} — أعد تشغيله بـrun --bg ${target.display} إن لزم.`
+  }
+
+  /** `logs <pid>` من النموذج: ذيلُ مخرجي الخادم المُدار. */
+  logsByPid(pid: number): string | undefined {
+    const target = this.#running.find((p) => p.listenerPid === pid || p.proc.pid === pid)
+    if (target === undefined) return undefined
+    const text = target.tail?.text() ?? ""
+    return text.length === 0 ? `«${target.display}» (pid ${pid}) على المنفذ ${target.port}: لم يكتب الخادم شيئاً على مخرجيه بعد.` : `«${target.display}» (pid ${pid}) على المنفذ ${target.port} — آخر ما كتبه:
+${text}`
   }
 
   /** إيقافُ خادمٍ بعينه بأمر المشغّل — الدَّينُ الذي يقابل بقاءَها بين الأدوار. */

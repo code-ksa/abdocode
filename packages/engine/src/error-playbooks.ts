@@ -309,6 +309,13 @@ export const PLAYBOOKS: readonly Playbook[] = [
     hint: "الحاوية بلا اختبارات مكتشفة — ثلاثة أسباب مقيسة بالترتيب: (1) لا يوجد ملف اختبارات فيه [Fact] أصلاً داخل مشروع الاختبارات — تحقق بlist ثم اكتبه؛ (2) الصنف المُختبَر internal (class بلا public) ومشروع الاختبارات مرجعٌ خارجي لا يراه — اجعله public class؛ (3) xunit.runner.visualstudio غائب من PackageReference. بعد الإصلاح: dotnet test <مسار مشروع الاختبارات>.csproj.",
   },
   {
+    // مقيس 2026-09-28 (تطبيق مثل OpenRouter): `next build` كتب فوق `.next` وخادمُ dev حيٌّ يقرؤه ⇦ 500 «Cannot find module './787.js'»
+    // في كلّ صفحة؛ أحرق النموذجُ حقبتين في «إعادة التشغيل» بأوامر قتلٍ عمياء.
+    id: "next-stale-build-under-dev",
+    when: /Cannot find module '\.\/\d+\.js'[\s\S]{0,400}\.next[\\/]+server/u,
+    hint: "‏`.next` فسد لأنّ `next build` كُتب فوقه وخادمُ dev حيٌّ يقرؤه — لا تشغّل البناءَ وخادمَ dev معاً على المجلد نفسه. العلاج: أوقف خادم dev بـ`stop <pid>` المذكور في إيصاله، احذف `.next`، ثمّ `run --bg npm run dev` (أو `npm run build` ثمّ `npm start` بلا dev).",
+  },
+  {
     id: "cs-decimal-culture",
     when: /System\.FormatException.*(?:decimal|Decimal|number)/u,
     hint: "decimal.Parse يقرأ بثقافة النظام (قد تكون فاصلة عربية) — استعمل decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out v) وToString(\"0.00\", CultureInfo.InvariantCulture) للطباعة.",
