@@ -74,11 +74,11 @@ export function scanAdded(lines: readonly AddedLine[]): ScanFinding[] {
 }
 
 /** سطرٌ لكلّ نتيجة، والأخطرُ أوّلاً — بلا قيمة: الملفُّ والسطرُ والقاعدةُ والسبب. */
-export function renderFindings(findings: readonly ScanFinding[], limit = 20): string {
-  if (findings.length === 0) return "🛡 فحصُ الفرق: لا سرَّ ولا نمطَ ثغرةٍ في الأسطر المضافة."
+export function renderFindings(findings: readonly ScanFinding[], limit = 20, title = "فحصُ الفرق"): string {
+  if (findings.length === 0) return `🛡 ${title}: لا سرَّ ولا نمطَ ثغرةٍ في الأسطر المضافة.`
   const sorted = [...findings].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "high" ? -1 : 1))
   const high = findings.filter((f) => f.severity === "high").length
-  const head = `🛡 فحصُ الفرق: ${high} خطيرة · ${findings.length - high} للمراجعة`
+  const head = `🛡 ${title}: ${high} خطيرة · ${findings.length - high} للمراجعة`
   const rows = sorted.slice(0, limit).map((f) => `${f.severity === "high" ? "⛔" : "⚠"} ${f.file}:${f.line} · ${f.rule} — ${f.why}`)
   return [head, ...rows, ...(findings.length > limit ? [`…و${findings.length - limit} أخرى`] : [])].join("\n")
 }

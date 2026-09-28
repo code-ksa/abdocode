@@ -158,6 +158,7 @@ import { exitZero, receiptFailed, wallFact, WallTracker, type WallVerdict } from
 import { addedLines, renderFindings, scanAdded } from "./diff-security-scan"
 import { parsePrCreate, prBlocker, prBody } from "./pr-create"
 import { surveyPush } from "./push-survey"
+import { parseSecurityScan, renderProjectScan, scanProject } from "./project-security-scan"
 import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
 import { readPdf } from "./pdf-read"
 import { diskEvidence, diskSnapshot, type GitRun } from "./disk-evidence"
@@ -6657,6 +6658,18 @@ const runServeShell = async (): Promise<void> => {
       })
       // م9ح — حارةُ المراجعة: «review [معرّف|last|git]» / «راجع تغييراتي» — ثلاثُ عدساتٍ بلا أدوات على فرق الدور الكاتب الأخير (أو فرق git).
       // الفجوة #9 — مراجعةُ PR على GitHub: الفرقُ بـgh عبر مسار run نفسِه (النواةُ والبوّابة)، والعدساتُ نفسُها، والنشرُ ببوّابة الشبكة.
+      // البند 3 (2026-09-28) — `security scan [مسار]`: ملفّاتُ git المتتبَّعة بقواعد فحص الفرق نفسِها؛ قراءةٌ صِرفة بلا موافقة.
+      {
+        const request = parseSecurityScan(turn.body)
+        if (request !== undefined) {
+          if ("error" in request) return { answer: request.error, completed: false }
+          const scan = scanProject(PROJECT_DIR, (args) => { const r = Bun.spawnSync(["git", "-C", PROJECT_DIR, ...args], { stdout: "pipe", stderr: "pipe" }); return { ok: r.exitCode === 0, out: r.stdout.toString() } }, request.path)
+          if ("error" in scan) return { answer: scan.error, completed: false }
+          const report = renderProjectScan(scan, request.path)
+          await emitEvent(turn.id, report.split("\n", 1)[0]!)
+          return { answer: report, completed: true }
+        }
+      }
       // البند 4 (2026-09-28) — `pr create`: الفرعُ ⇦ فحصُ الفرق الكامل ⇦ سؤالُ المالك صراحةً (الدفعُ نشر) ⇦ الدفع ⇦ gh pr create.
       {
         const request = parsePrCreate(turn.body)
