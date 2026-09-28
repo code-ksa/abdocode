@@ -194,17 +194,27 @@ fn download_installer(app: &AppHandle, version: &str) -> Result<PathBuf, String>
     Ok(target)
 }
 
-/// يشغّل المثبِّتَ مباشرةً (لا عبر PowerShell) بوضع التقدّم وإعادةِ فتح التطبيق (`/P /R` من قالب NSIS).
+/// يشغّل المثبِّتَ منفصلاً عن التطبيق بوضع التقدّم وإعادةِ الفتح (`/P /R` من قالب NSIS) — **بعد مهلةٍ** تكفي لخروج التطبيق.
 ///
-/// مقيس 2026-09-28 على التطبيق الحقيقيّ: وسيطُ PowerShell منفصلٌ كان يموت مع خروج التطبيق قبل أن يُطلق
-/// المثبِّت — التنزيلُ والبصمةُ نجحا و«يُعاد التشغيل» ظهرت ثمّ لم يُثبَّت شيء؛ والأمرُ نفسُه يدويّاً ثبّت وأعاد الفتح.
-/// المثبِّتُ يُطلق مباشرةً منفصلاً عن مجموعة العمليات وخارج أيّ Job (`CREATE_BREAKAWAY_FROM_JOB`، ويُعاد بلا الانفكاك
-/// إن رُفض)، بلا مقابض قياسيّة موروثة. والتطبيقُ الذي ما زال يعمل لحظةَ فحص المثبِّت يُغلقه مديرُ إعادة التشغيل في
-/// الوضع الصامت/التقدّميّ (RmShutdown في `CheckIfAppIsRunning`) — لا حوارَ ولا انتظار.
+/// مقيس 2026-09-28 مرّتين على التطبيق الحقيقيّ: (١) وسيطُ PowerShell كان يموت مع خروج التطبيق فلا يُثبَّت شيء؛ (٢) إطلاقُ
+/// المثبِّت مباشرةً بلا مهلة ثبّت الحمولةَ (المحرّكُ متوقّف) لكنّ `abdocode-desktop.exe` بقي قديماً — المثبِّتُ وصل إليه
+/// والتطبيقُ ما زال يقبضه لحظتَها، فبقي المضيفُ 4.0.73 فوق محرّك 4.0.75. الآن `cmd.exe` منفصلٌ (منفكٌّ عن أيّ Job، بلا
+/// نافذة، بلا مقابض موروثة) ينتظر ~4 ثوانٍ ثمّ يطلق المثبِّت؛ وإن بقي التطبيقُ حيّاً رغمها يُغلقه مديرُ إعادة التشغيل
+/// في الوضع الصامت/التقدّميّ بلا حوار.
 fn launch_installer(path: &PathBuf) -> Result<(), String> {
+    let installer = path.to_string_lossy().to_string();
+    if installer.contains('"')
+        || installer.contains('&')
+        || installer.contains('|')
+        || installer.contains('^')
+    {
+        return Err("مسارُ المثبِّت يحمل محارفَ لا تمرّ عبر cmd.".into());
+    }
+    // `ping -n 5` ≈ 4 ثوانٍ بلا الحاجة إلى وحدة تحكّمٍ تفاعليّة (timeout.exe يرفض بلا stdin).
+    let script = format!("ping -n 5 127.0.0.1 >nul & start \"\" \"{installer}\" /P /R");
     let spawn = |flags: u32| {
-        let mut cmd = Command::new(path);
-        cmd.args(["/P", "/R"])
+        let mut cmd = Command::new("cmd.exe");
+        cmd.args(["/d", "/c", &script])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -215,9 +225,9 @@ fn launch_installer(path: &PathBuf) -> Result<(), String> {
         }
         cmd.spawn()
     };
-    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB، ثمّ بلا الانفكاك.
-    spawn(0x0000_0008 | 0x0000_0200 | 0x0100_0000)
-        .or_else(|_| spawn(0x0000_0008 | 0x0000_0200))
+    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB، ثمّ بلا الانفكاك إن رُفض.
+    spawn(0x0000_0008 | 0x0000_0200 | 0x0800_0000 | 0x0100_0000)
+        .or_else(|_| spawn(0x0000_0008 | 0x0000_0200 | 0x0800_0000))
         .map(|_| ())
         .map_err(|e| format!("تعذّر تشغيل المثبِّت: {e}"))
 }

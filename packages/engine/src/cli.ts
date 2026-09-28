@@ -1863,7 +1863,10 @@ const ask = async (
     // ودرجةُ صعودٍ لا يصحّ اعتمادُها (401/غائب) درجةٌ مستهلكة لا نهايةُ الدور — قياسٌ حيّ 2026-09-28: ازدحامُ glm ⇦ OpenRouter
     // بلا مفتاح ⇦ الدورُ كلُّه «refused». الاعتمادُ على النموذج **المختار نفسِه** يبقى خطأً يُقال للمشغّل (لا صعودَ عنه صامتاً).
     const onClimbedRung = outageRoute !== undefined && sel.ref === outageRoute.to && sel.ref !== selected.ref
-    const climbable = error instanceof ModelRequestFailure && (error.failure.retry === "bounded-backoff" || error.failure.kind === "quota-exhausted" || (onClimbedRung && error.failure.kind === "credential"))
+    // 404/410 من المزوّد = هذا النموذجُ غيرُ متاحٍ لهذا الحساب (مقيس 2026-09-28: NIM «Function … Not found for account» على
+    // llama-3.1-nemotron-ultra-253b رغم ظهوره في /models) — انقطاعٌ لهذا النموذج لا خطأُ طلب، فيُصعَد عنه كالازدحام.
+    const modelGone = error instanceof ModelRequestFailure && error.failure.kind === "invalid-request" && (error.failure.status === 404 || error.failure.status === 410)
+    const climbable = error instanceof ModelRequestFailure && (error.failure.retry === "bounded-backoff" || error.failure.kind === "quota-exhausted" || modelGone || (onClimbedRung && error.failure.kind === "credential"))
     if (!(error instanceof ModelRequestFailure) || !climbable || hooks.signal?.aborted === true) throw error
     // سلّمُ المالك إن ضُبط؛ وإلا سلّمٌ تلقائيّ من البدائل المتاحة بمفتاح، الأقدرُ أوّلاً، بلا ما سقط في هذا الدور (أمر المالك 2026-09-28).
     const owner = ownerLadder()
