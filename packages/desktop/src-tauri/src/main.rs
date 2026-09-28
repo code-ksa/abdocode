@@ -21,6 +21,7 @@ mod desktop_preferences;
 mod extensions;
 mod extension_download;
 mod release_check;
+mod release_install;
 mod notify;
 mod marketplace;
 mod local_settings;
@@ -1242,6 +1243,7 @@ fn main() {
             extensions::extensions_set_enabled,
             extensions::extensions_remove,
             release_check::release_check,
+            release_install::release_install,
             marketplace::marketplace_index,
             notify::desktop_notify,
             terminal_pty::terminal_open,

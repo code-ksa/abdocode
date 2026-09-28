@@ -4074,7 +4074,7 @@
     el("settingsclose").onclick = () => el("settings").classList.remove("open");
 
     if (panelWindowId === null) window.AbdoDesktopShell = mountNativeShell({
-      invoke, send: sendFrame, submit: operatorSubmit, openSettings, notice,
+      invoke, listen, send: sendFrame, submit: operatorSubmit, openSettings, notice,
       saveShellSettings: async(next)=>{const saved=await invoke('settings_set',{settings:next});applyShellSettings(saved);fillSettingsControls();return saved;},
       providers: Providers, pluginOn,
       snapshot: () => ({ settings: runtimeSettings, shell: shellSettings, pluginRegistry, pluginCatalog, sessionId: currentSessionId, project: rootDir, working: working !== undefined, turnId: outbox.kind === "offering" ? outbox.turn.id : null, engineUp }),
