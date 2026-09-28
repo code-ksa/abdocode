@@ -159,6 +159,7 @@ import { addedLines, renderFindings, scanAdded } from "./diff-security-scan"
 import { parsePrCreate, prBlocker, prBody } from "./pr-create"
 import { surveyPush } from "./push-survey"
 import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
+import { readPdf } from "./pdf-read"
 import { diskEvidence, diskSnapshot, type GitRun } from "./disk-evidence"
 import { PlaybookMiner, type PlaybookCandidate } from "./playbook-miner"
 import { RecipeCollector, RecipeStore, describeRecipe, recipeBrief } from "./setup-recipes"
@@ -886,6 +887,12 @@ const readThroughKernelV = async (file: string, range?: Readonly<{ from: number;
     return invalid(found.length > 0
       ? `الملفّ غير موجود: ${target}\nلكنّ «${base}» موجودٌ هنا:\n${found.map((p) => `  - ${p}`).join("\n")}`
       : `الملفّ غير موجود: ${target}`)
+  }
+
+  // PDF نصٌّ لا بايتات (pdf-read.ts): المقطعُ صفحات، والمسارُ حُسم داخل المشروع أعلاه.
+  if (/\.pdf$/iu.test(target)) {
+    const pdf = readPdf(target, range)
+    return pdf.ok ? okText(pdf.text) : invalid(pdf.error)
   }
 
   // مضيفُ النواة يمسك الدفترَ كاتباً وحيداً طوال القراءة: يمرّ بطابور الدفتر نفسِه مع آثار الوكلاء المتوازين.
