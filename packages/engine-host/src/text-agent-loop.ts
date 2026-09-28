@@ -425,7 +425,21 @@ const narrationOnly = (preface: string): boolean => {
   return true
 }
 
-const parseCommand = (text: string, verifiedEffect = false): CommandParse => {
+/**
+ * الاقتباسُ ممّا قُرئ دليلٌ لا اختلاق — قياسٌ حيّ 2026-09-28: جوابٌ صحيحٌ عن «هل يُنشر هذا الموقع بالدفع؟» اقتبس سطرَ
+ * AGENTS.md الذي قرأه في كتلةٍ مسيّجة، فرُفض «عرضتَ محتوى ملفٍّ بلا أداة» **تسعَ مرّاتٍ** حتى المهلة. الحارسُ صُمّم لنموذجٍ يلصق
+ * ملفّاً بدل أن يكتبه؛ لا لجوابٍ يقتبس ما قرأه أو يضرب مثالاً بأمر. فالكتلةُ المسيّجة تُقبل إن كانت كلُّ أسطرها في خرج أداةٍ من
+ * هذا الدور (اقتباس)، أو كانت أوامرَ قليلةً معروفة (مثال). وادّعاءُ الكتابة الصريح يبقى رفضاً كما كان.
+ */
+const COMMAND_EXAMPLE = /^(?:\$\s*)?(?:git|gh|npm|npx|pnpm|bun|bunx|yarn|node|python3?|pip|cd|ls|cat|curl|ssh|scp|docker|pm2|systemctl|journalctl|nginx|powershell|pwsh|wsl|tail|grep|rg)\b/u
+export function quotedOrExampleBlock(body: string, seen: string): boolean {
+  const lines = body.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.length > 0)
+  if (lines.length === 0) return true
+  if (lines.length <= 4 && lines.every((line) => COMMAND_EXAMPLE.test(line) || line.startsWith("#"))) return true
+  return seen.length > 0 && lines.every((line) => line.length < 3 || seen.includes(line))
+}
+
+const parseCommand = (text: string, verifiedEffect = false, seen = ""): CommandParse => {
   // Arabic diacritics are optional orthography, not an execution boundary.
   // Normalize only an exact line-leading imperative plus colon; all ordinary
   // multi-call, payload and registered-tool checks still run afterwards.
@@ -446,7 +460,8 @@ const parseCommand = (text: string, verifiedEffect = false): CommandParse => {
     // A fenced source payload or an explicit file-write claim without a tool
     // receipt is not a final answer. Treat it as a malformed proposal rather
     // than letting the model hallucinate a filesystem effect.
-    const inspected = verifiedEffect ? clean.replace(/```(?:text|bash|sh|powershell)?[ \t]*\r?\n([\s\S]*?)```/giu, (block, body) => /[├└]─/u.test(body) || body.trim().split(/\r?\n/u).every((line: string) => /^(?:npm |pnpm |bun |yarn |cd |#|$)/u.test(line.trim())) ? "" : block) : clean
+    const effectChecked = verifiedEffect ? clean.replace(/```(?:text|bash|sh|powershell)?[ \t]*\r?\n([\s\S]*?)```/giu, (block, body) => /[├└]─/u.test(body) || body.trim().split(/\r?\n/u).every((line: string) => /^(?:npm |pnpm |bun |yarn |cd |#|$)/u.test(line.trim())) ? "" : block) : clean
+    const inspected = effectChecked.replace(/```[^\n]*\r?\n([\s\S]*?)```/gu, (block, body: string) => quotedOrExampleBlock(body, seen) ? "" : block)
     if (/```/u.test(inspected) || /^(?:import\s|export\s+(?:default|const|function)|<!doctype\s|<html\b)/iu.test(clean) || /(?:تم(?:ت)?\s+(?:كتابة|إنشاء)\s+(?:ال)?ملف|ملف\s+\S+\s+تم(?:ت)?\s+(?:كتابته|إنشاؤه))/u.test(clean)) {
       return Object.freeze({ kind: "invalid", why: "عرضت محتوى ملف أو ادعيت كتابته من دون استدعاء أداة، لذلك لا يوجد إيصال تنفيذ" })
     }
@@ -597,12 +612,14 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
    * تُستدعى، و`parseCommand(text)` هي المسار القديم بايتاً.
    */
   let verifiedEffect = (options.priorReceipts ?? []).some(r => r.verdict?.ok === true && /^(write|edit|patch|run)\s/u.test(r.command))
+  // خرجُ الأدوات في هذا الدور (السابقُ والحاليّ) — مرجعُ «الاقتباس ممّا قُرئ»؛ مسقوفٌ بأحدث 2M حرف.
+  let seenOutput = (options.priorReceipts ?? []).map((r) => r.output).join("\n").slice(-2_000_000)
   const parseAfterSummary = (text: string): CommandParse => {
-    if (!summaryOn) { currentSummary = undefined; return parseCommand(text, verifiedEffect) }
+    if (!summaryOn) { currentSummary = undefined; return parseCommand(text, verifiedEffect, seenOutput) }
     const split = splitSummary(text)
     currentSummary = split.summary
-    if (split.summary === undefined) return parseCommand(text, verifiedEffect)
-    const parsed = parseCommand(split.body, verifiedEffect)
+    if (split.summary === undefined) return parseCommand(text, verifiedEffect, seenOutput)
+    const parsed = parseCommand(split.body, verifiedEffect, seenOutput)
     if (parsed.kind !== "command" && parsed.kind !== "batch") return parsed
     // حمولةُ `write` لا تُبتر بخلاصة، واستدعاءٌ لا يُنفَّذ بجسدٍ نُقص منه.
     currentSummary = undefined
@@ -905,6 +922,7 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
         seenCommandKeys.add(key)
         notifyTool(member)
         const { output, verdict, idempotencyKey, mutated } = resolveDispatch(await options.dispatch(member))
+        seenOutput = `${seenOutput}\n${output}`.slice(-2_000_000)
         notifyToolResult(member, output, verdict, idempotencyKey, mutated)
         recordRun(key, output)
         knownReads.set(key, output)
@@ -975,6 +993,7 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     notifyTool(command)
     const { output, verdict, idempotencyKey, mutated } = resolveDispatch(await options.dispatch(command, nativeReply?.call))
     if (verdict?.ok === true && /^(write|edit|patch|run)\s/u.test(command)) verifiedEffect = true
+    seenOutput = `${seenOutput}\n${output}`.slice(-2_000_000)
     notifyToolResult(command, output, verdict, idempotencyKey, mutated)
     recordRun(commandKey, output)
     if (isReadCommand) knownReads.set(commandKey, output)
