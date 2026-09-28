@@ -61,7 +61,7 @@ export function scanAdded(lines: readonly AddedLine[]): ScanFinding[] {
       if (SECRET_FILE.test(file) && !TEMPLATE_FILE.test(file)) findings.push({ file, line, severity: "high", rule: "secret-file", why: "ملفُّ بيئةٍ أو مفتاحٍ خاصّ لا يُودَع — مكانُه الخزنة" })
     }
     const secrets = redactCounted(text)
-    if (secrets.redactions.count > 0) findings.push({ file, line, severity: "high", rule: `secret:${secrets.redactions.kinds.join("+")}`, why: "شكلُ سرٍّ في سطرٍ مضاف — أخرجه إلى الخزنة، وعدَّه محروقاً إن كان حقيقيّاً" })
+    if (secrets.redactions.count > 0) findings.push({ file, line, severity: "high", rule: `secret:${secrets.redactions.kinds.join("+")}`, why: "شكلُ سرٍّ في السطر — أخرجه إلى الخزنة، وعدَّه محروقاً إن كان حقيقيّاً" })
     const credential = CREDENTIAL.exec(text)
     if (credential !== null && !PLACEHOLDER.test(credential[1] ?? "") && secrets.redactions.count === 0) findings.push({ file, line, severity: "high", rule: "hardcoded-credential", why: "اعتمادٌ مكتوبٌ في الشيفرة — يُقرأ من البيئة أو الخزنة" })
     const comment = COMMENT_ONLY.test(text)
