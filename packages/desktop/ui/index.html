@@ -1999,6 +1999,7 @@
         // الدور الحيّ بلا سبب. والآن ثلاثة مخازن تُصفَّر معاً — والموافقة
         // منها، فلا يبقى مقعدٌ حيٌّ لمحادثةٍ طُويت.
         clearFeed(); activityReset(); notice(""); refreshSessions();
+        if (Approval !== null) renderApproval();
         // محادثة جديدة تعيد هيئة اللقطة: بطلٌ ومؤلّفٌ وسط الشاشة
         if (!el("welcome")) {
           const w = document.createElement("div");
@@ -2029,6 +2030,7 @@
         refreshSessions();
         // الدورُ الجاري يخصّ هذه المحادثة: لوحُه الحيّ يُفتح ثانيةً فتصله الأُطرُ القادمة.
         if (outbox.kind === "offering" && turnSessions.get(outbox.turn.id) === currentSessionId && !blocks.has(outbox.turn.id)) openAnswerBlock(outbox.turn.id);
+        if (Approval !== null) renderApproval();
         return;
       }
       if (f.kind === "models") {
@@ -2207,9 +2209,12 @@
         if (Approval !== null && (pluginOn("approvalTakeover") || Approval.pendingTurn(approvalStore) !== undefined)) {
           // IDEA 7: المقعد يستولي على المؤلِّف، وتبقى في المحادثة كتلةُ أثرٍ
           // حالتُها «معلّقة» **لا تُمحى بالنقر**: الحقيقة قرارُ الدفتر لا اليد.
-          const node = addBlock("warnb", "🔐 موافقة", f.request + "\nالنمط: " + f.mode + " — الصنف: " + f.class);
-          node.querySelector(".state").textContent = "معلّقة";
-          approvalBlocks.set(f.turnId, node);
+          // طلبُ دورٍ في محادثةٍ أخرى: المقعدُ وحده (موسوماً)، ولا كتلةَ أثرٍ في هذه المحادثة.
+          if (!turnIsBackground(f.turnId)) {
+            const node = addBlock("warnb", "🔐 موافقة", f.request + "\nالنمط: " + f.mode + " — الصنف: " + f.class);
+            node.querySelector(".state").textContent = "معلّقة";
+            approvalBlocks.set(f.turnId, node);
+          }
           approvalFold(f);
           scroll();
           return;
