@@ -156,6 +156,8 @@ import { EMPTY_GENERAL_STORE, GENERAL_STORE_FILE, PROMOTION_RULE, generalAwarene
 import { browserProofVerdict, httpEvidenceVerdict, localCopyInTestViolation, mockedAwayViolation, outputEvidenceVerdict } from "./closure-gate"
 import { exitZero, receiptFailed, wallFact, WallTracker, type WallVerdict } from "./failure-tiering"
 import { addedLines, renderFindings, scanAdded } from "./diff-security-scan"
+import { parsePrCreate, prBlocker, prBody } from "./pr-create"
+import { surveyPush } from "./push-survey"
 import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
 import { PlaybookMiner, type PlaybookCandidate } from "./playbook-miner"
 import { RecipeCollector, RecipeStore, describeRecipe, recipeBrief } from "./setup-recipes"
@@ -6636,6 +6638,45 @@ const runServeShell = async (): Promise<void> => {
       })
       // م9ح — حارةُ المراجعة: «review [معرّف|last|git]» / «راجع تغييراتي» — ثلاثُ عدساتٍ بلا أدوات على فرق الدور الكاتب الأخير (أو فرق git).
       // الفجوة #9 — مراجعةُ PR على GitHub: الفرقُ بـgh عبر مسار run نفسِه (النواةُ والبوّابة)، والعدساتُ نفسُها، والنشرُ ببوّابة الشبكة.
+      // البند 4 (2026-09-28) — `pr create`: الفرعُ ⇦ فحصُ الفرق الكامل ⇦ سؤالُ المالك صراحةً (الدفعُ نشر) ⇦ الدفع ⇦ gh pr create.
+      {
+        const request = parsePrCreate(turn.body)
+        if (request !== undefined) {
+          if ("error" in request) return { answer: request.error, completed: false }
+          const git = (args: readonly string[]) => {
+            const r = Bun.spawnSync(["git", "-C", PROJECT_DIR, ...args], { stdout: "pipe", stderr: "pipe" })
+            return { ok: r.exitCode === 0, out: r.stdout.toString().trim(), err: r.stderr.toString().trim() }
+          }
+          const survey = surveyPush({ git: (args) => { const r = git(args); return { ok: r.ok, out: `${r.out}\n${r.err}`.trim() } } })
+          const remoteHead = git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).out.replace(/^origin\//u, "")
+          const base = request.base ?? (remoteHead || (git(["rev-parse", "--verify", "main"]).ok ? "main" : "master"))
+          const baseRef = git(["rev-parse", "--verify", `origin/${base}`]).ok ? `origin/${base}` : base
+          const ahead = Number(git(["rev-list", "--count", `${baseRef}..HEAD`]).out || "0")
+          const blocked = prBlocker({ isRepo: survey.isRepo, ...(survey.branch === undefined ? {} : { branch: survey.branch }), base, ahead, remotes: survey.remotes, dirty: survey.dirty })
+          if (blocked !== undefined) return { answer: `⛔ لم يُفتح PR: ${blocked}`, completed: false }
+          const branch = survey.branch!
+          const findings = scanAdded(addedLines(git(["diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", `${baseRef}...HEAD`]).out))
+          const scan = renderFindings(findings)
+          await emitEvent(turn.id, scan)
+          if (findings.some((f) => f.severity === "high")) return { answer: `⛔ لم يُفتح PR — فحصُ الفرق وجد ما لا يُنشر:\n${scan}`, completed: false }
+          const commits = git(["log", "--no-merges", "--format=%s", `${baseRef}..HEAD`]).out.split("\n").filter(Boolean)
+          const files = git(["diff", "--name-only", `${baseRef}...HEAD`]).out.split("\n").filter(Boolean)
+          const remote = survey.remotes.includes("origin") ? "origin" : survey.remotes[0]!
+          const what = `دفعُ الفرع «${branch}» إلى ${remote} وفتحُ PR «${request.title}» إلى «${base}»${request.draft ? " (مسوّدة)" : ""} — ${commits.length} كوميتاً، ${files.length} ملفّاً. الدفعُ نشر.`
+          const allowed = await gate(turn.id, "network", what, "pr-create", { always: true })
+          if (!allowed) return { answer: `لم يُفتح PR: لم تُمنح الموافقة.\n${what}`, completed: false }
+          const pushed = git(["push", "-u", remote, branch])
+          if (!pushed.ok) return { answer: `🔴 فشل دفعُ الفرع «${branch}»: ${`${pushed.err}\n${pushed.out}`.trim().slice(0, 400)}`, completed: false }
+          const bodyFile = join(tmpdir(), `abdo-pr-body-${crypto.randomUUID()}.md`)
+          try {
+            writeFileSync(bodyFile, prBody({ commits, files, scan }))
+            const created = Bun.spawnSync(["gh", "pr", "create", "--title", request.title, "--body-file", bodyFile, "--base", base, "--head", branch, ...(request.draft ? ["--draft"] : [])], { cwd: PROJECT_DIR, stdout: "pipe", stderr: "pipe" })
+            const url = created.stdout.toString().trim().split("\n").find((line) => /^https:\/\/github\.com\//u.test(line))
+            if (created.exitCode !== 0 || url === undefined) return { answer: `دُفع الفرع «${branch}»، لكن تعذّر فتحُ PR بـgh: ${created.stderr.toString().trim().slice(0, 400)}`, completed: false }
+            return { answer: `✓ فُتح PR «${request.title}» من «${branch}» إلى «${base}»${request.draft ? " (مسوّدة)" : ""}: ${url}\n${scan}`, completed: true }
+          } finally { rmSync(bodyFile, { force: true }) }
+        }
+      }
       {
         const pr = /^\/?review\s+pr\s+(\S+?)(\s+--post)?$/iu.exec(turn.body.trim())
         if (pr !== null) {
