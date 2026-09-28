@@ -22,9 +22,10 @@
  * مفتاح الإعدادات (قاعدة المالك 6): `plugins.cacheAccounting` (الافتراض مفعَّل)؛
  * إطفاؤه يمنع كتابة الحقل أصلاً عبر `chargeableUsage` فتعود القيود خاماً كالقديم.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
+import { renameRetrying } from "@abdo/builtin-tools/rename-retry"
 
 export interface LedgerEntry {
   readonly at: string
@@ -277,7 +278,7 @@ export function recordCloudUsage(entry: Omit<LedgerEntry, "at">, path = ledgerPa
   mkdirSync(dirname(path), { recursive: true })
   const tmp = `${path}.tmp-${process.pid}`
   writeFileSync(tmp, `${JSON.stringify(ledger, null, 1)}\n`, "utf8")
-  renameSync(tmp, path)
+  renameRetrying(tmp, path)
 }
 
 /** المحاسبة المتحفّظة: المبلَّغ إن وُجد وإلا المقدَّر — والأعلى يفوز. */

@@ -6,10 +6,11 @@
  * الدفترُ **ذاكرةٌ لا حَكَم**: ما فيه قياسٌ ماضٍ يُقرأ ليُوجّه، ولا يُستعمل بديلاً عن قراءةٍ حيّة. السقفُ ٥٠٠ شاشةٍ لكلّ تطبيق
  * والأقدمُ يُطرد أوّلاً. القراءةُ والكتابةُ بالمسار المحقون؛ الفهرسُ المرتبط يُبنى من قائمةِ ملفّاتٍ تُمرَّر (اختبارٌ حتميّ) أو تُمسح.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { ProjectIndex } from "@abdo/project-index"
 import type { ViewMode, Rect } from "./viewport-map"
+import { renameRetrying } from "@abdo/builtin-tools/rename-retry"
 
 export const UI_BOOK_DIR = "ui-book"
 export const UI_BOOK_CAP = 500
@@ -142,7 +143,7 @@ export function recordScreen(root: string, entry: UiBookEntry): { readonly path:
   const body: UiBookEntry = { ...entry, tree, ...(styles === undefined ? {} : { styles: styles.slice(0, UI_BOOK_STYLES_CAP) }), ...(screenshot === undefined ? {} : { screenshot }), codePaths: codePaths.slice(0, 10) }
   const tmp = `${path}.${process.pid}.tmp`
   writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`, "utf8")
-  renameSync(tmp, path)
+  renameRetrying(tmp, path)
   const evicted: string[] = []
   const names = readdirSync(dir).filter((n) => n.endsWith(".json"))
   if (names.length > UI_BOOK_CAP) {

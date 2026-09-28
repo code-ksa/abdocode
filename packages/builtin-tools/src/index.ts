@@ -27,6 +27,7 @@ export {
   type UrlVerdict,
 } from "./adapters"
 export { repairCommandSpec, splitCommandLine, type CommandRepair } from "./repair-command"
+export { renameRetrying, TRANSIENT_RENAME, type RenameRetryOptions } from "./rename-retry"
 export { needsShell, validateCommand, toArgv, renderForDisplay, commandDigestInput, type CommandSpec, type CommandProblem } from "./command"
 export {
   runRemoteScript,

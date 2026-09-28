@@ -18,7 +18,6 @@ import {
   openSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -27,6 +26,7 @@ import { tmpdir } from "os"
 import { dirname, join } from "path"
 import { policy, type MutationReceipt, type ToolContext, type ToolDefinition, type ToolResult } from "@abdo/tools"
 import { resolveInWorkspace } from "./workspace"
+import { renameRetrying } from "./rename-retry"
 
 const str = (o: unknown, k: string): string | undefined => {
   const v = (o as Record<string, unknown>)?.[k]
@@ -53,7 +53,7 @@ function atomicWriteText(path: string, content: string | Uint8Array): void {
     fsyncSync(handle)
     closeSync(handle)
     handle = undefined
-    renameSync(temporary, path)
+    renameRetrying(temporary, path)
   } catch (error) {
     if (handle !== undefined) closeSync(handle)
     if (existsSync(temporary)) rmSync(temporary, { force: true })

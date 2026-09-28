@@ -8,8 +8,9 @@
  * قيمُ الكعكات لا تغادر القرص: القوائمُ والإيصالاتُ تذكر الأعدادَ والأصولَ والأعمارَ فقط.
  */
 import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { renameRetrying } from "@abdo/builtin-tools/rename-retry"
 
 export interface SessionCookie {
   readonly name: string
@@ -116,7 +117,7 @@ const readJson = <T>(file: string, fallback: T): T => {
 const writeJsonAtomic = (file: string, value: unknown): void => {
   const staging = `${file}.${process.pid}.tmp`
   writeFileSync(staging, JSON.stringify(value, null, 2), "utf8")
-  renameSync(staging, file)
+  renameRetrying(staging, file)
 }
 
 /**

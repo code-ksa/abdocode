@@ -8,8 +8,9 @@
  * **الحفظُ صريحٌ وحده**: تغييرُ المستخدم للنافذة بعد الحفظ لا يمسّ المحفوظ — لا كتابةَ في الملفّ إلا من `desk layout save`
  * و`desk layout forget`. الملفُّ `<حالة>/desk-layouts.json`، وهذه الوحدةُ صرفةٌ إلا القراءةَ والكتابةَ المحقونتين بالمسار.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
+import { renameRetrying } from "@abdo/builtin-tools/rename-retry"
 
 export const LAYOUTS_FILE = "desk-layouts.json"
 export const LAYOUTS_CAP = 200
@@ -114,7 +115,7 @@ export function saveLayouts(path: string, store: LayoutStore): void {
   mkdirSync(dirname(path), { recursive: true })
   const tmp = `${path}.${process.pid}.tmp`
   writeFileSync(tmp, `${JSON.stringify({ version: 1, layouts: store.layouts }, null, 2)}\n`, "utf8")
-  renameSync(tmp, path)
+  renameRetrying(tmp, path)
 }
 
 /** إدراجٌ أو تحديثٌ بالاسم؛ السقفُ يُطبَّق بإسقاط الأقدم حفظاً. */
