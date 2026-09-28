@@ -38,6 +38,11 @@ export class RustReachEffects {
     return this.#worker.hasCredential(provider)
   }
 
+  /** قراءةٌ لا أثر: قائمةُ النماذج الحيّة من المزوّد (المفتاحُ يبقى في العامل). */
+  listModels(provider: string): Promise<ModelProviderWorkerResponse> {
+    return this.#worker.listModels(provider)
+  }
+
   model(request: ModelProviderWorkerRequest, signal?: AbortSignal): Promise<ModelProviderWorkerResponse> {
     return this.#execute(
       { kind: "model-provider", provider: request.provider, endpoint: request.url, payloadHash: digestValue(request.body), timeoutMs: request.timeoutMs },

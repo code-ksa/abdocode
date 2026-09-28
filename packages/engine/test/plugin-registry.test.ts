@@ -33,7 +33,7 @@ const SHELL_SPRINT_ROWS = "approvalTakeover: true, trajectory: true, deliverable
 // S14 — صفّ الإدخال المُعان للأسرار: يُضاف ولا يُبدّل ما قبله.
 const SECRET_INTAKE_ROW = "secretIntake: true"
 // البند 13 من جرد هيرمس/أوبن‑كلاو (2026-09-27): مسبارُ المفتاح التلقائيّ بعد الحفظ — مطفأٌ لأنّه يُنفق توكنات.
-const PROBE_ROW = "providerProbe: false"
+const PROBE_ROW = "providerProbe: true"
 // البند 25 (2026-09-27): المحاولةُ الثانية للردّ الفارغ نداءٌ إضافيّ — مطفأة.
 const EMPTY_GUARD_ROW = "emptyGuard: false"
 // ميزةُ ذكاءٍ مقيسة (2026-09-27): التحقّقُ بعد التعديل يمنع تسليمَ شيفرةٍ مكسورة بصمت — مفعَّل.
@@ -106,7 +106,7 @@ describe("plugin registry — the table", () => {
     // ترتيب اللوحة (المرئيّ) هو الترتيب الوحيد الآن — كان يختلف عن ترتيب
     // خريطة الاستعادة في موضع trailCompaction وحده.
     expect(generated.join(", ")).toBe(
-      "providerProbe: false, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true, denialBreaker: false, unattendedDeny: true, standingGrants: false, inboundGuard: true, mcpClient: false, delegation: false, reviewer: false, activity: false, terminalPanel: true, serversPanel: false, tasksPanel: true, walls: true, verifier: false, toolVerdict: true, miner: true, readCompaction: true, trailCompaction: true, cacheAccounting: true, resumeIntent: true, turnBudget: true, receiptFixtures: true, intentField: false, approvalTakeover: true, trajectory: true, deliverables: false, secretIntake: true, sessionAwareness: true, projectAwareness: true, generalAwareness: true, semanticFrame: true, semanticInfer: false, lessons: true, usageMeter: true",
+      "providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true, denialBreaker: false, unattendedDeny: true, standingGrants: false, inboundGuard: true, mcpClient: false, delegation: false, reviewer: false, activity: false, terminalPanel: true, serversPanel: false, tasksPanel: true, walls: true, verifier: false, toolVerdict: true, miner: true, readCompaction: true, trailCompaction: true, cacheAccounting: true, resumeIntent: true, turnBudget: true, receiptFixtures: true, intentField: false, approvalTakeover: true, trajectory: true, deliverables: false, secretIntake: true, sessionAwareness: true, projectAwareness: true, generalAwareness: true, semanticFrame: true, semanticInfer: false, lessons: true, usageMeter: true",
     )
     // المفاتيح الحاكمة تُلحق بالخريطة بافتراضاتها.
     expect(PLUGINS.filter((d) => d.meta === true).map((d) => `${d.name}: ${d.defaultOn}`).join(", "))

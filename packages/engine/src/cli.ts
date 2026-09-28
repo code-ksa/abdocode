@@ -267,6 +267,46 @@ const googleSearchReady = (): boolean => {
   const presence = shippedVaultPresence(["abdocode-google-pse-api-key", "abdocode-google-pse-engine-id"], process.env)
   return presence === undefined || [...presence.values()].every(Boolean)
 }
+/**
+ * القائمةُ الحيّة لنماذج مزوّدٍ موسومٍ `discoverModels` (إنفيديا: ~80 نموذجاً والبذرةُ أربعة — أمرُ المالك 2026-09-28).
+ * تُقرأ عبر عامل رست بالمفتاح من الخزنة، وتُذكر عشر دقائق: فتحُ قائمة النماذج لا يطلق نداءً كلَّ مرّة، والفشلُ
+ * (لا شبكة، 401، 503) يُبقي البذرةَ بلا ضجيج — البذرةُ ما يعمل بلا شبكة.
+ */
+const DISCOVERED_MODELS_TTL_MS = 10 * 60_000
+const discoveredModels = new Map<string, { readonly at: number; readonly models: readonly string[] }>()
+const discoverProviderModels = async (providerId: string): Promise<readonly string[]> => {
+  const cached = discoveredModels.get(providerId)
+  if (cached !== undefined && Date.now() - cached.at < DISCOVERED_MODELS_TTL_MS) return cached.models
+  try {
+    const response = await REACH.listModels(providerId)
+    if (response.status < 200 || response.status >= 300) return cached?.models ?? []
+    const parsed = JSON.parse(response.body) as { data?: { id?: unknown }[] }
+    const models = (parsed.data ?? [])
+      .map((row) => (typeof row.id === "string" ? row.id.trim() : ""))
+      .filter((id) => /^[A-Za-z0-9._\/-]{1,128}$/u.test(id))
+      .sort((a, b) => a.localeCompare(b))
+    discoveredModels.set(providerId, { at: Date.now(), models: Object.freeze([...new Set(models)]) })
+    return discoveredModels.get(providerId)!.models
+  } catch {
+    return cached?.models ?? []
+  }
+}
+/**
+ * تدفئةُ القائمة في الخلفية عند الجاهزية وبعد كلّ حفظِ مفتاح: النداءُ الحيّ يستغرق ~6 ثوانٍ (عامل + curl + NIM)،
+ * وقائمةُ النماذج تُفتح بضغطةٍ فلا تنتظر. فتحُ القائمة قبل اكتمالها يعطي البذرةَ وما اكتمل، لا تعليقاً.
+ */
+const warmDiscoveredModels = (status?: readonly { readonly provider: string; readonly hasKey: boolean }[]): void => {
+  for (const p of Providers.listProviders()) {
+    if (p.discoverModels !== true || p.local || p.vaultKey === undefined) continue
+    // لا مسبارَ إضافيّاً للخزنة: حضورُ المفتاح من تقرير vault-status حين يُعطى، وإلا من ملفّ الخزنة المشحونة وحده
+    // (خزنةُ مالكٍ تُسأل عبر العامل — وذاك المسارُ يُترك لتقرير الحالة كي لا يتضاعف؛ مقيس: 26 طلباً ⇦ 26 مسباراً).
+    const has = status !== undefined
+      ? status.some((row) => row.provider === p.id && row.hasKey)
+      : shippedVaultPresence([p.vaultKey], process.env)?.get(p.vaultKey) === true
+    if (has) void discoverProviderModels(p.id).catch(() => undefined)
+  }
+}
+
 const hasProviderKey = async (providerId: string): Promise<boolean> => {
   const vaultKey = Providers.provider(providerId)?.vaultKey
   const shipped = vaultKey === undefined ? undefined : shippedVaultPresence([vaultKey], process.env)
@@ -3498,7 +3538,8 @@ const runServeShell = async (): Promise<void> => {
         writeFileSync(trustFile(actual), JSON.stringify({project: actual, trustedAt: new Date().toISOString(), by: "approved-project-create"}))
         emit({kind: "project", path: actual, trusted: true, created: true, customCommands: customCommandsFor(actual)})
         emit({kind: "settings", settings: next, ...pluginFrameFields(next)})
-        return {...okText("Created empty project folder and selected it: " + actual + ". No application files have been created yet. Now write your sprint plan, then implement sprint 1. For Next/Vite/React use `templates <stack>` (pinned starters); for Flutter, React Native (Expo) or Swift use `templates <stack>` to get the exact doctor → scaffold → verify → run commands."), mutated: true}
+        // «سيكوال لايت» — مقيس 2026-09-28: nemotron-120b قرأها «MySQL lite» فبنى next-mysql-lite-dashboard على mysql2 بلا خادم MySQL.
+        return {...okText("Created empty project folder and selected it: " + actual + ". No application files have been created yet. Now write your sprint plan, then implement sprint 1. For Next/Vite/React use `templates <stack>` (pinned starters); for Flutter, React Native (Expo) or Swift use `templates <stack>` to get the exact doctor → scaffold → verify → run commands. Arabic «سيكوال لايت / سكولايت» means SQLite (better-sqlite3, or Prisma with the sqlite provider) — never MySQL/mysql2 unless MySQL was asked for by name."), mutated: true}
       }
       case "exec": {
         // ذ9ب — logs/stop للتشغيلات الخلفيّة (قراءةٌ وإيقافُ ما بدأته الجلسة)، وrun --bg بعد البوّابة والحرّاس نفسِها.
@@ -5314,7 +5355,8 @@ const runServeShell = async (): Promise<void> => {
   const vaultStatus = createVaultStatusReporter({
     providers: () => Providers.listProviders().filter(p => p.vaultKey !== undefined).map(p => p.id),
     hasCredential: hasProviderKey,
-    emit,
+    // مفتاحٌ حُفظ للتوّ (القشرةُ تطلب vault-status بعد الحفظ): القائمةُ الحيّة تُدفَّأ من التقرير نفسِه بلا مسبارٍ ثانٍ.
+    emit: (frame) => { emit(frame); warmDiscoveredModels(frame.status) },
   })
   async function* shellInputFrames(): AsyncGenerator<unknown> {
     if (!framedStdio) {
@@ -5420,6 +5462,7 @@ const runServeShell = async (): Promise<void> => {
   const emitReady = () => {
     const s = loadSettings()
     emit({ kind: "ready", name: "عبدو كود", version: "4.0.0", sessionId:currentSession, conversationMode:currentConversationMode, settings: s, ...pluginFrameFields(s), customCommands: projectSelected ? customCommandsFor(PROJECT_DIR) : [] })
+    warmDiscoveredModels()
     if (desktopProjectRequired && projectSelected) emit({kind: "project", path: PROJECT_DIR, trusted: isTrusted(PROJECT_DIR), customCommands: customCommandsFor(PROJECT_DIR)})
     void emitDevServers()
   }
@@ -5735,6 +5778,12 @@ const runServeShell = async (): Promise<void> => {
           } catch { /* أولاما نائم — نُبقي البذرة */ }
         } else if (p.vaultKey !== undefined) {
           hasKey = await hasProviderKey(p.id)
+          // البذرةُ أوّلاً (المقيسة حيّاً)، ثمّ كلُّ ما يعلنه المزوّد — بلا تكرار. سقفُ الانتظار ثانيتان: ما لم يكتمل
+          // (أوّلُ فتحٍ قبل التدفئة) يُترك للفتح التالي، فالقائمةُ لا تعلّق على الشبكة.
+          if (hasKey && p.discoverModels === true) {
+            const discovered = await Promise.race([discoverProviderModels(p.id), Bun.sleep(2_000).then(() => discoveredModels.get(p.id)?.models ?? [])])
+            for (const model of discovered) if (!models.includes(model)) models.push(model)
+          }
         }
         groups.push({ provider: p.id, label: p.label, local: p.local, hasKey, models: models.map((m) => `${p.id}/${m}`) })
       }

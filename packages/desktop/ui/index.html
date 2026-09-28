@@ -2438,7 +2438,7 @@
           e.key.toLowerCase() === key;
       };
       if (matchesBinding(shellSettings.keybindings.settings)) { e.preventDefault(); openSettings(); return; }
-      if (matchesBinding(shellSettings.keybindings.newSession)) { e.preventDefault(); if (engineUp) void Promise.resolve(window.AbdoDesktopShell?.api.chatWork?.newSession() ?? sendFrame({ kind: "session-new" })).catch(err => notice(String(err))); return; }
+      if (matchesBinding(shellSettings.keybindings.newSession)) { e.preventDefault(); if (engineUp) void Promise.resolve(window.AbdoDesktopShell?.api.newConversation?.() ?? window.AbdoDesktopShell?.api.chatWork?.newSession() ?? sendFrame({ kind: "session-new" })).catch(err => notice(String(err))); return; }
       if (matchesBinding(shellSettings.keybindings.commandPalette)) { e.preventDefault(); prompt.value = "/"; prompt.focus(); renderPalette(); return; }
       if (e.key === "Escape" && palette.style.display !== "block") {
         // IDEA 7: الهروب أمام سؤالٍ معلَّق **رفضٌ** لا تجاهل — ولا يقاطع الدور:
@@ -2451,7 +2451,7 @@
     for (const chip of document.querySelectorAll("#quickrow .chip")) {
       chip.onclick = () => { prompt.value = chip.dataset.fill; prompt.focus(); renderPalette(); };
     }
-    el("newchat").onclick = () => Promise.resolve(window.AbdoDesktopShell?.api.chatWork?.newSession() ?? sendFrame({ kind: "session-new" })).catch(err => notice(String(err)));
+    el("newchat").onclick = () => Promise.resolve(window.AbdoDesktopShell?.api.newConversation?.() ?? window.AbdoDesktopShell?.api.chatWork?.newSession() ?? sendFrame({ kind: "session-new" })).catch(err => notice(String(err)));
     el("modelchip").onclick = () => sendFrame({ kind: "models" });
 
     // ---- الإعدادات: القشرة تملك تفضيلاتها، والمحرّك يملك النموذج والصلاحية ----
@@ -4077,7 +4077,7 @@
       invoke, send: sendFrame, submit: operatorSubmit, openSettings, notice,
       saveShellSettings: async(next)=>{const saved=await invoke('settings_set',{settings:next});applyShellSettings(saved);fillSettingsControls();return saved;},
       providers: Providers, pluginOn,
-      snapshot: () => ({ settings: runtimeSettings, shell: shellSettings, pluginRegistry, pluginCatalog, sessionId: currentSessionId, project: rootDir, working: working !== undefined, engineUp }),
+      snapshot: () => ({ settings: runtimeSettings, shell: shellSettings, pluginRegistry, pluginCatalog, sessionId: currentSessionId, project: rootDir, working: working !== undefined, turnId: outbox.kind === "offering" ? outbox.turn.id : null, engineUp }),
       // الشريحةُ تُسمّى من الإعدادات والدورُ خامد: السطرُ يتبعها، لا يبقى على نموذجِ دورٍ سابق (مقيس 2026-09-27).
       setModelLabel: (label) => { setChipLabel("modelchip", label); modelName = "AbdoCode"; renderStatus(); },
       artifacts: () => [...activityOutputs.keys()],

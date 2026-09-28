@@ -11,6 +11,13 @@ export function mountNativeTerminal(host, bridge, attach) {
   // Escape/Ctrl+K in a shell belong to the shell, not to the conversation's
   // interruption/command-palette shortcuts on document.
   root.addEventListener('keydown', event => event.stopPropagation());
+  // بلاغُ المالك 2026-09-28 (4.0.70): «التيرمينال لا أستطيع الكتابة فيه» — المفاتيحُ تصل xterm عبر حقله المخفيّ وحده،
+  // وهو لا يُركَّز إلا بنقرةٍ داخل الشاشة نفسِها. نقرةٌ في أيّ موضعٍ من اللوح (الحاشية، الشريط، سطر الحالة) تعيد التركيزَ
+  // إلى الطرفيّة الحيّة، وتُلتقط في طور الالتقاط كي لا يبتلعها زرٌّ أو منزلقٌ في الطريق.
+  root.addEventListener('mousedown', event => {
+    if (!active || active.closed || event.target.closest('button, input, form, .nt-tools')) return;
+    requestAnimationFrame(() => { if (active && !active.closed) active.term.focus(); });
+  }, true);
   const tabs = document.createElement('div'); tabs.className = 'nt-tabs'; tabs.setAttribute('role', 'tablist');
   const area = document.createElement('div'); area.className = 'nt-area';
   const status = document.createElement('div'); status.className = 'nt-status'; status.setAttribute('aria-live', 'polite');
@@ -86,6 +93,8 @@ export function mountNativeTerminal(host, bridge, attach) {
       if (disposed || item.closed) { await bridge.invoke('terminal_close', { id: item.id }).catch(() => {}); return; }
       for (const data of early.get(item.id) || []) term.write(new Uint8Array(data)); early.delete(item.id);
       choose(item); resize(item);
+      // الصدفةُ حيّة: التركيزُ فوراً لا عند الإطار التالي وحده — مقيسٌ أنّ rAF داخل choose يسبق أحياناً اتّصالَ الشاشة.
+      setTimeout(() => { if (!disposed && active === item && !item.closed) term.focus(); }, 60);
     } catch (error) { item.closed = true; term.options.disableStdin = true; term.writeln(L('Could not start terminal. Use + to try again.', 'تعذر تشغيل الطرفية. اضغط + لإعادة المحاولة.')); fail(error); }
     finally { creating = false; add.disabled = false; early.clear(); }
   }

@@ -44,6 +44,8 @@ export interface Provider extends RegistryEntry {
   readonly vaultKey?: string
   readonly models: readonly string[]
   readonly imageModels?: readonly string[]
+  /** القائمةُ الحيّة من `/models` تُضاف إلى البذرة حين يوجد المفتاح (كتالوج: nvidia). */
+  readonly discoverModels?: true
 }
 
 const registry = new DeterministicRegistry<Provider>()

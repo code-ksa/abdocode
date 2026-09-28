@@ -109,7 +109,12 @@ export function lessonEventLine(lesson: Lesson): string {
   const head = `📚 درسٌ مقيَّد بالمشروع (${lesson.taskKind}، ${lesson.hits}×): «${lesson.command}» — ${lesson.signature.slice(-100)}`
   if (!confirmed(lesson)) return head
   const verdict = repeatVerdict(lesson)
-  return `${head}\n${verdict.kind === "proceed" ? "" : `الحكم: ${verdict.why}`}`.trimEnd()
+  // الحكمُ للنموذج بلغته ومطلبُه صريح: مقيس 2026-09-28 أنّ الجملةَ الإنجليزية «run out of ideas» عادت إليه
+  // بلا فعلٍ مطلوب، فأعاد الأمرَ نفسَه ثالثةً ثمّ صمت. الحكمُ يسمّي ما يُفعل بدل الأمر المكرَّر.
+  const judged = verdict.kind === "proceed"
+    ? ""
+    : `الحكم: «${lesson.command}» فشل ${lesson.hits}× بالنتيجة نفسها — إعادتُه بلا تغييرٍ ليست مثابرة. اقرأ سببَ الفشل في الإيصال أعلاه، وأصلحه أوّلاً (الاعتماديات أو الإعداد أو الكود)، ثمّ شغّل أمراً مختلفاً أو الأمرَ نفسَه بعد إصلاحٍ مقيس.`
+  return `${head}\n${judged}`.trimEnd()
 }
 
 /** الموجزُ الذي يُحقن قبل أوّل نداء: المؤكَّدُ أوّلاً، محدودُ العدد، وفارغٌ حين لا درس — بايتاً كما كان. */

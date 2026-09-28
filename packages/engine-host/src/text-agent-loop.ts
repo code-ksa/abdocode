@@ -386,7 +386,12 @@ const fencedJsonWrite = (text: string): string | undefined => {
  * شيفرة فيبقى مرفوضاً كما كان (التوأم في الاختبار).
  */
 /** حرفُ «ذ» يصل أحياناً U+FFFD من المزوّد (مقيس 09-14) — علامةٌ مكسورة في صدر السطر تُشفى إلى «نفّذ:»؛ لا يُمسّ غيرُ صدر السطر. */
-export const healCallMarker = (text: string): string => text.replace(/^([ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})?\s*)نفّ?\uFFFD\s*:/gmu, "$1نفّذ:")
+export const healCallMarker = (text: string): string => text
+  .replace(/^([ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})?\s*)نفّ?\uFFFD\s*:/gmu, "$1نفّذ:")
+  // مقيس 2026-09-28 (nemotron-120b يجيب بالإنجليزية لأنّ المالك فضّلها): كتب «Execute: write package.json <<<» —
+  // العلامةَ مترجمةً — فحكم المحلّلُ «بلا أداة» ومات الدور. الترجمةُ الحرفيّة للعلامة في صدر السطر، متبوعةً باسم أداةٍ
+  // لاتينيّ، تُردّ إلى «نفّذ:»؛ وما في وسط الجملة لا يُمسّ.
+  .replace(/^([ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})?\s*)(?:Execute|EXECUTE|Exec|EXEC)\s*:(?=[ \t]*[a-z][a-z-]*\b)/gmu, "$1نفّذ:")
 
 /**
  * 🔴 **مسافةٌ واحدةٌ قبل «نفّذ:» كانت تُلغي الدورَ كلَّه.**
@@ -494,10 +499,18 @@ const parseCommand = (text: string, verifiedEffect = false): CommandParse => {
     } else if (immediatePayload !== null && !/<<<<|>>>/u.test(rawCommand)) {
       command = `write ${immediatePayload[1]} <<<\n${immediatePayload[2]}`
     }
-    const syntax = command.match(/^write\s+\S+\s+<<<(?:\r?\n|[ \t])([\s\S]*)$/u)
-    const payload = syntax?.[1]?.trim()
+    const syntax = command.match(/^write\s+(\S+)\s+<<<(?:\r?\n|[ \t])([\s\S]*)$/u)
+    let payload = syntax?.[2]?.trim()
     if (syntax === null || /<<<<|>>>/u.test(command) || /^—\s*ملف\s+.*(?:تم|بنجاح)/gmu.test(command)) {
       return Object.freeze({ kind: "invalid", why: "صيغة write هي: write <المسار> <<< ثم المحتوى، وثلاث علامات < بالضبط بلا علامة إغلاق" })
+    }
+    // سياجٌ واحدٌ يغلّف الحمولةَ **كلَّها** (```lang … ```) زخرفةُ عرضٍ لا محتوى: مقيس 2026-09-28 على nemotron-120b —
+    // رُفض «لا تغلفه بسياج» ثلاثَ مرّاتٍ في حقبتين ثمّ مات الدور بلا ملفّ. الغلافُ يُنزع ويُكتب ما بداخله بايتاً؛
+    // وما يبقى بعد سياج الإغلاق (رسالةُ نجاح، سردٌ) يُبقي الرفضَ كما كان — التوأمُ في الاختبار.
+    const fenced = payload?.match(/^```[^\r\n`]*\r?\n([\s\S]*?)\r?\n[ \t]*```$/u)
+    if (syntax !== null && fenced !== null && fenced !== undefined) {
+      payload = fenced[1]!.trim()
+      command = `write ${syntax[1]!} <<<\n${fenced[1]!}`
     }
     if (payload !== undefined && payload.length >= 2 &&
         ((payload.startsWith("\"") && payload.endsWith("\"")) || (payload.startsWith("'") && payload.endsWith("'")))) {

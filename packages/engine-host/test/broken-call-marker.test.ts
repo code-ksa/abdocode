@@ -28,6 +28,19 @@ describe("broken call marker", () => {
     expect(healCallMarker("قرأتُ نفّ�: شيئاً في الوسط")).toBe("قرأتُ نفّ�: شيئاً في الوسط")
     expect(healCallMarker("نفّذ: image x.png")).toBe("نفّذ: image x.png")
   })
+  // مقيس 2026-09-28 (nemotron-120b يجيب بالإنجليزية): «Execute: write package.json <<<» — العلامةُ مترجمةً حرفيّاً.
+  test("healCallMarker maps a line-leading English «Execute:» before a tool name to «نفّذ:», and leaves prose alone", () => {
+    expect(healCallMarker("Execute: write package.json <<<\n{}")).toBe("نفّذ: write package.json <<<\n{}")
+    expect(healCallMarker("**Execute: read a.ts**")).toBe("**نفّذ: read a.ts**")
+    expect(healCallMarker("EXECUTE: list .")).toBe("نفّذ: list .")
+    expect(healCallMarker("I will execute: the plan now")).toBe("I will execute: the plan now")
+    expect(healCallMarker("Execute: The plan has three steps")).toBe("Execute: The plan has three steps")
+  })
+  test("the loop dispatches an English-marked call (measured failure) — and completes after", async () => {
+    const { result, dispatched } = await drive(["Execute: list ."])
+    expect(dispatched).toEqual(["list ."])
+    expect(result.stopReason).toBe("complete")
+  })
   test("the loop dispatches a reply whose only line is the broken marker (measured failure) — and completes after", async () => {
     const { result, dispatched } = await drive(["نفّ�: image renders/shot_01.png"])
     expect(dispatched).toEqual(["image renders/shot_01.png"])

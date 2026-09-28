@@ -136,10 +136,13 @@ describe("managed servers — real lifecycle", () => {
 
   test("a server that never listens is reaped, not orphaned", async () => {
     const dir = mkdtempSync(join(tmpdir(), "abdo-srv-dead-"))
-    writeFileSync(join(dir, "server.mjs"), "process.exit(7)")
+    // مقيس 2026-09-28: «خرج برمز 7» بلا سطرٍ من stderr أعمى النموذجَ فأعاد الأمرَ نفسَه حتى قُطع الدور — الإيصالُ يحمل الذيل.
+    writeFileSync(join(dir, "server.mjs"), "console.error('Error: Cannot find module next'); process.exit(7)")
     const servers = new ManagedServers()
     const receipt = await servers.start({ launch: ["bun", "server.mjs"], port: 3899 }, dir)
     expect(receipt).toContain("خرج برمز 7")
+    expect(receipt).toContain("آخر ما كتبه الخادم")
+    expect(receipt).toContain("Cannot find module next")
     expect(servers.active).toBe(0)
     expect(servers.stopAll()).toBeUndefined()
   }, 30_000)

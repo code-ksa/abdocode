@@ -42,7 +42,8 @@ test("the real engine answers an explicit probe always, and an automatic one onl
     mkdirSync(vault, { recursive: true })
     writeFileSync(join(vault, "abdocode-qwen-token-plan.sec"), "dpapi-v1:not-read-here")
     const settings = join(home, "settings.json")
-    writeFileSync(settings, JSON.stringify({ language: "en", mode: "read-only", plugins: pluginOn ? { providerProbe: true } : {} }))
+    // 2026-09-28: المسبارُ التلقائيّ مفعَّلٌ افتراضاً، فالحالةُ المطفأة تُكتب صراحةً — لا بغياب المفتاح.
+    writeFileSync(settings, JSON.stringify({ language: "en", mode: "read-only", plugins: { providerProbe: pluginOn } }))
     // Only the network effect is replaced in this isolated child: no key, host or provider is contacted.
     const preload = join(home, "fake-reach.ts")
     const calls = join(home, "calls.jsonl")

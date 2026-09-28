@@ -92,6 +92,19 @@ fn main() -> std::process::ExitCode {
             }
         };
     }
+    if std::env::args().nth(1).as_deref() == Some("provider-models") {
+        let provider_id = std::env::args().nth(2).unwrap_or_default();
+        return match provider::run_models(&provider_id) {
+            Ok(frame) if std::io::stdout().lock().write_all(&frame).is_ok() => {
+                std::process::ExitCode::SUCCESS
+            }
+            Ok(_) => std::process::ExitCode::FAILURE,
+            Err(error) => {
+                eprintln!("abdo-tool-worker provider-models: {error}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
     if std::env::args().nth(1).as_deref() == Some("provider-search") {
         return match provider::run_search() {
             Ok(frame) if std::io::stdout().lock().write_all(&frame).is_ok() => {

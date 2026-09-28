@@ -15,6 +15,12 @@ export interface ProviderDefinition {
   readonly models: readonly string[]
   /** النماذجُ التي أثبت قياسٌ حيّ أنّها تقبل الصور — لا تُستنتج من الاسم (ر1، 2026-09-13). */
   readonly imageModels?: readonly string[]
+  /**
+   * القائمةُ الحيّة من `GET {baseUrl}/models` بمفتاح الخزنة (عبر عامل رست) تُضاف إلى البذرة حين يوجد المفتاح.
+   * أمرُ المالك 2026-09-28: «أظهر كلَّ النماذج الموجودة في إنفيديا لا الصغيرة فقط» — NIM يعرض ~80 نموذجاً
+   * والبذرةُ أربعة. البذرةُ تبقى: هي ما يعمل بلا شبكة وما قيس حيّاً.
+   */
+  readonly discoverModels?: true
 }
 
 /**
@@ -40,7 +46,7 @@ export const PROVIDER_DEFINITIONS = [
   { id: "qwen-coding-plan", version: "1", source: "builtin", label: "كوين — خطة البرمجة", local: false, wire: "openai-compatible", harness: "qwen-style", baseUrl: "https://coding-intl.dashscope.aliyuncs.com/v1", workerUrl: "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions", vaultKey: "abdocode-qwen-coding-plan", models: ["qwen3.7-plus", "qwen3.6-plus", "qwen3-coder-next", "qwen3-coder-plus", "qwen3.5-plus", "qwen3-max-2026-01-23", "kimi-k2.5", "glm-5", "MiniMax-M2.5", "glm-4.7"] },
   { id: "minimax", version: "1", source: "builtin", label: "ميني ماكس (MiniMax)", local: false, wire: "openai-compatible", harness: "abdo-native", baseUrl: "https://api.minimax.chat/v1", workerUrl: "https://api.minimax.chat/v1/chat/completions", vaultKey: "abdocode-minimax", models: ["minimax-m2", "abab6.5s-chat"] },
   { id: "openrouter", version: "1", source: "builtin", label: "أوبن راوتر (OpenRouter)", local: false, wire: "openai-compatible", harness: "abdo-native", baseUrl: "https://openrouter.ai/api/v1", workerUrl: "https://openrouter.ai/api/v1/chat/completions", vaultKey: "abdocode-openrouter", models: ["anthropic/claude-sonnet-4.5", "meta-llama/llama-3.3-70b-instruct"] },
-  { id: "nvidia", version: "1", source: "builtin", label: "إنفيديا (NIM)", local: false, wire: "openai-compatible", harness: "abdo-native", baseUrl: "https://integrate.api.nvidia.com/v1", workerUrl: "https://integrate.api.nvidia.com/v1/chat/completions", vaultKey: "abdocode-nvidia", models: ["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", "nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-super-120b-a12b", "meta/llama-3.2-11b-vision-instruct"], imageModels: ["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", "meta/llama-3.2-11b-vision-instruct"] },
+  { id: "nvidia", version: "1", source: "builtin", label: "إنفيديا (NIM)", local: false, wire: "openai-compatible", harness: "abdo-native", baseUrl: "https://integrate.api.nvidia.com/v1", workerUrl: "https://integrate.api.nvidia.com/v1/chat/completions", vaultKey: "abdocode-nvidia", discoverModels: true, models: ["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", "nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-super-120b-a12b", "meta/llama-3.2-11b-vision-instruct"], imageModels: ["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", "meta/llama-3.2-11b-vision-instruct"] },
   { id: "meta", version: "1", source: "builtin", label: "ميتا (Llama API)", local: false, wire: "openai-compatible", harness: "abdo-native", baseUrl: "https://api.llama.com/compat/v1", workerUrl: "https://api.llama.com/compat/v1/chat/completions", vaultKey: "abdocode-meta", models: ["llama-4-maverick", "llama-4-scout"] },
 ] as const satisfies readonly ProviderDefinition[]
 

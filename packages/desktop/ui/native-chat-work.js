@@ -69,13 +69,26 @@ export function mountChatWork(api) {
   function onPaste(event){const files=Array.from(event.clipboardData?.items||[]).filter(item=>item.kind==='file').map(item=>item.getAsFile()).filter(Boolean);if(files.length){event.preventDefault();void importFiles(files);}}
   const fileDrag=event=>Array.from(event.dataTransfer?.types||[]).includes('Files');
   const inside=target=>composer?.contains(target)||host.contains(target);
-  function onDragOver(event){if(!fileDrag(event))return;event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect=inside(event.target)?'copy':'none';composer?.classList.toggle('ncw-drop-active',inside(event.target));}
-  function onDrop(event){if(!fileDrag(event))return;event.preventDefault();composer?.classList.remove('ncw-drop-active');if(inside(event.target))void importFiles(event.dataTransfer.files);else error(L('Drop files on the message input.','أسقط الملفات داخل مربع الرسالة.'));}
-  const onDragLeave=event=>{if(!event.relatedTarget||!inside(event.relatedTarget))composer?.classList.remove('ncw-drop-active');};
+  // بلاغُ المالك 2026-09-28 (4.0.70): «سحبتُ ملف وورد فلم يظهر» — الإفلاتُ خارج مربّع الرسالة كان يُرفض بتنبيهٍ يُفوَّت.
+  // ملفٌّ يُسقَط في أيّ موضعٍ من النافذة مقصودٌ للمحادثة الحاليّة؛ المربّعُ يُضاء دلالةً لا شرطاً.
+  function onDragOver(event){if(!fileDrag(event))return;event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy';composer?.classList.add('ncw-drop-active');}
+  function onDrop(event){if(!fileDrag(event))return;event.preventDefault();composer?.classList.remove('ncw-drop-active');void importFiles(event.dataTransfer.files);}
+  const onDragLeave=event=>{if(!event.relatedTarget||!(event.relatedTarget instanceof Node)||!document.contains(event.relatedTarget))composer?.classList.remove('ncw-drop-active');};
   prompt?.addEventListener('paste',onPaste);window.addEventListener('dragover',onDragOver);window.addEventListener('drop',onDrop);window.addEventListener('dragleave',onDragLeave);
-  function newSession(next=currentMode){
-    if(!['chat','code'].includes(next))return Promise.reject(Error('Invalid conversation mode'));
-    if(bridge.snapshot().working||choosing||pendingSession)return Promise.reject(Error(L('Finish the current action before starting another conversation.','أنه الإجراء الحالي قبل بدء محادثة أخرى.')));
+  // بلاغُ المالك 2026-09-28 (4.0.70): زرُّ «جديد» أثناء دورٍ جارٍ لم يفتح شيئاً — المحرّكُ يرفض session-new والدورُ في الطريق
+  // (قرارٌ صحيح: القطعُ يُتَّخذ باسمه)، والقشرةُ كانت ترفض قبله بتنبيهٍ يُفوَّت. الآن `interrupt:true` (بعد تأكيد المشغّل في
+  // القشرة) يقطع الدورَ الجاري وينتظر إعلانَ المحرّك ثمّ يفتح المحادثة الجديدة.
+  async function interruptRunningTurn(){
+    const turnId=bridge.snapshot().turnId;
+    if(!turnId)throw Error(L('The running turn could not be identified.','تعذّر تحديد الدور الجاري.'));
+    await bridge.send({kind:'interrupt',turnId});
+    for(let waited=0;bridge.snapshot().working&&waited<15000;waited+=100)await new Promise(r=>setTimeout(r,100));
+    if(bridge.snapshot().working)throw Error(L('The engine did not stop the running turn.','لم يوقف المحرك الدور الجاري.'));
+  }
+  async function newSession(next=currentMode,options={}){
+    if(!['chat','code'].includes(next))throw Error('Invalid conversation mode');
+    if(bridge.snapshot().working&&options.interrupt===true&&!choosing&&!pendingSession)await interruptRunningTurn();
+    if(bridge.snapshot().working||choosing||pendingSession)throw Error(L('Finish the current action before starting another conversation.','أنه الإجراء الحالي قبل بدء محادثة أخرى.'));
     return new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{pendingSession=null;render();reject(Error(L('The engine did not confirm the new conversation.','لم يؤكد المحرك إنشاء المحادثة الجديدة.')));},10000);
       pendingSession={mode:next,previous:sessionId,resolve,reject,timer};render();
@@ -103,7 +116,7 @@ export function mountChatWork(api) {
     return {conversationMode:currentMode,attachments:list().map(file=>file.id)};
   }
   render();
-  return {mode:()=>currentMode,setMode:next=>next===currentMode?Promise.resolve(sessionId):newSession(next),newSession:()=>newSession(),prepareSubmission,choose,frame,render,
+  return {mode:()=>currentMode,setMode:next=>next===currentMode?Promise.resolve(sessionId):newSession(next),newSession:(options)=>newSession(currentMode,options||{}),prepareSubmission,choose,frame,render,
     submitted(turn,submission){if(submission?.conversationMode===currentMode&&prompt?.value.trim()===turn.body.trim())textDrafts.set(sessionId,'');if(submission?.attachments?.length)submissions.set(turn.id,{session:sessionId,ids:[...submission.attachments]});render();},
     dispose(){disposed=true;if(pendingSession){clearTimeout(pendingSession.timer);pendingSession.reject(Error('Conversation controls closed'));}prompt?.removeEventListener('input',saveText);prompt?.removeEventListener('paste',onPaste);window.removeEventListener('dragover',onDragOver);window.removeEventListener('drop',onDrop);window.removeEventListener('dragleave',onDragLeave);composer?.classList.remove('ncw-drop-active');if(prompt)inputSurface.before(prompt);inputSurface.remove();host.remove();drafts.clear();textDrafts.clear();submissions.clear();}
   };

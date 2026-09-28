@@ -184,7 +184,7 @@ describe("serve convergence wiring", () => {
         // والخوادمُ تغيّر **عمرَ العمليات**، وما يغيّر سلوكاً يبدأ مطفأً.
         + ", terminalPanel: true, serversPanel: false, tasksPanel: true"
         // البند 13 (2026-09-27): المسبارُ التلقائيّ يُنفق توكنات فيبدأ مطفأً.
-        + ", providerProbe: false, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true").split(", ").sort(),
+        + ", providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true").split(", ").sort(),
     )
     // ولا صفَّ ثابتاً بقي في القشرة: الصفوف عُقدٌ تُبنى من الإطار، والاستعادة تُحسب من الأوصاف.
     expect(desktopUi).toContain('<div id="pluginrows"></div>')
@@ -956,7 +956,8 @@ describe("serve convergence wiring", () => {
     expect(desktop).toContain(
       "if (Approval !== null) { approvalStore = Approval.empty(); renderApproval(); void syncShellPlugins(); }",
     )
-    expect(desktop).toContain('el("newchat").onclick = () => Promise.resolve(window.AbdoDesktopShell?.api.chatWork?.newSession() ?? sendFrame({ kind: "session-new" })).catch(err => notice(String(err)));')
+    // 2026-09-28: زرُّ «جديد» يمرّ بمدخل القشرة الأصلية (تأكيدٌ ثمّ قطعُ الدور الجاري) قبل chatWork، ويهبط إلى الإطار الخام بلا قشرة.
+    expect(desktop).toContain('el("newchat").onclick = () => Promise.resolve(window.AbdoDesktopShell?.api.newConversation?.() ?? window.AbdoDesktopShell?.api.chatWork?.newSession() ?? sendFrame({ kind: "session-new" })).catch(err => notice(String(err)));')
     // (و) مفرداتٌ واحدة: القشرة تطوي على البادئة المُصدَّرة لا على حرفٍ ثانٍ.
     expect(shellApproval).toContain('import { APPROVAL_DECIDED_PREFIX, decisionOfLine, type ApprovalDecision } from "../approval-ledger"')
     expect(shellApproval).not.toContain('"🔐 قرار الموافقة: "')

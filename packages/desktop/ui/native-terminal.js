@@ -1,4 +1,4 @@
-// ../../node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.mjs
+// node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.mjs
 var zs = Object.defineProperty;
 var Rl = Object.getOwnPropertyDescriptor;
 var Ll = (s, t) => {
@@ -9699,7 +9699,7 @@ var Dl = class extends D {
   }
 };
 
-// ../../node_modules/.bun/@xterm+addon-fit@0.11.0/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
+// node_modules/.bun/@xterm+addon-fit@0.11.0/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
 var h = 2;
 var _ = 1;
 var o = class {
@@ -9725,13 +9725,21 @@ var o = class {
   }
 };
 
-// src/native-terminal.js
+// packages/desktop/src/native-terminal.js
 function mountNativeTerminal(host, bridge, attach) {
   const L2 = (en2, ar2) => document.documentElement.lang === "ar" ? ar2 : en2;
   const root = document.createElement("div");
   root.className = "native-terminal";
   root.dir = "ltr";
   root.addEventListener("keydown", (event) => event.stopPropagation());
+  root.addEventListener("mousedown", (event) => {
+    if (!active || active.closed || event.target.closest("button, input, form, .nt-tools"))
+      return;
+    requestAnimationFrame(() => {
+      if (active && !active.closed)
+        active.term.focus();
+    });
+  }, true);
   const tabs = document.createElement("div");
   tabs.className = "nt-tabs";
   tabs.setAttribute("role", "tablist");
@@ -9922,6 +9930,10 @@ function mountNativeTerminal(host, bridge, attach) {
       early.delete(item.id);
       choose(item);
       resize(item);
+      setTimeout(() => {
+        if (!disposed && active === item && !item.closed)
+          term.focus();
+      }, 60);
     } catch (error) {
       item.closed = true;
       term.options.disableStdin = true;

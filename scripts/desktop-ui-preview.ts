@@ -33,6 +33,8 @@ const mock = `<script>
   let store = { version:1, projects:[], sessions:[], schedules:[], artifacts:[], preferences:{ sidebarWidth:356, sidebarSide:'left', classifySessionStates:true, autoArchiveDays:0, interfaceFont:'system', codeFont:'system', transcriptSize:'default', transcriptWidth:'comfortable', uiDensity:'comfortable', accentColor:'gold', codeThemeLight:'abdo-light', codeThemeDark:'abdo-dark', openLinksInBuiltin:true, browserDefaultPermission:'allow', blockedSites:[], browserPersistence:'shared', draftPullRequests:true, branchPrefix:'abdo/' } };
   const automation = { store:{ version:1, enabled:false, stopRequested:false, migratedLegacy:true, schedules:[], jobs:[], workerPid:null, heartbeatAt:null, serviceError:null }, workerRunning:false, taskRegistered:false, serviceSupported:true };
   const listeners = {};
+  let termSeq = 0;
+  const emit = (name, payload) => { for (const cb of listeners[name] || []) cb({ payload }); };
   const ws = engine ? new WebSocket('ws://' + location.host + '/engine') : null;
   const outbox = [];
   if (ws) {
@@ -64,6 +66,11 @@ const mock = `<script>
         case 'automation_status': case 'automation_migrate_legacy': return structuredClone(automation);
         case 'release_check': return { status:'current' };
         case 'pane_url': return '';
+        // مسرحُ الطرفيّة والمرفقات (2026-09-28): صدفةٌ مزيّفة تصدّي المكتوب، واستيرادٌ يعيد شكلَ المرفق — لقياس مسار الكتابة والإسقاط في المتصفّح.
+        case 'terminal_open': { const id = 't' + (++termSeq); setTimeout(() => emit('terminal-output', { id, data: Array.from(new TextEncoder().encode('PS C:\\\\preview> ')) }), 40); return { id, cwd: 'C:\\\\preview', shell: 'powershell.exe', pid: 4242 }; }
+        case 'terminal_write': { const text = args.data === '\\r' ? '\\r\\nPS C:\\\\preview> ' : args.data; emit('terminal-output', { id: args.id, data: Array.from(new TextEncoder().encode(text)) }); return null; }
+        case 'terminal_resize': case 'terminal_close': return null;
+        case 'attachments_import': return (args.files || []).map((f, i) => ({ id: 'att-' + Date.now() + '-' + i, sessionId: args.sessionId, name: f.name, mime: /\\.docx$/i.test(f.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/octet-stream', bytes: Math.floor((f.dataBase64 || '').length * 3 / 4), sha256: 'preview' }));
         default: return null;
       }
     }},

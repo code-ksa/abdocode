@@ -665,6 +665,135 @@ fn run_request(request: &Request, provider: &ResolvedBinding) -> Result<(u16, Ve
     Ok((http_status, output))
 }
 
+/// `provider-models <id>` — القائمةُ الحيّة من `GET {base}/models` بمفتاح الخزنة (أمرُ المالك 2026-09-28:
+/// «أظهر كلَّ نماذج إنفيديا لا الصغيرة فقط»). النقطةُ تُشتقّ من نقطة الدردشة المُجمَّعة أو المعلَنة نفسِها —
+/// لا عنوانَ ولا سرَّ يأتي من الطالب، والردُّ يُنقّى من السرّ كما في الدردشة.
+pub fn run_models(provider_id: &str) -> Result<Vec<u8>, String> {
+    let (chat_url, provider) = if let Some(fixed) = PROVIDERS.iter().find(|item| item.id == provider_id) {
+        (
+            fixed.url.to_string(),
+            ResolvedBinding {
+                vault_key: fixed.vault_key.into(),
+                credential: fixed.credential,
+                anthropic: fixed.anthropic,
+            },
+        )
+    } else if let Some(custom) = owner_custom_bindings()?
+        .into_iter()
+        .find(|item| item.id == provider_id)
+    {
+        (
+            custom.url.clone(),
+            ResolvedBinding {
+                vault_key: custom.vault_key,
+                credential: CredentialKind::Bearer,
+                anthropic: false,
+            },
+        )
+    } else {
+        return Err(
+            "provider identity is neither compiled into this worker nor declared by the owner".into(),
+        );
+    };
+    let base = chat_url
+        .strip_suffix("/chat/completions")
+        .or_else(|| chat_url.strip_suffix("/messages"))
+        .ok_or_else(|| "provider endpoint has no models listing".to_string())?;
+    let models_url = format!("{base}/models");
+    let (status, body) = run_get(&models_url, &provider)?;
+    encode_response(status, &body)
+}
+
+fn run_get(url: &str, provider: &ResolvedBinding) -> Result<(u16, Vec<u8>), String> {
+    let secret = read_secret(&provider.vault_key)?;
+    let mut child = Command::new(curl_path())
+        .args([
+            "--config",
+            "-",
+            "--silent",
+            "--show-error",
+            "--no-progress-meter",
+            "--proto",
+            "=https",
+            "--proto-redir",
+            "=https",
+            "--max-redirs",
+            "0",
+            "--get",
+            "--header",
+            "accept: application/json",
+            "--max-time",
+            "20",
+            "--connect-timeout",
+            "15",
+            "--write-out",
+            "\nABDO_HTTP_STATUS:%{http_code}",
+            url,
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "provider HTTPS client unavailable".to_string())?;
+    let header_name = match provider.credential {
+        CredentialKind::Bearer => b"authorization: Bearer ".as_slice(),
+        CredentialKind::ApiKey => b"x-api-key: ".as_slice(),
+    };
+    let mut header = Vec::with_capacity(header_name.len() + secret.as_bytes().len());
+    header.extend_from_slice(header_name);
+    header.extend_from_slice(secret.as_bytes());
+    let mut config = Vec::with_capacity(header.len() + 64);
+    config_value(&mut config, b"header", b"", &header)?;
+    header.fill(0);
+    if provider.anthropic {
+        config.extend_from_slice(b"header = \"anthropic-version: 2023-06-01\"\n");
+    }
+    let write_result = child
+        .stdin
+        .take()
+        .ok_or_else(|| "provider HTTPS stdin unavailable".to_string())?
+        .write_all(&config);
+    config.fill(0);
+    if write_result.is_err() {
+        let _ = child.kill();
+        return Err("provider HTTPS configuration failed".into());
+    }
+    let mut output = Vec::new();
+    let read_result = child
+        .stdout
+        .take()
+        .ok_or_else(|| "provider HTTPS stdout unavailable".to_string())?
+        .take((MAX_RESPONSE_BYTES + 64) as u64)
+        .read_to_end(&mut output);
+    if read_result.is_err() {
+        let _ = child.kill();
+        return Err("provider HTTPS response failed".into());
+    }
+    if output.len() >= MAX_RESPONSE_BYTES + 64 {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("provider response exceeds 2 MiB".into());
+    }
+    let status = child
+        .wait()
+        .map_err(|_| "provider HTTPS wait failed".to_string())?;
+    if !status.success() {
+        return Err("provider HTTPS request failed".into());
+    }
+    let marker = b"\nABDO_HTTP_STATUS:";
+    let split = output
+        .windows(marker.len())
+        .rposition(|window| window == marker)
+        .ok_or_else(|| "provider status marker missing".to_string())?;
+    let http_status = std::str::from_utf8(&output[split + marker.len()..])
+        .map_err(|_| "provider status invalid")?
+        .parse::<u16>()
+        .map_err(|_| "provider status invalid".to_string())?;
+    output.truncate(split);
+    redact_bytes(&mut output, secret.as_bytes());
+    Ok((http_status, output))
+}
+
 fn redact_bytes(output: &mut [u8], secret: &[u8]) {
     if secret.is_empty() {
         return;

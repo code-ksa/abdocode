@@ -107,6 +107,36 @@ const listenerOf = (port: number): number | undefined => {
   return undefined
 }
 
+/**
+ * ذيلُ ما كتبه الخادم على مخرجيه — يُصرَّف في الخلفية فلا يمتلئ الأنبوب ويعلّق الوليد، ويُحفظ آخرُ
+ * `limit` حرفاً وحدها. الإيصالُ يُلحق بالفشل فقط: خادمٌ حيٌّ لا يُطبع سجلُّه.
+ */
+export const tailOf = (
+  ...streams: readonly (ReadableStream<Uint8Array> | null | undefined)[]
+): { readonly text: () => string; readonly receipt: () => string } => {
+  const limit = 3_000
+  let buffer = ""
+  for (const stream of streams) {
+    if (!stream) continue
+    void (async () => {
+      const decoder = new TextDecoder()
+      try {
+        for await (const chunk of stream as unknown as AsyncIterable<Uint8Array>) {
+          buffer = (buffer + decoder.decode(chunk, { stream: true })).slice(-limit)
+        }
+      } catch { /* قُتل الخادم أو أُغلق أنبوبه — الذيلُ المحفوظ يكفي */ }
+    })()
+  }
+  const text = () => buffer.replace(/\u001b\[[0-9;]*[A-Za-z]/gu, "").trim()
+  return {
+    text,
+    receipt: () => {
+      const lines = text().split(/\r?\n/u).filter((line) => line.trim().length > 0).slice(-25)
+      return lines.length === 0 ? " (لم يكتب الخادم شيئاً على مخرجيه.)" : `\nآخر ما كتبه الخادم:\n${lines.join("\n")}\n`
+    },
+  }
+}
+
 const listening = async (port: number): Promise<boolean> => {
   try {
     const probe = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2_000) })
@@ -256,10 +286,12 @@ export class ManagedServers {
     try {
       proc = Bun.spawn([...spawnArgv], {
         cwd,
-        // لا وراثة stdio: الوراثة هي ما علّق الهارنس 63 دقيقة بلا EOF.
+        // لا وراثة stdio: الوراثة هي ما علّق الهارنس 63 دقيقة بلا EOF. الأنبوبان يُصرَّفان في الخلفية
+        // (tailOf) ويُحفظ ذيلُهما وحده — فالفشلُ يحمل سببَه (مقيس 2026-09-28: «خرج برمز 7» بلا سطرٍ
+        // واحدٍ من npm أعمى النموذجَ فأعاد الأمرَ نفسَه حتى قُطع الدور).
         stdin: "ignore",
-        stdout: "ignore",
-        stderr: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
         // خادمُ التطوير كودُ المستخدم: يرث بيئةً منزوعةَ الاعتمادات كما يرثها
         // أيُّ أمرٍ يُنفَّذ. كان يرث `process.env` كاملاً — ومنه رمزُ القشرة.
         env: { ...stripChildEnv(process.env).env, PORT: String(port) },
@@ -272,6 +304,7 @@ export class ManagedServers {
     }
     const managed: ManagedProcess = { proc, port, display }
     this.#running.push(managed)
+    const tail = tailOf(proc.stdout as ReadableStream<Uint8Array> | null, proc.stderr as ReadableStream<Uint8Array> | null)
     // ٩٠ ثانية لا ٣٠ (مقيس 2026-09-13): أوّلُ تشغيلٍ لـVite يُجهّز الاعتمادات (optimizeDeps) فيتجاوز ٣٠ ثانية، فقُتل الخادمُ وهو يقوم؛
     // الخروجُ المبكّر يبقى فوريّاً — الانتظارُ الطويل للحيّ البطيء لا للميّت.
     for (let i = 0; i < 120; i += 1) {
@@ -289,12 +322,14 @@ export class ManagedServers {
         if (proc.exitCode === 0 && i < 8) continue
         // انتهت المهلةُ والوسيطُ خارجٌ بصفر بلا مُنصت: الحكمُ الصادق «خرج قبل الإنصات» فوراً لا انتظارُ ٩٠ ثانية لتشخيصٍ خاطئ.
         this.#running = this.#running.filter((p) => p.proc.pid !== proc.pid)
-        return `فشل تشغيل الخادم «${display}»: خرج برمز ${proc.exitCode} قبل الإنصات على ${port}. افحص سبب الفشل (البناء أو الإعداد) قبل إعادة المحاولة.`
+        // مهلةٌ قصيرة كي يصل آخرُ ما كُتب على الأنبوبين بعد الخروج.
+        await Bun.sleep(150)
+        return `فشل تشغيل الخادم «${display}»: خرج برمز ${proc.exitCode} قبل الإنصات على ${port}.${tail.receipt()} أصلح السبب المذكور (البناء أو الإعداد أو الاعتماديات) قبل إعادة المحاولة — إعادةُ الأمر نفسِه بلا تغيير تعيد الفشلَ نفسَه.`
       }
     }
     killTree(managed)
     this.#running = this.#running.filter((p) => p.proc.pid !== proc.pid)
-    return `فشل تشغيل الخادم «${display}»: لم يُنصت على ${port} خلال 90 ثانية — أُوقفت شجرته. تحقّق من المنفذ والسكربت.`
+    return `فشل تشغيل الخادم «${display}»: لم يُنصت على ${port} خلال 90 ثانية — أُوقفت شجرته.${tail.receipt()} تحقّق من المنفذ والسكربت.`
   }
 
   /** لوحةُ المهامّ الخلفيّة (09-14): الخوادمُ المُدارة الحيّة بمنفذها — قراءةٌ لا أثر. */

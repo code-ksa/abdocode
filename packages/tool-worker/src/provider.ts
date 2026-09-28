@@ -168,6 +168,23 @@ export class ModelProviderWorker {
     return stdout === "1"
   }
 
+  /**
+   * القائمةُ الحيّة لنماذج مزوّدٍ — `provider-models <id>` في العامل: يشتقّ `{base}/models` من نقطة الدردشة
+   * المُجمَّعة ويقرأ المفتاحَ من الخزنة بنفسه؛ لا عنوانَ ولا سرَّ يعبر من هنا (أمرُ المالك 2026-09-28: كلُّ نماذج إنفيديا).
+   */
+  async listModels(provider: string): Promise<ModelProviderWorkerResponse> {
+    if (!/^[a-z0-9-]{1,32}$/.test(provider)) throw new Error("provider_worker_provider_invalid")
+    let child: Bun.Subprocess<undefined, "pipe", "pipe">
+    try { child = Bun.spawn([this.executable, "provider-models", provider], { stdout: "pipe", stderr: "pipe", env: { ...process.env } }) }
+    catch (error) { throw new Error(`provider_worker_unavailable: ${error instanceof Error ? error.message : String(error)}`) }
+    const timeout = setTimeout(() => child.kill(), 30_000)
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited, new Response(child.stdout).arrayBuffer(), new Response(child.stderr).text(),
+    ]).finally(() => clearTimeout(timeout))
+    if (exitCode !== 0) throw new Error(`provider_worker_refused: ${workerExitReason(exitCode, stderr)}`)
+    return decodeModelProviderWorkerResponse(new Uint8Array(stdout))
+  }
+
   async search(request: GoogleSearchWorkerRequest, signal?: AbortSignal): Promise<ModelProviderWorkerResponse> {
     const input = encodeGoogleSearchWorkerRequest(request)
     if (signal?.aborted) throw new Error("provider_worker_aborted")

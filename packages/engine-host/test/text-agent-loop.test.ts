@@ -710,10 +710,28 @@ describe("owned text agent loop", () => {
     expect(dispatched).toEqual(["write README.md <<<\n" + body.trimEnd()])
   })
 
-  // والحارسُ باقٍ: حمولةٌ مغلَّفةٌ كلُّها بسياجٍ ما زالت تُرفض — غموضٌ لا يُخمَّن.
-  test("still refuses a payload wrapped whole in a code fence", async () => {
+  // انقلبت القاعدة (مقيس 2026-09-28، nemotron-120b عبر NIM من سجلّ المالك): حمولةٌ مغلَّفةٌ **كلُّها** بسياجٍ
+  // واحدٍ رُفضت ثلاثَ مرّاتٍ في حقبتين ثمّ مات الدور بلا ملفّ — «حارسٌ يحجب الشكلَ الشائع». الغلافُ الكامل
+  // زخرفةُ عرضٍ بلا غموض: يُنزع ويُكتب ما بداخله بايتاً.
+  test("unwraps a payload wrapped whole in a single code fence and writes its bytes", async () => {
     const dispatched: string[] = []
-    const answers = ["نفّذ: write a.ts <<<\n```ts\nconst a = 1\n```", "تم"]
+    const answers = ["نفّذ: write a.ts <<<\n```ts\nconst a = 1\nconst b = `x`\n```", "تم"]
+    const result = await runTextAgentLoop({
+      input: "اكتب a.ts",
+      history: [],
+      ask: async () => answers.shift() ?? "تم",
+      dispatch: async (command) => { dispatched.push(command); return "written" },
+      isCallable: (name) => name === "write",
+      maxRounds: 1,
+    })
+    expect(dispatched).toEqual(["write a.ts <<<\nconst a = 1\nconst b = `x`"])
+    expect(result.stopReason).toBe("complete")
+  })
+
+  // والتوأمُ السلبيّ: سياجٌ يليه ادّعاءُ نجاحٍ ليس غلافاً كاملاً — يبقى مرفوضاً كما كان.
+  test("still refuses a fenced payload followed by a success claim", async () => {
+    const dispatched: string[] = []
+    const answers = ["نفّذ: write a.ts <<<\n```ts\nconst a = 1\n```\n✅ تم كتابة a.ts بنجاح", "تم"]
     const result = await runTextAgentLoop({
       input: "اكتب a.ts",
       history: [],
