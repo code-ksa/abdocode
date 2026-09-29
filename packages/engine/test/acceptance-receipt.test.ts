@@ -77,3 +77,21 @@ describe("unproven — ran, exit 0, no evidence in the output", () => {
     expect(shortfall).not.toContain("أصلح السبب")
   })
 })
+
+describe("preexisting (09-29) — فشلُ التدقيق على اعتمادياتٍ لم تُمسّ يُبلَّغ ولا يحجب", () => {
+  test("الحالة تُروى «سابق»، وتُرضي القبول، وتحمل دليلَها؛ وبمسّ الاعتماديات تعود «فشل»", () => {
+    const pre = { ran: true, passed: false, evidence: "4 high, 1 critical", preexisting: true }
+    expect(gateState(pre)).toBe("preexisting")
+    const receipts = gateReceipts({ build: true, audit: true }, { build: { ran: true, passed: true }, audit: pre })
+    expect(receipts[1]).toEqual({ gate: "audit", state: "preexisting", evidence: "4 high, 1 critical" })
+    expect(acceptanceSatisfied(receipts)).toBe(true)
+    expect(acceptanceLine(receipts)).toContain("التدقيق △ سابق — اعتمادياتٌ لم تُمسّ (4 high, 1 critical)")
+    expect(gateShortfall(receipts[1]!)).toContain("لم تمسّها هذه الجولة")
+    // التوأم: الفشلُ بعد مسّ الاعتماديات يبقى فشلاً يحجب
+    const failed = gateReceipts({ audit: true }, { audit: { ran: true, passed: false, evidence: "x" } })
+    expect(failed[0]!.state).toBe("failed")
+    expect(acceptanceSatisfied(failed)).toBe(false)
+    // والنجاحُ يغلب العلامة
+    expect(gateState({ ran: true, passed: true, preexisting: true })).toBe("passed")
+  })
+})

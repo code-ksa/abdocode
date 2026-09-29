@@ -7248,6 +7248,9 @@ const runServeShell = async (): Promise<void> => {
       let successfulTypecheck = false
       let successfulAudit = false
       let successfulTests = false
+      // 09-29: هل مسّت هذه الجولةُ الاعتماديات؟ بدونه فشلُ التدقيق «سابق» يُبلَّغ ولا يحجب (acceptance-receipt: preexisting).
+      let depsTouchedThisTurn = false
+      let auditPreexistingTold = false
       // ذ4 — ثلاثُ حالاتٍ لكلّ بوّابة لا اثنتان: «نُفّذت على الشيفرة الحاليّة؟» و«نجحت؟» ودليلُ آخر فشل.
       // التعديلُ المُبطِل يعيدها إلى «لم يُفحص» — نجاحٌ من قبل التعديل لا يشهد للشيفرة الحاليّة.
       // الأعلامُ الأربعة أعلاه تبقى كما هي (سلوكُ الحلقة)؛ هذا إيصالٌ فوقها لا بديلٌ عنها.
@@ -7271,7 +7274,7 @@ const runServeShell = async (): Promise<void> => {
           // التعديل لا يشهد للشيفرة الحالية (المسح العدائي: سوابق كاذبة).
           outputEvidenceFloor = allReceipts.length
         }
-        if (/^(?:write|edit)\s+(?:\.\/)?package(?:-lock)?\.json\b/iu.test(command) || /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update)\b/iu.test(command)) { successfulAudit = false; gateTracks.audit = { ran: false, passed: false } }
+        if (/^(?:write|edit)\s+(?:\.\/)?package(?:-lock)?\.json\b/iu.test(command) || /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update)\b/iu.test(command)) { successfulAudit = false; depsTouchedThisTurn = true; gateTracks.audit = { ran: false, passed: false } }
       }
       // S13.5 (إصلاح النزاهة) — أوامرُ الوكيل المفوَّض تُطوى في قبول هذا الدور
       // بهذا المنفذ نفسِه. إبطالٌ لا يمنح، فلا سياسةَ ثانية ولا شهادةَ تُخترع؛
@@ -7284,7 +7287,7 @@ const runServeShell = async (): Promise<void> => {
         if (isTypecheckCommand(command)) { const ok = exitZero(output, verdict); if (ok) successfulTypecheck = true; gateTracks.typecheck = { ran: true, passed: ok, evidence: gateEvidence(output) } }
         const buildProblem = isBuildCommand(command) ? projectBuildViolation(PROJECT_DIR, output, verdict) : undefined
         if (isBuildCommand(command)) { const ok = buildProblem === undefined && exitZero(output, verdict); if (ok) successfulBuild = true; gateTracks.build = { ran: true, passed: ok, evidence: buildProblem ?? gateEvidence(output) } }
-        if (isAuditCommand(command)) { const ok = /(?:(?:found\s+)?0\s+vulnerabilit(?:y|ies)|No known vulnerabilities found)/iu.test(output) && exitZero(output, verdict); if (ok) successfulAudit = true; gateTracks.audit = { ran: true, passed: ok, evidence: gateEvidence(output) } }
+        if (isAuditCommand(command)) { const ok = /(?:(?:found\s+)?0\s+vulnerabilit(?:y|ies)|No known vulnerabilities found)/iu.test(output) && exitZero(output, verdict); if (ok) successfulAudit = true; gateTracks.audit = { ran: true, passed: ok, evidence: gateEvidence(output), ...(!ok && !depsTouchedThisTurn ? { preexisting: true } : {}) } }
         return buildProblem
       }
       let lastAnswer = ""
@@ -7962,7 +7965,12 @@ const runServeShell = async (): Promise<void> => {
             continue
           }
         }
-        if (loop.stopReason === "complete" && requiresNpmAudit && !successfulAudit && existsSync(join(PROJECT_DIR, "package.json"))) {
+        if (loop.stopReason === "complete" && requiresNpmAudit && !successfulAudit && gateTracks.audit.preexisting === true && !auditPreexistingTold) {
+          // 09-29: ثغراتٌ سابقةٌ في اعتمادياتٍ لم تمسّها الجولة — تُقال مرّةً ولا تحجب (قيس: بناءٌ ✓ وprobe ✓ ثمّ acceptance-pending على glob الموروثة).
+          auditPreexistingTold = true
+          await emitEvent(turn.id, `△ التدقيق: ${gateShortfall(gateReceiptOf("audit"))}`)
+        }
+        if (loop.stopReason === "complete" && requiresNpmAudit && !successfulAudit && gateTracks.audit.preexisting !== true && existsSync(join(PROJECT_DIR, "package.json"))) {
           lastStop = "acceptance-pending"
           pending = "run npm audit --audit-level=high"
           // مساحة عمل pnpm انساقت إلى `npm audit`/`npm i --package-lock-only` (قيس 2026-09-02):
