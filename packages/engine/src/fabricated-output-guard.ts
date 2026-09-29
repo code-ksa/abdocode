@@ -105,3 +105,34 @@ export function fabricationNoticeLine(lines: readonly string[]): string {
 export function fabricationCorrection(lines: readonly string[]): string {
   return `[تصحيحٌ من النظام] ردُّك السابق حمل سطوراً بشكل خرج أمرٍ لم تُنفَّذ (${lines.map((l) => `«${l.slice(0, 60)}»`).join("، ")}). لا تكتب خرجاً بنفسك؛ اطلب الأداة بسطر «نفّذ:» وانتظر إيصالها، ثمّ ابنِ على الإيصال وحده.`
 }
+
+/**
+ * 09-29 — أمرُ المالك «خليه ينفّذ»: النموذجُ يسرد «⚙ chrome.open …» و«⚙ chrome.look» بلا نداء، وكان الردُّ تصحيحاً
+ * نصّيّاً فيعيد السردَ نفسَه (مقيس: ثلاثُ حقبٍ فارغة في مهمّة OpenRouter). السطرُ المسرود بشكل إيصالٍ لأداةٍ قابلةٍ للتنفيذ
+ * هو نيّةٌ صريحة: يُنفَّذ بالسياسة والحرّاس والاعتماد نفسِها، ويعود إيصالُه الحقيقيّ. الأدواتُ المسموحة: قراءةٌ وتصفّحٌ
+ * و`run` (الذي يمرّ بحرّاس الأوامر كأيّ نداء)؛ لا write/edit/stop — تلك تُطلب صراحةً.
+ */
+export const NARRATED_EXECUTABLE: readonly string[] = Object.freeze([
+  "chrome.open", "chrome.look", "chrome.page", "chrome.find", "chrome.shot", "chrome.reload", "chrome.tabs",
+  "open", "look", "page", "find", "shot", "read", "list", "logs", "run",
+])
+
+/** الأوامرُ المسرودة بشكل «⚙ <أداة> …» لأدواتٍ قابلة للتنفيذ ولم تُنفَّذ بعد — بترتيبها، بلا تكرار، حتى `max`. */
+export function narratedToolCalls(modelText: string, executedCommands: readonly string[] = [], max = 4): string[] {
+  const done = new Set(executedCommands.map((c) => lineDigest(c.split(/\r?\n/u, 1)[0] ?? "")))
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const raw of modelText.split(/\r?\n/u)) {
+    const m = /^\s*⚙\s+(\S.*)$/u.exec(raw)
+    if (m === null) continue
+    const body = m[1]!.trim().replace(/\s+(?:⏎|✕|✓).*$/u, "").trim()
+    const word = body.split(/\s+/u, 1)[0] ?? ""
+    if (!NARRATED_EXECUTABLE.includes(word)) continue
+    const digest = lineDigest(body)
+    if (seen.has(digest) || done.has(digest)) continue
+    seen.add(digest)
+    out.push(body.slice(0, 400))
+    if (out.length >= max) break
+  }
+  return out
+}

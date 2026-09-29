@@ -570,7 +570,9 @@ describe("receipt fixtures — wiring pins", () => {
   test("the tap is built once, only behind the toggle, and observed in BOTH receipt paths", () => {
     expect(source).toContain("const tap = fixturesOn ? openReceiptTap(STATE_ROOT, turn.id) : undefined")
     expect(source.match(/openReceiptTap\(/gu)).toHaveLength(1)
-    expect(source.match(/tap\?\.observe\(/gu)).toHaveLength(2)
+    // 09-29: مسارٌ ثالث — الأوامرُ المسرودة «⚙ …» التي تُنفَّذ بدل التصحيح تُرصد كذلك.
+    expect(source.match(/tap\?\.observe\(/gu)).toHaveLength(3)
+    expect(source).toContain("tap?.observe(cmd, r.output, verdict, epoch)")
     // لا نداءَ بلا `?.`: المفتاح المطفأ يعني صفر عمل، لا استثناء.
     expect(source).not.toContain("tap.observe(")
     const acceptance = source.indexOf("allReceipts.push({ command, output, verdict, mutated })")

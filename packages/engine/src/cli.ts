@@ -92,7 +92,8 @@ import { AGENT_DIR, AGENT_FILE_RE, BUILTIN_AGENT_FILES, buildAgentCatalogue, des
 import { DELEGATE_TOOL, MAX_DELEGATION_DEPTH, NESTED_TEAM_MAX, childToolRefusal, parseDelegateCommand, renderDelegateReport, runDelegatedAgent } from "./delegation"
 import { applyEdit, countOccurrences, nearestHint, parseEditCommand } from "./edit-match"
 import { EditRefusalTracker, SHRINK_FLAG, shrinkViolation } from "./adaptive-write-guards"
-import { fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine } from "./fabricated-output-guard"
+import { fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine, narratedToolCalls } from "./fabricated-output-guard"
+import { bracketDeleteNote } from "./powershell-bracket-guard"
 import { powershellCallOperatorRepair } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
 import { terminalDialectLine, toolVocabulary, browserBridgeHint, policyLine } from "./tool-vocabulary"
@@ -5395,6 +5396,8 @@ const runServeShell = async (): Promise<void> => {
       }
       diagnosis += errorPlaybookHints(all)
     }
+    // 09-29 — فخُّ الأقواس المربّعة: حذفٌ خرج 0 والمسارُ ذو القوس ما زال على القرص — يُقال مع العلاج (-LiteralPath).
+    diagnosis += bracketDeleteNote(cmd, PROJECT_DIR, existsSync)
     // الحكم من حقول المنفّذ نفسها (run-command: ok ⇔ exitCode===0 && !timedOut && !aborted)؛
     // «غير معروف» و«قوطع» يصيران ok:false — فتحتان مقيستان أُغلقتا. النصّ أعلاه لم يُمسّ.
     const toolVerdict: ToolVerdict = result.ok
@@ -7674,8 +7677,33 @@ const runServeShell = async (): Promise<void> => {
             lastAnswer = loop.answer
             lastStop = "acceptance-pending"
             pending = undefined
-            continuationHint = fabricationCorrection(invented)
-            await emitEvent(turn.id, `↻ إيصالاتٌ مختلَقة بلا أداة (${invented.length}) — لا يُقبل الردُّ إنجازاً؛ يُعاد النداء بتصحيح (${fabricatedStalls}/2).`)
+            // 09-29 — أمرُ المالك «خليه ينفّذ»: ما سُرد بشكل «⚙ أداة …» لأداةٍ قابلةٍ للتنفيذ يُنفَّذ الآن بالسياسة والحرّاس
+            // والاعتماد نفسِها (dispatchToolV) ويعود إيصالُه الحقيقيّ إلى النموذج — لا تصحيحٌ نصّيّ وحده يعيد السردَ نفسَه.
+            const narrated = narratedToolCalls(loop.answer, allCommands)
+            if (narrated.length > 0) {
+              await emitEvent(turn.id, `↻ سردَ النموذجُ ${narrated.length} أمراً بلا نداء — تُنفَّذ الآن بالسياسة نفسِها: ${narrated.map((c) => `«${c.slice(0, 60)}»`).join(" · ")}`)
+              const digests: string[] = []
+              for (const cmd of narrated) {
+                if (hooks.signal?.aborted === true) break
+                const word = cmd.split(/\s+/u, 1)[0]!
+                invalidateAcceptanceFor(cmd)
+                emit({ kind: "tool", turnId: turn.id, cmd, epoch })
+                const r = await dispatchToolV(word, cmd, turn.id, hooks)
+                const verdict = verdictOn ? r.verdict : undefined
+                const mutated = verdictOn ? r.mutated : undefined
+                receipts.push({ command: cmd, output: r.output, verdict, mutated })
+                allReceipts.push({ command: cmd, output: r.output, verdict, mutated })
+                tap?.observe(cmd, r.output, verdict, epoch)
+                allCommands.push(cmd)
+                observeAcceptanceReceipt(cmd, r.output, verdict)
+                emit({ kind: "tool-result", turnId: turn.id, cmd, output: r.output.slice(0, 16000), outputTruncated: r.output.length > 16000, epoch, ...verdictFrame(verdict, verdictOn ? r.idempotencyKey : undefined) })
+                digests.push(`«${cmd.slice(0, 80)}» ⇦ ${r.output.replace(/\s+/gu, " ").slice(0, 400)}`)
+              }
+              continuationHint = `نُفِّذت الأوامرُ التي سردتَها بلا نداء (${narrated.length}) وهذه إيصالاتُها الحقيقيّة:\n${digests.join("\n")}\nابنِ عليها ولا تكتب سطراً يبدأ بـ⚙ بنفسك — اطلب الأداة بـ«نفّذ:».`
+            } else {
+              continuationHint = fabricationCorrection(invented)
+            }
+            await emitEvent(turn.id, `↻ إيصالاتٌ مختلَقة بلا أداة (${invented.length}) — لا يُقبل الردُّ إنجازاً؛ يُعاد النداء ${narrated.length > 0 ? "بإيصالات التنفيذ الحقيقيّة" : "بتصحيح"} (${fabricatedStalls}/2).`)
             continue
           }
         }

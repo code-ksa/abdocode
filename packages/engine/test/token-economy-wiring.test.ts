@@ -304,3 +304,19 @@ describe("stop/logs reach kernel-managed servers by pid", () => {
     expect(source.indexOf("turnServers.stopByPid(pid)")).toBeLessThan(source.indexOf("return invalid(`لا تشغيلَ خلفيّاً بالمعرّف «${rest.trim().slice(0, 16)}»`)"))
   })
 })
+
+describe("narrated ⚙ calls are executed, not merely corrected (09-29)", () => {
+  test("the fabricated-output branch dispatches narrated executable calls through dispatchToolV and feeds their receipts back", () => {
+    expect(source).toContain("const narrated = narratedToolCalls(loop.answer, allCommands)")
+    const at = source.indexOf("const narrated = narratedToolCalls(loop.answer, allCommands)")
+    const block = source.slice(at, at + 2600)
+    expect(block).toContain("const r = await dispatchToolV(word, cmd, turn.id, hooks)")
+    expect(block).toContain("allReceipts.push({ command: cmd, output: r.output, verdict, mutated })")
+    expect(block).toContain("allCommands.push(cmd)")
+    expect(block).toContain("continuationHint = fabricationCorrection(invented)")
+    expect(block).toContain("وهذه إيصالاتُها الحقيقيّة")
+  })
+  test("a delete of a bracketed path that still exists is called out in the run receipt", () => {
+    expect(source).toContain("diagnosis += bracketDeleteNote(cmd, PROJECT_DIR, existsSync)")
+  })
+})

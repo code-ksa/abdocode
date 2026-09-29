@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine } from "../src/fabricated-output-guard"
+import { NARRATED_EXECUTABLE, fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine, narratedToolCalls } from "../src/fabricated-output-guard"
 
 const reply = [
   "سأتحقّق من الملفّات:",
@@ -76,5 +76,33 @@ describe("fabricated output guard", () => {
     expect(fabricatedOutputSignals(echoed, ["✍ sum.js — ok"], [write])).toEqual([])
     // التوأم: الصدى نفسُه بلا أمرٍ منفَّذ ما زال يُسمّى.
     expect(fabricatedOutputSignals(echoed, ["✍ sum.js — ok"], [])).toEqual(["⚙ write sum.js <<<"])
+  })
+})
+
+// 09-29 — «خليه ينفّذ»: السطورُ المسرودة بشكل ⚙ لأدواتٍ قابلة للتنفيذ تُستخرج لتُنفَّذ؛ الكتابةُ والإيقافُ لا.
+describe("narrated tool calls become real calls", () => {
+  test("extracts executable narrated calls in order, without duplicates or already-executed ones, capped at four", () => {
+    const text = [
+      "⚙ chrome.open http://localhost:3000/playground",
+      "⚙ chrome.look",
+      "⚙ chrome.open http://localhost:3000/playground",
+      "⚙ chrome.open http://localhost:3000/dashboard",
+      "⚙ chrome.look ⏎ {\"title\":\"x\"}",
+      "⚙ write src/a.ts <<< x",
+      "⚙ stop 123",
+      "⚙ run npm audit fix --force",
+      "⚙ read src/app/page.tsx",
+      "نصٌّ عاديّ",
+    ].join("\n")
+    expect(narratedToolCalls(text, ["chrome.look"])).toEqual([
+      "chrome.open http://localhost:3000/playground",
+      "chrome.open http://localhost:3000/dashboard",
+      "run npm audit fix --force",
+      "read src/app/page.tsx",
+    ])
+    expect(narratedToolCalls(text, [], 2)).toEqual(["chrome.open http://localhost:3000/playground", "chrome.look"])
+    expect(narratedToolCalls("نفّذ: chrome.look\nتمّ.", [])).toEqual([])
+    expect(NARRATED_EXECUTABLE).not.toContain("write")
+    expect(NARRATED_EXECUTABLE).not.toContain("stop")
   })
 })
