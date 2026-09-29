@@ -323,7 +323,10 @@ mod tests {
         let fake = dir.join("AbdoCode-0.0.0-x64-setup.cmd");
         fs::write(
             &fake,
-            format!("@echo off\r\necho %1 %2> \"{}\"\r\n", marker.display()),
+            format!(
+                "@echo off\r\necho %1 %2> \"{}\"\r\nexit\r\n",
+                marker.display()
+            ),
         )
         .unwrap();
         launch_installer(&fake).unwrap();
