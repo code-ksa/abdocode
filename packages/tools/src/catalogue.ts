@@ -153,6 +153,8 @@ export const TOOLS: readonly ToolSpec[] = [
   { name: "find", effect: "read", usage: "find <نصّ>", summary: "بحثٌ في الصفحة عن عناصرَ يطابق دورُها أو اسمُها النصَّ — يعيد المراجع للنقر والكتابة بدل قراءة الشجرة كاملةً", agentCallable: true, runner: "surface" },
   { name: "network", effect: "read", usage: "network [عدد]", summary: "طلباتُ الصفحة منذ الوصل: الطريقةُ والحالةُ والرابطُ ونوعُ المورد — بلا ترويسةٍ ولا جسمِ طلبٍ أو ردّ (لا تُلتقط أصلاً)؛ الفارغُ يُقال فارغاً", agentCallable: true, runner: "surface" },
   { name: "console", effect: "read", usage: "console [عدد]", summary: "رسائلُ طرفيّة الصفحة الملتقطة منذ الوصل (console.* والأخطاء غير الملتقطة) — الفارغُ يُقال فارغاً ولا يُخمَّن", agentCallable: true, runner: "surface" },
+  // 09-29 (فكرةُ OpenJev): نموذجُ القرار يختار الخطوةَ التالية على الصفحة من مرشّحيها المسمّين.
+  { name: "next", aliases: ["الخطوة"], effect: "read", usage: "next <الهدف> [--go]", summary: "نموذجُ القرار (decisionModel أو نموذج الدور) يختار الخطوةَ التالية على الصفحة الحاليّة من عناصرها المسمّاة: tap/fill/scroll/done/blocked بسطرٍ واحد — و--go ينفّذها فوراً عبر tap/fill ببوّاباتها", agentCallable: true, runner: "surface" },
   { name: "look", effect: "read", usage: "look [مرجع]", summary: "نصُّ الصفحة أو عنصرٍ وأنماطُه المحسوبة — لإصلاح التصميم", agentCallable: true, runner: "surface" },
   { name: "handoff", effect: "read", usage: "handoff <مرجع>", summary: "تسليمُ حقلِ اعتمادٍ للمستخدم: تركيزٌ في نافذة المتصفّح بلا كتابة", agentCallable: true, runner: "surface" },
 

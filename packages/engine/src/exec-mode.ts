@@ -148,7 +148,7 @@ export async function runExec(options: ExecOptions, engineArgv: readonly string[
  */
 const git = (cwd: string, args: readonly string[], env?: Record<string, string | undefined>) => {
   const run = Bun.spawnSync(["git", "-C", cwd, ...args], { stdout: "pipe", stderr: "pipe", ...(env === undefined ? {} : { env }) })
-  return { ok: run.exitCode === 0, out: run.stdout.toString().trim(), err: run.stderr.toString().trim() }
+  return { ok: run.exitCode === 0, out: run.stdout.toString().trim(), raw: run.stdout.toString(), err: run.stderr.toString().trim() }
 }
 
 export async function runExecInWorktree(options: ExecOptions, engineArgv: readonly string[], env: Record<string, string | undefined>, progress: (line: string) => void): Promise<ExecSummary> {
@@ -166,7 +166,9 @@ export async function runExecInWorktree(options: ExecOptions, engineArgv: readon
   progress(`🌿 فرعٌ معزول ${branch} في ${dir}`)
   try {
     const summary = await runExec({ ...options, project: dir }, engineArgv, { ...env, ABDO_CODE_STATE_DIR: state }, progress)
-    const changed = git(dir, ["status", "--porcelain"]).out.split("\n").filter((line) => line.trim().length > 0).map((line) => line.slice(3))
+    // 09-29 (كشفه اختبارُ الجودة الحيّ): `trim()` على خرج porcelain كان يأكل فراغَ أوّل سطرٍ (« M README.md» ⇦ «M README.md») فيصير
+    // الاسمُ «EADME.md». الخرجُ الخام سطراً سطراً، والمسارُ بعد عمودَي الحالة والفراغ، وإعادةُ التسمية تُقرأ بهدفها.
+    const changed = git(dir, ["status", "--porcelain"]).raw.split(/\r?\n/u).filter((line) => line.trim().length > 0).map((line) => line.slice(3).replace(/^.* -> /u, "").replace(/^"(.*)"$/u, "$1"))
     let commit: string | undefined
     if (changed.length > 0) {
       git(dir, ["add", "-A"])

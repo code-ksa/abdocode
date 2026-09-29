@@ -358,3 +358,24 @@ describe("ideas on our system (09-29): decision model, parallel worktree workers
     expect(source).toContain('"merge", "--abort"]')
   })
 })
+
+describe("LangGraph-style plan routing and the OpenJev-style browser next step (09-29)", () => {
+  test("a failed tool marks the running plan step failed with its reason, and a completion claim with open steps is routed to the next ready step (twice at most)", () => {
+    expect(source).toContain("const planAutoFail = (reason: string): string | undefined => {")
+    expect(source).toContain('const toolFailed = verdict?.ok === false || (/^run\\b/u.test(cmd) && !exitZero(output, verdict))')
+    expect(source).toContain('if (toolFailed && !/^plan\\b/u.test(cmd)) {')
+    expect(source).toContain("const failedStep = planAutoFail(why)")
+    expect(source).toContain('if (loop.stopReason === "complete" && planStalls < 2) {')
+    expect(source).toContain("const open = planOpenSteps()")
+    expect(source).toContain('const touched = allCommands.some((c) => /^plan\\s+(?!show\\b)/u.test(c)) || open.some((s) => s.state === "running")')
+    expect(source).toContain("↻ بوّابةُ الخطّة (${planStalls}/2)")
+  })
+  test("next reads the page's candidates, asks the decision model for one line, and executes only with --go through the same dispatcher", () => {
+    expect(source).toContain('if (name === "next") {')
+    expect(source).toContain("const candidates = candidatesFrom(surfaceRefs)")
+    expect(source).toContain('const judge = resolveDecisionModel(selectTurnModel(goal, "code"))')
+    expect(source).toContain("const reply = await ask(buildNextStepPrompt(goal, { url: surfaceUrl, text: pageText }, candidates), {}, [], judge)")
+    expect(source).toContain("if (!go || command === undefined) return receipt")
+    expect(source).toContain('const executed = await dispatchToolV(command.split(/\\s+/u, 1)[0]!, command, turnId, {})')
+  })
+})

@@ -97,6 +97,7 @@ import { bracketDeleteNote } from "./powershell-bracket-guard"
 import { killByPidTargets, killRefusal, pidCommandLine, pidOwnedByProject } from "./process-ownership"
 import { probeTargets, probeUrls, renderProbe } from "./probe-targets"
 import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport } from "./parallel-workers"
+import { buildNextStepPrompt, candidatesFrom, commandFor as nextStepCommand, parseNextStep, renderNextStep } from "./browser-next-step"
 import { powershellCallOperatorRepair } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
 import { terminalDialectLine, toolVocabulary, browserBridgeHint, policyLine } from "./tool-vocabulary"
@@ -5017,6 +5018,27 @@ const runServeShell = async (): Promise<void> => {
       return `ضغطتُ ${key} بإدخالٍ موثوق.`
     }
 
+    if (name === "next") {
+      // 09-29 (فكرةُ OpenJev على المتصفّح): نموذجُ القرار يختار الخطوةَ التالية من مرشّحي الصفحة المسمّين — رقمٌ واحد وفعلٌ واحد —
+      // لا من نصٍّ حرّ؛ و`--go` ينفّذ المختارَ عبر الموزّع نفسِه (tap/fill/scroll ببوّاباتها). ردٌّ لا يُقرأ يعود «غيرَ محكّم» مع المرشّحين.
+      if (surface === undefined) return "لا سطحَ موصولاً — استعمل open <رابط> أوّلاً ثمّ next <الهدف>"
+      const go = /(?:^|\s)--go(?:\s|$)/u.test(rest)
+      const goal = rest.replace(/(?:^|\s)--go(?:\s|$)/u, " ").trim()
+      if (goal.length === 0) return "الصيغة: next <الهدف> [--go]"
+      if (surfaceRefs.length === 0) { surfaceRefs = await surface.readPage(); await paneBook(surfaceRefs) }
+      const candidates = candidatesFrom(surfaceRefs)
+      let pageText = ""
+      try { pageText = await surface.readText(undefined) } catch { pageText = "" }
+      const judge = resolveDecisionModel(selectTurnModel(goal, "code"))
+      const reply = await ask(buildNextStepPrompt(goal, { url: surfaceUrl, text: pageText }, candidates), {}, [], judge)
+      const step = parseNextStep(reply, candidates)
+      const receipt = renderNextStep(step, candidates, judge.ref, reply)
+      const command = step === undefined ? undefined : nextStepCommand(step)
+      if (!go || command === undefined) return receipt
+      const executed = await dispatchToolV(command.split(/\s+/u, 1)[0]!, command, turnId, {})
+      return `${receipt}\n⚙ ${command}\n${executed.output}`
+    }
+
     if (name === "look") {
       // ب3 — نصُّ الصفحة أو عنصرٍ وأنماطُه المحسوبة: لحلقة إصلاح التصميم — قراءةٌ بتعبيرٍ ثابت.
       const ref = rest.trim()
@@ -7351,6 +7373,8 @@ const runServeShell = async (): Promise<void> => {
       let duplicateReplaysUsed = 0
       let emptyStalls = 0
       let fabricatedStalls = 0
+      // 09-29 (فكرةُ LangGraph): بوّابةُ الخطّة — مرّتان كحدّ، ثمّ يُترك الحكمُ لبقيّة السلسلة.
+      let planStalls = 0
       let emptyReplies = 0
       let epochs = 0
       for (let epoch = 1; epoch <= MAX_AGENT_EPOCHS; epoch++) {
@@ -7564,6 +7588,14 @@ const runServeShell = async (): Promise<void> => {
             allReceipts.push({ command: cmd, output, verdict, mutated })
             tap?.observe(cmd, output, verdict, epoch)
             observeAcceptanceReceipt(cmd, output, verdict)
+            // 09-29 (LangGraph): الخطوةُ الجارية تسقط بأداتها الفاشلة وسببها يُحفظ في اللوح — الرسمُ يتغيّر من الإيصال لا من الادّعاء.
+            const toolFailed = verdict?.ok === false || (/^run\b/u.test(cmd) && !exitZero(output, verdict))
+            if (toolFailed && !/^plan\b/u.test(cmd)) {
+              const failure = verdict !== undefined && verdict.ok === false ? (verdict.detail ?? verdict.reason) : undefined
+              const why = `${cmd.split("\n", 1)[0]!.slice(0, 60)}: ${failure ?? output.trim().split("\n").at(-1) ?? "فشل"}`
+              const failedStep = planAutoFail(why)
+              if (failedStep !== undefined) void emitEvent(turn.id, `✗ الخطّة: الخطوةُ الجارية «${failedStep}» فشلت بأداتها — ${why.slice(0, 160)}`)
+            }
             // الجدران والتعدين من إيصالات التنفيذ وحدها — إيصال write يردّد
             // محتوىً فيه كلمة error ليس فشلاً (صنف anton: substring matching
             // يخطئ في الاتجاهين).
@@ -7709,6 +7741,24 @@ const runServeShell = async (): Promise<void> => {
         }
         if (loop.commands.length === 0 && loop.stopReason === "complete") {
           await emitEvent(turn.id, `⚠ رد النموذج بلا أداة (ليس إيصال إنجاز):\n${loop.answer.slice(0, 700)}`)
+        }
+        // 09-29 (فكرةُ LangGraph — الرسمُ يقود): ادّعاءُ اكتمالٍ وخطواتٌ مفتوحة في خطّةٍ لمسها هذا الدور (أو فيها خطوةٌ جارية) ⇦ لا تسليم؛
+        // يُوجَّه إلى التالي الجاهز مرّتين كحدّ، ثمّ تحكم بقيّةُ السلسلة. عرضُ اللوح وحدَه (plan show) لا يُعدّ لمساً.
+        if (loop.stopReason === "complete" && planStalls < 2) {
+          const open = planOpenSteps()
+          const touched = allCommands.some((c) => /^plan\s+(?!show\b)/u.test(c)) || open.some((s) => s.state === "running")
+          if (open.length > 0 && touched) {
+            planStalls += 1
+            lastAnswer = loop.answer
+            lastStop = "acceptance-pending"
+            pending = undefined
+            const { ready } = require("./mind/planner") as typeof import("./mind/planner")
+            const next = ready(planForCurrentProject()).slice(0, 3).map((s) => `${s.id}: ${s.action}`).join(" · ")
+            const failed = open.filter((s) => s.state === "failed").map((s) => `${s.id}${planReasons.has(s.id) ? ` (${planReasons.get(s.id)!.slice(0, 80)})` : ""}`).join("، ")
+            continuationHint = `الخطّةُ لم تكتمل: ${open.length} خطوة باقية${next ? ` — التالي الجاهز: ${next}` : ""}${failed ? ` — فاشلة تحتاج إصلاحاً أو إعادةَ تخطيط: ${failed}` : ""}. نفّذ الخطوةَ التالية وعلّمها بـplan start ثمّ plan done بدليل إيصال، أو أعد plan set بلا الخطوات التي سقطت مع ذكر السبب — لا تسليمَ وخطوةٌ مفتوحة.`
+            await emitEvent(turn.id, `↻ بوّابةُ الخطّة (${planStalls}/2): ${open.length} خطوة باقية${next ? ` — التالي: ${next}` : ""}${failed ? ` — فاشلة: ${failed}` : ""}`)
+            continue
+          }
         }
         // البند 25 من جرد هيرمس/أوبن‑كلاو — حارسُ الإكمال الفارغ. مقيس 2026-09-27: ردٌّ فارغٌ بلا أداة
         // (نموذجٌ لا يُخرج شيئاً) كان يُنهي الدور «مكتملاً» بصفر أدوات وجوابٍ فارغ. الفراغُ ليس جواباً:
@@ -8069,10 +8119,14 @@ const runServeShell = async (): Promise<void> => {
         }
       }
       // ذ4 — البوّاباتُ الأربع بقاعدةٍ واحدة: passed وحده يُرضي؛ الفاشلُ لا، وغيرُ المفحوص لا.
-      const completed = superAccepted && lastStop === "complete" && !waitingVerdict && acceptanceSatisfied(currentGateReceipts()) && outputEvidenceVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor)) === undefined && browserProofVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor), browserAvailable) === undefined && sprintProgressViolation(PROJECT_DIR, !planningOnly && process.env.ABDO_REQUIRE_SPRINT_PLAN === "1") === undefined
+      // 09-29 (LangGraph): خطّةٌ لمسها الدور وفيها خطواتٌ مفتوحة لا تُسلَّم مكتملة — الرسمُ حكمٌ كالبوّابات.
+      const planSatisfied = planOpenSteps().length === 0 || !(allCommands.some((c) => /^plan\s+(?!show)/u.test(c)) || planOpenSteps().some((s) => s.state === "running"))
+      const completed = planSatisfied && superAccepted && lastStop === "complete" && !waitingVerdict && acceptanceSatisfied(currentGateReceipts()) && outputEvidenceVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor)) === undefined && browserProofVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor), browserAvailable) === undefined && sprintProgressViolation(PROJECT_DIR, !planningOnly && process.env.ABDO_REQUIRE_SPRINT_PLAN === "1") === undefined
       let answer = completed
         ? `${lastAnswer}\n— حقب التنفيذ: ${epochs} · الأدوات: ${allCommands.length} · التوقف: ${lastStop}`
         : `— المهمة غير مكتملة بعد. حقب التنفيذ: ${epochs} · الأدوات المنفذة فعلياً: ${allCommands.length} · التوقف: ${lastStop}`
+      if (!planSatisfied) answer += `
+📋 الخطّةُ غير مكتملة: ${planOpenSteps().length} خطوة مفتوحة — ${planOpenSteps().slice(0, 4).map((s) => `${s.id} (${s.state === "failed" ? "فشلت" : s.state === "running" ? "جارية" : "معلَّقة"})`).join("، ")}`
       if (!completed) {
         // ح4 — الخلاصةُ لا تتجاوز البوّابات: ادّعاءُ النموذج «بالكامل/تمّ الإنجاز» بُثّ حيّاً قبل الحكم، فيُنقض هنا بالاسم لا يُسكت عنه.
         if (/بالكامل|تمّ? (?:إنجاز|انجاز|إكمال|اكمال)|اكتمل|مكتمل(?!ة بعد)|fully (?:complete|done)|completed successfully/iu.test(lastAnswer)) answer += `\n⚠ ادّعى النموذجُ الاكتمالَ ونقضته البوّابات (التوقّف: ${lastStop}) — العبرةُ بإيصالات البوّابات أدناه لا بالخلاصة.`
@@ -8559,6 +8613,17 @@ const planBrief = (): string => {
   const stuck = blocked(plan).length
   return `\nلوحُ الخطّة: ${done}/${plan.length} منجزة${running ? ` — جارية: ${running}` : ""}${next ? ` — التالي: ${next}` : ""}${failed ? ` — فشلت: ${failed}` : ""}${stuck ? ` — معلَّقة: ${stuck}` : ""}. حدّثه بـ«plan done <id>» بعد كلّ خطوةٍ بإيصالها.\n`
 }
+/** 09-29 (فكرةُ LangGraph — الحافّةُ الشرطيّة من الإيصال): أداةٌ فشلت وخطوةٌ جارية ⇦ تُعلَّم فاشلةً بسببها تلقائياً، لا بيد النموذج. */
+const planAutoFail = (reason: string): string | undefined => {
+  const running = planForCurrentProject().find((s) => s.state === "running")
+  if (running === undefined) return undefined
+  sessionPlan = sessionPlan.map((s) => (s.id === running.id ? { ...s, state: "failed" as const } : s))
+  planReasons.set(running.id, reason.replace(/\s+/gu, " ").slice(0, 200))
+  publishPlan()
+  return running.id
+}
+/** الخطواتُ غيرُ المنجَزة — لبوّابة الخطّة حين يدّعي النموذجُ الاكتمال. */
+const planOpenSteps = (): readonly PlanStep[] => planForCurrentProject().filter((s) => s.state !== "done")
 const publishPlan = (): void => { planPublisher?.({ kind: "plan", turnId: "session", goal: planGoal || "الخطّة", steps: planForCurrentProject().map((s) => ({ id: s.id, cmd: s.action, action: s.action, state: s.state, dependsOn: s.dependsOn, ...(planReasons.has(s.id) ? { reason: planReasons.get(s.id) } : {}) })) }) }
 const planCommand = async (tail: readonly string[], body: string): Promise<string> => {
   const { validate, replan } = await import("./mind/planner")

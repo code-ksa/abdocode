@@ -207,5 +207,6 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     // بدفتر الكلفة والعدّاد نفسيهما، وكلفتُه تُعلَن قبل إنفاقها ويُسلَّم الدورُ عند موضعه إن تربت الميزانية.
     // م9ح (2026-09-14): الثالث عشر معلَن — حارةُ المراجعة «review» (نداءٌ واحدٌ في خريطة العدسات الثلاث بلا أدوات وبسياقٍ منفصل).
     // الفجوة #9 (2026-09-27): الرابع عشر معلَن — مراجعةُ PR («review pr»): العدساتُ الثلاث نفسُها بلا أدوات وبسياقٍ منفصل على فرق gh.
-    expect(source.match(/\bawait ask\(/gu)).toHaveLength(14)
+    // 09-29: الخامس عشر معلَن — أداةُ next: نموذجُ القرار (decisionModel) يختار خطوةَ المتصفّح من مرشّحين مسمّين (نداءٌ واحد بلا أدوات).
+    expect(source.match(/\bawait ask\(/gu)).toHaveLength(15)
     expect(source).toContain("const reply = await ask(buildReviewPrompt(reviewGoal, diff.text, lens), { ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REVIEW_SYSTEM }, [], turnSelection)")
