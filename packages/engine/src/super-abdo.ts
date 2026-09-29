@@ -97,11 +97,32 @@ const VERIFICATION = /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:(?:run\s+)?(?:test|build|
 
 const normalizedCommand = (command: string): string => command.trim().replace(/\s+/gu, " ")
 
+/**
+ * 09-29 (مقيس على تطبيق المالك): كتابةُ ملفِّ توثيقٍ (md/rst/adoc — لا txt: قد يكون بياناتِ برنامج) ليست تعديلَ كودٍ — البوّابةُ كانت تطالب بعد
+ * `write NOTES-plan.md` بـ«run npm test» و«run npm run build» فيقف الدورُ acceptance-pending وخطّتُه 3/3 منجزة.
+ * إيصالُ الكتابة نفسُه دليلُ التوثيق؛ وتعديلُ كودٍ سبقه يبقى محتاجاً فحصَه.
+ */
+const DOC_MUTATION = /^(?:write|edit|patch)\s+(?:--\S+\s+)?\S+\.(?:md|markdown|mdx|rst|adoc)(?:\s|$)/iu
+export const isDocMutation = (command: string): boolean => DOC_MUTATION.test(command.split("\n", 1)[0]!)
+
+/**
+ * 09-29: الفحصُ الافتراضيّ من سكربتات package.json الحقيقيّة لا من التخمين — «run npm test» في مشروعٍ بلا سكربت test
+ * مطلبٌ لا يُلبّى أبداً (npm يخرج 1: Missing script). بلا مانيفستٍ معروف يبقى الافتراضُ القديم.
+ */
+export const defaultVerificationTools = (scripts?: readonly string[]): readonly string[] => {
+  if (scripts === undefined) return ["run npm test", "run npm run build"]
+  const picked: string[] = []
+  if (scripts.includes("test")) picked.push("run npm test")
+  for (const name of ["build", "typecheck", "check", "lint"]) if (scripts.includes(name)) picked.push(`run npm run ${name}`)
+  return picked.length > 0 ? picked : ["run node --test (package.json بلا سكربت test/build/typecheck/lint)"]
+}
+
 /** The deterministic evidence picture: the last mutation and the checks that ran after it (latest run wins per check). */
 const evidencePicture = (receipts: readonly SuperAbdoEvidence[]) => {
   let lastMutation = -1
   for (let i = 0; i < receipts.length; i++) {
     const item = receipts[i]!
+    if (isDocMutation(item.command)) continue
     if (item.mutated === true || /^(?:write|edit|patch)\b/iu.test(item.command)) lastMutation = i
   }
   const checks = new Map<string, boolean>()
@@ -137,12 +158,12 @@ export const SUPER_ABDO_REPAIR_ROUNDS = 1
 export interface MissingReceipt { readonly tool: string; readonly shouldShow: string }
 
 /** الإيصالاتُ الناقصة بالاسم: الأداةُ التي تُنتجها وما يجب أن تُظهره — من الأدلّة الحتميّة، ثمّ من سبب المراجِع إن بقي. */
-export function superAbdoMissingReceipts(receipts: readonly SuperAbdoEvidence[], problem: string | undefined): readonly MissingReceipt[] {
+export function superAbdoMissingReceipts(receipts: readonly SuperAbdoEvidence[], problem: string | undefined, scripts?: readonly string[]): readonly MissingReceipt[] {
   const picture = evidencePicture(receipts)
   const after = picture.lastMutationCommand === undefined ? "" : ` بعد آخر تعديل «${picture.lastMutationCommand}»`
   const missing: MissingReceipt[] = []
   if (picture.lastMutation >= 0 && picture.checks.size === 0) {
-    const tools = picture.earlier.length > 0 ? picture.earlier : ["run npm test", "run npm run build"]
+    const tools = picture.earlier.length > 0 ? picture.earlier : defaultVerificationTools(scripts)
     for (const tool of tools) missing.push({ tool, shouldShow: `رمز خروج 0${after}` })
   } else {
     for (const [tool, passed] of picture.checks) if (!passed) missing.push({ tool, shouldShow: `رمز خروج 0 (آخرُ تشغيلٍ فشل)${after}` })

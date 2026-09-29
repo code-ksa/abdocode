@@ -48,7 +48,8 @@ test.skipIf(process.platform !== "win32")("plan: set/start/done/fail/show with r
     expect(planFrames()).toHaveLength(0)
     expect(await systemOfNextTurn()).not.toContain("لوحُ الخطّة")
     // set بهدفٍ وثلاثِ خطوات — الاعتماديّاتُ بفاصلةٍ عربيّةٍ وفراغ
-    const set = await turn("نفّذ: plan set بناءُ الموقع <<<\ns1: أنشئ الهيكل\ns2: اختبر [after: s1]\ns3: انشر [بعد: s1، s2]")
+    // 09-29: علامةُ إغلاقٍ «>>>» وحدَها تُهمَل (النموذجُ يختم بها؛ قيس على تطبيق المالك)
+    const set = await turn("نفّذ: plan set بناءُ الموقع <<<\ns1: أنشئ الهيكل\ns2: اختبر [after: s1]\ns3: انشر [بعد: s1، s2]\n>>>")
     expect(set[0]).toContain("الخطّة (0/3 منجزة) — بناءُ الموقع")
     expect(set[0]).toContain("○ s1: أنشئ الهيكل")
     expect(set[0]).toContain("○ s3: انشر (بعد s1، s2)")

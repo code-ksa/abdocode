@@ -8059,7 +8059,7 @@ const runServeShell = async (): Promise<void> => {
               lastStop = "acceptance-pending"
               // S11 (مقيس 09-18: 116 تحذيرَ «ادّعى الاكتمالَ ونقضته البوّابات») — الحجبُ يسمّي الإيصالَ الناقص (الأداة وما تُظهره)،
               // وبعد جولةِ إصلاحٍ واحدة يقف الدور acceptance-pending بدل الدوران؛ سقفُ الإعدادات يبقى حدّاً أعلى لا أدنى.
-              const named = missingReceiptsLine(superAbdoMissingReceipts(superEvidence, problem))
+              const named = missingReceiptsLine(superAbdoMissingReceipts(superEvidence, problem, projectScriptNames(PROJECT_DIR)))
               superStamp = "Super Abdo: completion withheld — " + problem + (named.length > 0 ? "\n" + named : "")
               await emitEvent(turn.id, superStamp)
               const repairRounds = Math.min(superAbdo.maxRepairPasses, SUPER_ABDO_REPAIR_ROUNDS)
@@ -8627,6 +8627,13 @@ const planAutoFail = (reason: string): string | undefined => {
   publishPlan()
   return running.id
 }
+/** 09-29: أسماءُ سكربتات package.json للبوّابة كي تسمّي فحصاً موجوداً؛ undefined بلا مانيفستٍ يُقرأ. */
+const projectScriptNames = (dir: string): readonly string[] | undefined => {
+  try {
+    const parsed = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { scripts?: Record<string, unknown> }
+    return Object.keys(parsed.scripts ?? {})
+  } catch { return undefined }
+}
 /** الخطواتُ غيرُ المنجَزة — لبوّابة الخطّة حين يدّعي النموذجُ الاكتمال. */
 const planOpenSteps = (): readonly PlanStep[] => planForCurrentProject().filter((s) => s.state !== "done")
 /** 09-29 (LangGraph — الحافّةُ التقدّميّة): لا خطوةَ جارية وثمّة خطوةٌ جاهزة ⇦ تُبدأ أوّلُها تلقائياً؛ يعيد معرّفَها أو undefined. */
@@ -8649,7 +8656,8 @@ const planCommand = async (tail: readonly string[], body: string): Promise<strin
     const marker = body.match(/\s<<<(?:\r?\n|[ \t])/u)
     if (marker?.index === undefined) return PLAN_USAGE
     const goalMatch = body.slice(0, marker.index).match(/plan\s+set\s+(.+)$/u)
-    const lines = body.slice(marker.index + marker[0].length).split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0 && !l.startsWith("#"))
+    // 09-29 (مقيس على تطبيق المالك): النموذجُ يختم الكتلةَ بـ«>>>» مرّتين قبل أن يصيب — علامةُ إغلاقٍ وحدَها ليست خطوةً فتُهمَل.
+    const lines = body.slice(marker.index + marker[0].length).split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0 && !l.startsWith("#") && l !== ">>>")
     const steps: { id: string; action: string; dependsOn: string[] }[] = []
     for (const line of lines) {
       const idMatch = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/u)

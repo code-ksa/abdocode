@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { missingReceiptsLine, parseSuperAbdoReview, resolveSuperAbdo, SUPER_ABDO_DEFAULTS, SUPER_ABDO_REPAIR_ROUNDS, superAbdoInstruction, superAbdoMissingReceipts, superAbdoVerificationProblem, validateSuperAbdo } from "../src/super-abdo"
+import { defaultVerificationTools, isDocMutation, missingReceiptsLine, parseSuperAbdoReview, resolveSuperAbdo, SUPER_ABDO_DEFAULTS, SUPER_ABDO_REPAIR_ROUNDS, superAbdoInstruction, superAbdoMissingReceipts, superAbdoVerificationProblem, validateSuperAbdo } from "../src/super-abdo"
 
 const cliSource = await Bun.file(new URL("../src/cli.ts", import.meta.url)).text()
 
@@ -55,6 +55,17 @@ describe("Super Abdo strategy", () => {
     }
     expect(superAbdoVerificationProblem(enabled, [mutated, { command: "read package.json", passed: true }])).toContain("No verification")
   })
+
+  test("09-29 — كتابةُ توثيقٍ (md/rst/adoc، لا txt) لا تُطالَب بفحص؛ وتعديلُ كودٍ قبلها يبقى مطالَباً (التوأم الإيجابيّ)", () => {
+    const notes = { command: "write NOTES-plan.md <<<\n# notes", mutated: true, passed: true }
+    expect(superAbdoVerificationProblem(enabled, [notes])).toBeUndefined()
+    expect(superAbdoVerificationProblem(enabled, [{ command: "write src/app.ts <<<\nx", mutated: true, passed: true }, { command: "run npm run build", passed: true }, notes])).toBeUndefined()
+    expect(superAbdoVerificationProblem(enabled, [{ command: "write src/app.ts <<<\nx", mutated: true, passed: true }, notes])).toContain("No verification")
+    expect(isDocMutation("edit README.md")).toBe(true)
+    expect(isDocMutation("write --shrink docs/guide.rst <<<")).toBe(true)
+    expect(isDocMutation("write super-probe.txt <<<")).toBe(false)
+    expect(isDocMutation("write src/readme.ts <<<")).toBe(false)
+  })
 })
 
 describe("S11 — الحجبُ يسمّي الإيصالَ الناقص ويقف بعد جولةٍ واحدة (مقيس 2026-09-18: 116 تحذيرَ «ادّعى الاكتمالَ ونقضته البوّابات»)", () => {
@@ -68,6 +79,11 @@ describe("S11 — الحجبُ يسمّي الإيصالَ الناقص ويقف
     ])
     // بلا فحصٍ سابق يُسمّى فحصُ المشروع الافتراضيّ لا «الفحص المناسب».
     expect(superAbdoMissingReceipts([write], "x").map((m) => m.tool)).toEqual(["run npm test", "run npm run build"])
+    // 09-29: بسكربتات package.json الحقيقيّة — لا «npm test» حيث لا سكربت test (قيس على تطبيق المالك: مطلبٌ لا يُلبّى)
+    expect(superAbdoMissingReceipts([write], "x", ["dev", "build", "lint"]).map((m) => m.tool)).toEqual(["run npm run build", "run npm run lint"])
+    expect(superAbdoMissingReceipts([write], "x", ["test", "typecheck"]).map((m) => m.tool)).toEqual(["run npm test", "run npm run typecheck"])
+    expect(defaultVerificationTools(["dev"])).toEqual(["run node --test (package.json بلا سكربت test/build/typecheck/lint)"])
+    expect(defaultVerificationTools(undefined)).toEqual(["run npm test", "run npm run build"])
     const line = missingReceiptsLine(missing)
     expect(line).toContain("الإيصالاتُ الناقصة بالاسم: «run bun test» يجب أن يُظهر: رمز خروج 0 بعد آخر تعديل «write src/app.ts <<<»؛ «run npm run build» يجب أن يُظهر")
     expect(missingReceiptsLine([])).toBe("")
@@ -88,7 +104,7 @@ describe("S11 — الحجبُ يسمّي الإيصالَ الناقص ويقف
 
   test("جولةُ إصلاحٍ واحدة: cli.ts يبثّ الحجبَ بالإيصالات المسمّاة، ويقف acceptance-pending بعد الجولة الأولى لا بعد سقف الإعدادات", () => {
     expect(SUPER_ABDO_REPAIR_ROUNDS).toBe(1)
-    expect(cliSource).toContain("const named = missingReceiptsLine(superAbdoMissingReceipts(superEvidence, problem))")
+    expect(cliSource).toContain("const named = missingReceiptsLine(superAbdoMissingReceipts(superEvidence, problem, projectScriptNames(PROJECT_DIR)))")
     expect(cliSource).toContain('superStamp = "Super Abdo: completion withheld — " + problem + (named.length > 0 ? "\\n" + named : "")')
     expect(cliSource).toContain("const repairRounds = Math.min(superAbdo.maxRepairPasses, SUPER_ABDO_REPAIR_ROUNDS)")
     expect(cliSource).toContain("if (superRepairPasses >= repairRounds) break")
