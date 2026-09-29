@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate } from "../src/project-sprint-plan-guard"
+import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance } from "../src/project-sprint-plan-guard"
 
 const project = () => mkdtempSync(join(tmpdir(), "abdo-sprints-"))
 const completePlan = "# منتج Next.js عربي RTL لشركة السعادة مع SQLite ولوحة الإدارة وتواصل العملاء\n" + Array.from({ length: 8 }, (_, index) => `## سبرنت ${index + 1}\nالحالة: [ ]\nبوابة القبول: npm run ${index === 7 ? "build" : "test"} وHTTP 200\nالأدلة: نتيجة Playwright أو vitest وفحص المتصفح\n${"نطاق واضح للعمل المطلوب. ".repeat(9)}`).join("\n") + "\n## الاستئناف\nABDO-HANDOFF.md\nNEXT_ACTION"
@@ -186,5 +186,38 @@ describe("autonomous sprint plan guard", () => {
     const projectDir = project()
     const tpl = sprintPlanTemplate("عيادة نور")
     expect(sprintPlanWriteViolation({ projectDir, normalizedTarget: "ABDO-SPRINTS.md", after: tpl }, true)).toBeUndefined()
+  })
+})
+
+describe("09-29 — الوعيُ بالسبرنتات: خلاصةٌ للنظام وحافّةُ انتقالٍ تلقائيّ", () => {
+  const plan = (states: readonly string[]): string => states.map((s, i) => `## سبرنت ${i + 1}: خطوة ${i + 1}\nالحالة: ${s}\nبوابة القبول: npm run build يخرج 0 (${i + 1})\n`).join("\n")
+  test("الخلاصةُ تسمّي أوّلَ سبرنتٍ مفتوح ببوّابته وNEXT_ACTION؛ وبلا ملفٍّ لا شيء؛ وكلُّها مغلقة تُقال", () => {
+    const dir = mkdtempSync(join(tmpdir(), "abdo-sprint-brief-"))
+    expect(sprintBrief(dir)).toBe("")
+    writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan(["مكتمل", "غير مكتمل", "غير مكتمل"]))
+    writeFileSync(join(dir, "ABDO-HANDOFF.md"), "# تسليم\nNEXT_ACTION: نفّذ سبرنت 2 وشغّل البناء\n")
+    const brief = sprintBrief(dir)
+    expect(brief).toContain("1/3 مكتملة")
+    expect(brief).toContain("السبرنتُ المفتوح الأوّل: سبرنت 2: خطوة 2")
+    expect(brief).toContain("بوّابتُه: npm run build يخرج 0 (2)")
+    expect(brief).toContain("NEXT_ACTION: نفّذ سبرنت 2 وشغّل البناء")
+    writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan(["مكتمل", "مكتمل"]))
+    expect(sprintBrief(dir)).toContain("2/2 مكتملة — كلُّها مغلقة")
+  })
+  test("الحافّة: انخفاضُ المفتوح منذ بدء الدور مع بقاءِ مفتوحٍ ⇦ التالي باسمه؛ ولا شيء بلا تغيير، أو حين أُغلق الأخير، أو بلا ملفّ", () => {
+    const dir = mkdtempSync(join(tmpdir(), "abdo-sprint-adv-"))
+    expect(sprintAdvance(dir, 2)).toBeUndefined()
+    writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan(["غير مكتمل", "غير مكتمل", "غير مكتمل"]))
+    expect(sprintAdvance(dir, 3)).toBeUndefined()
+    writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan(["مكتمل", "غير مكتمل", "غير مكتمل"]))
+    const adv = sprintAdvance(dir, 3)!
+    expect(adv.open).toBe(2)
+    expect(adv.line).toContain("(1/3) — يبدأ التالي تلقائياً: سبرنت 2: خطوة 2")
+    expect(adv.hint).toContain("«سبرنت 2: خطوة 2» — بوّابتُه: npm run build يخرج 0 (2)")
+    // الدورُ التالي يبدأ من 2 مفتوحَين: لا حافّةَ حتى يُغلق آخر
+    expect(sprintAdvance(dir, 2)).toBeUndefined()
+    writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan(["مكتمل", "مكتمل", "مكتمل"]))
+    expect(sprintAdvance(dir, 2)).toBeUndefined()
+    expect(sprintAdvance(dir, undefined)).toBeUndefined()
   })
 })

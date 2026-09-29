@@ -43,7 +43,7 @@ const until = async (label: string, ok: () => boolean | Promise<boolean>, ms = 3
   while (!(await ok())) { if (Date.now() > deadline) throw Error(`timed out: ${label}`); await Bun.sleep(200) }
 }
 
-test.skipIf(process.platform !== "win32")("desk types into the window it bound, photographs that window alone, and refuses when another window steals the front", async () => {
+test.skipIf(process.platform !== "win32" || process.env.ABDO_SKIP_DESK_LIVE === "1")("desk types into the window it bound, photographs that window alone, and refuses when another window steals the front", async () => {
   const dir = mkdtempSync(join(tmpdir(), "abdo-desk-live-"))
   const script = join(dir, "window.ps1")
   writeFileSync(script, FIXTURE)

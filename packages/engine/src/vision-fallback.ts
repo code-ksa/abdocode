@@ -30,7 +30,14 @@ export type ShotRoute =
 
 export function shotRoute(settings: { visionModel?: string; agentModel?: string; model?: string }): ShotRoute {
   const vision = typeof settings.visionModel === "string" ? settings.visionModel : ""
-  if (vision.length > 0 && Providers.parseRef(vision) !== undefined) return Object.freeze({ reaches: true, via: "vision", ref: vision })
+  const visionParsed = vision.length > 0 ? Providers.parseRef(vision) : undefined
+  if (visionParsed !== undefined) {
+    // 09-29 (مقيس على مزوّدٍ مخصّص nvidia2 بلا imageModels): البوّابةُ ترفض صورةً لنموذجٍ لم يُعلَن قبولُه لها فيموت الدورُ كلُّه —
+    // فالطريقُ يُحسم هنا: نموذجُ رؤيةٍ غيرُ معلَنٍ لا «يصل»، ويُقال السببُ في إيصال shot بدل رفضٍ يقطع الدور.
+    const visionProvider = Providers.provider(visionParsed.provider)
+    if (visionProvider !== undefined && Providers.hasDeclaredImageInput(visionProvider, visionParsed.model)) return Object.freeze({ reaches: true, via: "vision", ref: vision })
+    return Object.freeze({ reaches: false, why: `نموذجُ الرؤية المضبوط (${vision}) لا يُعلن قبولَ الصور — أضفه إلى imageModels لمزوّده أو اختر نموذجاً معلَناً` })
+  }
   const laneRef = settings.agentModel ?? settings.model
   const parsed = typeof laneRef === "string" ? Providers.parseRef(laneRef) : undefined
   const provider = parsed === undefined ? undefined : Providers.provider(parsed.provider)

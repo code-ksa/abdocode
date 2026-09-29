@@ -42,6 +42,7 @@ import { CdpBrowser, launchBrowserProcess } from "@abdo/browser"
 import { browserSiteAllowed, desktopBrowserOwnership, ownedDesktopBrowserPort, sitePolicyCommand } from "./browser-site-policy"
 import { BrowserHistory, BrowserSessionStore, PROFILE_DIR, historyCommand, loginPageVerdict, loginReceipt, originOf, sessionsCommand } from "./browser-sessions"
 import { shotRoute, shotFitsModel, tilePlan } from "./vision-fallback"
+import { renderVisionReport, VISION_EYE_SYSTEM, visionReportUsable, visionRubric } from "./vision-describe"
 import { MAX_IMAGE_BASE64 } from "@abdo/model-gateway"
 import { Shell } from "./shells/shell"
 import { Database } from "bun:sqlite"
@@ -138,7 +139,7 @@ import { projectBuildViolation } from "./project-build-acceptance"
 import { nextAppPageShellViolation } from "./next-app-structure-guard"
 import { unsupportedPublicContactClaim } from "./public-content-evidence-guard"
 import { tsxSourceViolation } from "./tsx-source-guard"
-import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate } from "./project-sprint-plan-guard"
+import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance } from "./project-sprint-plan-guard"
 import { projectAuthAudit, projectAuthViolation } from "./project-auth-guard"
 import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFrom, mergeProjectAwareness, projectAwarenessBrief } from "./project-awareness"
 import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation } from "./project-dependency-guard"
@@ -2003,7 +2004,7 @@ const askOnce = async (
   const projectSkillsAdvert = projectSkillList.length === 0 ? "" :
     "\nمهاراتٌ قطّرها هذا المشروع (حمّل ما يناسب المهمّة بـskill <مرجع>):\n" +
     projectSkillList.slice(0, 12).map((s) => "- " + s.ref + (s.description.length > 0 ? " — " + s.description.slice(0, 110) : "")).join("\n")
-  const skillsAdvert = (hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' && !planningPhase ? localSkillsBrief(SETTINGS_FILE) : "") + (hooks.conversationMode === "chat" || hooks.reviewSystem !== undefined ? "" : planBrief()) + projectSkillsAdvert
+  const skillsAdvert = (hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' && !planningPhase ? localSkillsBrief(SETTINGS_FILE) : "") + (hooks.conversationMode === "chat" || hooks.reviewSystem !== undefined ? "" : planBrief() + sprintBrief(PROJECT_DIR)) + projectSkillsAdvert
   const preferenceLanguage=loadSettings().language||'en';
   const replyLanguage=/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u.test(preferenceLanguage)?preferenceLanguage:'en';
   const languageInstruction='\nPreferred response language: '+replyLanguage+'. Use this language unless the user explicitly requests another. Do not translate file paths or code.\n';
@@ -4115,7 +4116,16 @@ const runServeShell = async (): Promise<void> => {
           const out = await runSurfaceTool(spec.name, rest, turnId)
           // الأتمتةُ المرئيّة تفهم خطأها بعينها: رفضُ العقد أو مرجعٌ ضائع أو تعذّرٌ ⇦ لقطةٌ للحالة تُلحق بالنداء التالي إن كان النموذجُ يرى.
           if (liveSurface !== undefined && /^(?:العقد رفض|مرجعٌ غير معروف|تعذّر|رُفض)/u.test(out) && ["tap", "fill", "key", "look", "find", "scroll", "dismiss"].includes(spec.name) && shotRoute(loadSettings()).reaches) {
-            try { const data = await liveSurface.captureScreenshot({ format: "jpeg", quality: 50 }); if (shotFitsModel(data) && pendingShots.length < 4) { pendingShots.push({ data, url: surfaceUrl, mime: "image/jpeg" }); return surfaced(out + "\n(أُرفقت لقطةٌ لحالة الصفحة عند الخطأ — انظرها قبل المحاولة التالية)") } } catch { /* اللقطةُ مساعِدةٌ لا شرط */ }
+            try {
+              const data = await liveSurface.captureScreenshot({ format: "jpeg", quality: 50 })
+              if (shotFitsModel(data)) {
+                // 09-29 (عينُ الوكيل): نموذجُ رؤيةٍ منفصل يصف لقطةَ الخطأ الآن — لا تُعلَّق للنداء التالي (كانت تُعلَّق فتصل دوراً لاحقاً لا علاقةَ له).
+                const errorRoute = shotRoute(loadSettings())
+                const described = errorRoute.reaches && errorRoute.via === "vision" ? await describeShots([{ mime: "image/jpeg", data }], errorRoute.ref, surfaceUrl, Math.round(data.length * 3 / 4), 1, turnId) : undefined
+                if (described !== undefined) return surfaced(out + "\n" + described)
+                if (pendingShots.length < 4) { pendingShots.push({ data, url: surfaceUrl, mime: "image/jpeg" }); return surfaced(out + "\n(أُرفقت لقطةٌ لحالة الصفحة عند الخطأ — انظرها قبل المحاولة التالية)") }
+              }
+            } catch { /* اللقطةُ مساعِدةٌ لا شرط */ }
           }
           return surfaced(out)
         }
@@ -4522,6 +4532,23 @@ const runServeShell = async (): Promise<void> => {
     return okText(`حُفظت لقطةُ الصفحة PNG على قرصك: ${file} (${Math.round(data.length * 3 / 4)} بايت) — قارنها: design compare <الهدف.png> ${file}`)
   }
 
+  /** عينُ الوكيل (09-29): نداءٌ واحد لنموذج الرؤية المنفصل بنظامٍ بلا أدوات ومعيارٍ ثابت؛ undefined = تعذّر أو جوابٌ ليس وصفاً
+   * (فيُسلَك المسارُ القديم: اللقطةُ إلى النداء التالي). في نطاق الخدمة لأنّ لقطةَ الخطأ التلقائيّة خارج runSurfaceTool تستعمله أيضاً. */
+  const describeShots = async (images: readonly { mime: "image/png" | "image/jpeg"; data: string }[], ref: string, url: string, bytes: number, tiles: number, turnId: string): Promise<string | undefined> => {
+    const sel = selectionOf(ref, "agent")
+    if (sel === undefined) return undefined
+    try {
+      await emitEvent(turnId, `👁 نموذجُ الرؤية ${ref} يصف اللقطة${tiles > 1 ? ` (${tiles} بلاطات)` : ""}…`)
+      const reply = await ask(visionRubric(currentGoalText, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, attachments: { descriptions: [], text: "", images: images.map((i) => ({ mime: i.mime, data: i.data })) } }, [], Object.freeze({ ...sel, vision: true as const }))
+      const text = typeof reply === "string" ? reply : String(reply)
+      if (!visionReportUsable(text)) { await emitEvent(turnId, `👁 نموذجُ الرؤية لم يُعطِ وصفاً صالحاً (${text.replace(/\s+/gu, " ").slice(0, 80)}) — تُرسَل اللقطةُ إلى النداء التالي كما كان.`); return undefined }
+      return renderVisionReport(ref, text, { bytes, url, tiles })
+    } catch (error) {
+      await emitEvent(turnId, `👁 تعذّر نداءُ نموذج الرؤية: ${String((error as Error).message ?? error).slice(0, 120)} — تُرسَل اللقطةُ إلى النداء التالي كما كان.`)
+      return undefined
+    }
+  }
+
   const runSurfaceTool = async (name: string, rest: string, turnId: string): Promise<string> => {
     const { Surface } = await import("./mind/surface")
 
@@ -4845,7 +4872,8 @@ const runServeShell = async (): Promise<void> => {
 
     if (name === "find") {
       // ذ9هـ — العثورُ بالنصّ: مطابقةٌ بلا حساسيةٍ للحالة على الدور والاسم، وتسطيحُ الشجرة لأنّ المرجعَ قد يكون في أيّ عمق.
-      const needle = rest.trim()
+      // 09-29 (مقيس بلا شاشة): النموذجُ يكتب find "System" فتدخل علاماتُ الاقتباس في الإبرة ولا يجد شيئاً — تُنزع من الطرفين.
+      const needle = rest.trim().replace(/^["'«“]+|["'»”]+$/gu, "").trim()
       if (needle.length === 0) return "الصيغة: find <نصّ يظهر في اسم العنصر أو دوره>"
       if (surface === undefined) return "لا سطحَ موصولاً — استعمل open أو ui أوّلاً"
       const flat: { ref: string; role: string; name: string }[] = []
@@ -5073,8 +5101,11 @@ const runServeShell = async (): Promise<void> => {
         await surface.scrollTo(metrics.scrollY)
         if (captured.length === 0) return "تعذّرت اللقطة الكاملة — الصفحةُ لم تُعطِ صورة"
         if (shellKind !== undefined) emit({ kind: "browser-shot", data: captured[0]!.data, url: surfaceUrl, mime: captured[0]!.mime })
-        if (route.reaches) { pendingShot = undefined; pendingShots = captured.map((c) => ({ data: c.data, url: surfaceUrl, mime: c.mime })) }
         const total = Math.round(captured.reduce((sum, c) => sum + c.data.length * 3 / 4, 0))
+        // 09-29 (عينُ الوكيل): نموذجُ رؤيةٍ منفصل يصف البلاطاتِ الآن، والوكيلُ يقرأ الوصفَ ويقرّر — لا يذهب النداءُ التالي كلُّه إلى نموذج الرؤية.
+        const described = route.reaches && route.via === "vision" ? await describeShots(captured.slice(0, 4).map((c) => ({ mime: c.mime, data: c.data })), route.ref, surfaceUrl, total, captured.length, turnId) : undefined
+        if (described !== undefined) { pendingShot = undefined; pendingShots = []; return described }
+        if (route.reaches) { pendingShot = undefined; pendingShots = captured.map((c) => ({ data: c.data, url: surfaceUrl, mime: c.mime })) }
         return route.reaches
           ? "التُقطت الصفحةُ كاملةً: " + captured.length + " بلاطات (ارتفاعُها " + metrics.scrollHeight + "px، " + total + " بايت) — تصل " + (route.via === "vision" ? "نموذجَ الرؤية" : "نموذجَ الحارة (يرى)") + " أربعاً في النداء التالي" + (captured.length > 4 ? " والبقيّةُ في الذي يليه" : "") + ". اقرأها بالترتيب من الأعلى إلى الأسفل."
           : "التُقطت الصفحةُ كاملةً: " + captured.length + " بلاطات — وصلت اللوحةَ؛ " + route.why + " فلا تصل النموذج."
@@ -5087,6 +5118,11 @@ const runServeShell = async (): Promise<void> => {
       // S7 — اللقطةُ تسمّي وضعَها وإطارَها ومقياسَها: إحداثيّاتُها CSS من زاوية المنفذ، وtap يأخذ المرجعَ لا الإحداثيّة.
       const frame = await paneFrame()
       const where = frame === undefined ? "" : ` ${(await import("./viewport-map")).frameLine(frame)}.`
+      // 09-29 (عينُ الوكيل): نموذجُ الرؤية المنفصل يصف اللقطةَ الآن نصّاً يعود إيصالاً — والوكيلُ (الذي قد لا يرى) يقرّر.
+      if (pendingShot !== undefined && route.reaches && route.via === "vision") {
+        const described = await describeShots([{ mime, data }], route.ref, surfaceUrl, bytes, 1, turnId)
+        if (described !== undefined) { pendingShot = undefined; return described + where }
+      }
       if (route.reaches && pendingShot === undefined) return `التُقطت لقطةُ الشاشة (${bytes} بايت) — وصلت اللوحةَ لكنّها فوق سقف الصورة (${MAX_IMAGE_BASE64} حرفاً) حتى بعد القصّ، فلا تصل النموذج.${where}`
       return route.reaches
         ? `التُقطت لقطةُ الشاشة (${bytes} بايت، ${mime === "image/jpeg" ? "JPEG" : "PNG"}) — وصلت اللوحةَ، وتصل ${route.via === "vision" ? "نموذجَ الرؤية" : "نموذجَ الحارة (يرى)"} في النداء التالي.${where}`
@@ -6536,6 +6572,9 @@ const runServeShell = async (): Promise<void> => {
       ? (() => { try { return pickPriorGoal(factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession)) } catch { return undefined } })()
       : undefined
     const effectiveGoal = priorGoal?.goal ?? turn.body
+    // 09-29 (سبرنتات): عددُ السبرنتات المفتوحة عند بدء الدور — إغلاقُ واحدٍ منها أثناءه حافّةُ تقدّمٍ تبدأ التالي تلقائياً.
+    let sprintOpenAtStart = openSprintCount(PROJECT_DIR)
+    let sprintAdvances = 0
     desktopTaskText = `${turn.body}\n${priorGoal?.goal ?? ""}`
     turnReadPaths.clear(); turnCreatedPaths.clear(); turnScopeStartedAt = Date.now()
     currentGoalText = turn.body
@@ -8127,6 +8166,19 @@ const runServeShell = async (): Promise<void> => {
             }
           } else if (verifierOn && verifierRejections >= 2 && semanticStamp === "") {
             semanticStamp = "⚠ قُبل ميكانيكياً بعد رفضين دلاليين — اعتراض المحكّم الأخير في الأحداث"
+          }
+          // 09-29 (أمر المالك — الانتقالُ التلقائيّ بين السبرنتات): سبرنتٌ أُغلق في هذا الدور وبقيت سبرنتاتٌ مفتوحة في
+          // ABDO-SPRINTS.md ⇦ لا يُختم الدور «مكتملاً» على سبرنتٍ واحد؛ يُقال التالي ويبدأ (حتى ثلاث مرّاتٍ في الدور، والسقفُ يحكم).
+          const advance = sprintAdvance(PROJECT_DIR, sprintOpenAtStart)
+          if (advance !== undefined && sprintAdvances < 3) {
+            sprintAdvances += 1
+            sprintOpenAtStart = advance.open
+            superAccepted = !superActive
+            semanticStamp = ""
+            lastStop = "acceptance-pending"
+            continuationHint = advance.hint
+            await emitEvent(turn.id, `▶ ${advance.line}`)
+            continue
           }
           break
         }

@@ -35,5 +35,11 @@ describe("a screenshot reaches the model that can actually see it", () => {
     expect(route.reaches).toBe(false)
     expect(shotRoute({ model: "ollama/qwen9b-gpu-32k:latest" }).reaches).toBe(false)
     expect(shotRoute({ visionModel: "not-a-ref", agentModel: "qwen-token-plan/qwen3.7-max" }).reaches).toBe(false)
+    // 09-29: نموذجُ رؤيةٍ صحيحُ المرجع لكنّ مزوّدَه لا يعلن قبولَه للصور (qwen3.7-max يرفضها حيّاً) ⇦ لا يصل، والسببُ يسمّي imageModels
+    const undeclared = shotRoute({ visionModel: "qwen-token-plan/qwen3.7-max", agentModel: "qwen-token-plan/qwen3.7-plus" })
+    expect(undeclared.reaches).toBe(false)
+    expect(undeclared.reaches === false ? undeclared.why : "").toContain("imageModels")
+    // والمعلَن يصل عبر «vision» (nvidia nano-omni مقيس HTTP 200 بصورة 09-29)
+    expect(shotRoute({ visionModel: "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", agentModel: "nvidia/nvidia/nemotron-3-ultra-550b-a55b" })).toEqual({ reaches: true, via: "vision", ref: "nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning" })
   })
 })

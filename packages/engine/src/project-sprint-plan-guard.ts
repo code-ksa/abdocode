@@ -149,3 +149,47 @@ export const openSprintCount = (projectDir: string): number | undefined => {
   }
   return sprintSectionsOf(text).filter(sprintIsOpen).length
 }
+
+const firstLine = (s: string): string => (s.split(/\r?\n/u, 1)[0] ?? "").replace(/^#+\s*/u, "").trim().slice(0, 120)
+const fieldOf = (section: string, pattern: RegExp): string => (section.match(pattern)?.[1] ?? "").trim().slice(0, 240)
+const SPRINT_GATE_LINE = /^\s*\*{0,2}(?:بوابة\s*القبول|معيار\s*القبول|acceptance\s*gate)\*{0,2}\s*[:：-]\s*\*{0,2}([^\r\n]*)/imu
+const NEXT_ACTION_LINE = /NEXT_ACTION\s*[:：=-]?\s*([^\r\n]*)/u
+
+/**
+ * 09-29 (أمر المالك: «يشتغل من خطّةٍ في الوعي، وعند اكمل يكون عارف الخطوات التالية»): سطرٌ للنظام كلَّ حقبة من
+ * ABDO-SPRINTS.md وABDO-HANDOFF.md — كم أُغلق، أوّلُ سبرنتٍ مفتوح ببوّابته، وNEXT_ACTION. الملفُّ غائب = "" (لا اختراع).
+ */
+export const sprintBrief = (projectDir: string): string => {
+  let text: string
+  try { text = readFileSync(join(projectDir, "ABDO-SPRINTS.md"), "utf-8") } catch { return "" }
+  const sections = sprintSectionsOf(text)
+  if (sections.length === 0) return ""
+  const open = sections.filter(sprintIsOpen)
+  const first = open[0]
+  let next = ""
+  try { next = fieldOf(readFileSync(join(projectDir, "ABDO-HANDOFF.md"), "utf-8"), NEXT_ACTION_LINE) } catch { /* لا تسليمَ بعد */ }
+  const head = `\nخطّةُ السبرنتات (ABDO-SPRINTS.md): ${sections.length - open.length}/${sections.length} مكتملة`
+  if (first === undefined) return `${head} — كلُّها مغلقة.${next ? ` NEXT_ACTION: ${next}` : ""}\n`
+  const gate = fieldOf(first, SPRINT_GATE_LINE)
+  return `${head} — السبرنتُ المفتوح الأوّل: ${firstLine(first)}${gate ? ` · بوّابتُه: ${gate}` : ""}${next ? ` · NEXT_ACTION: ${next}` : ""}. أنجزه بأدلّته، حدّث حالتَه في الملفّ، ثمّ ابدأ الذي يليه بلا انتظار.\n`
+}
+
+/**
+ * حافّةُ التقدّم بين السبرنتات: انخفض عددُ المفتوح منذ بدء الدور وبقي مفتوحٌ ⇦ التالي يُقال ويبدأ. لا شيءَ آخرُ يحرّكه:
+ * لا الادّعاءُ ولا البناءُ وحدَه — تغييرُ الحالة في الملفّ هو الحافّة (والبوّاباتُ تحكم الادّعاءَ من جهتها).
+ */
+export const sprintAdvance = (projectDir: string, openAtStart: number | undefined): { readonly open: number; readonly line: string; readonly hint: string } | undefined => {
+  if (openAtStart === undefined || openAtStart === 0) return undefined
+  let text: string
+  try { text = readFileSync(join(projectDir, "ABDO-SPRINTS.md"), "utf-8") } catch { return undefined }
+  const sections = sprintSectionsOf(text)
+  const open = sections.filter(sprintIsOpen)
+  if (open.length >= openAtStart || open.length === 0) return undefined
+  const title = firstLine(open[0]!)
+  const gate = fieldOf(open[0]!, SPRINT_GATE_LINE)
+  return Object.freeze({
+    open: open.length,
+    line: `أُغلق سبرنتٌ في هذا الدور (${sections.length - open.length}/${sections.length}) — يبدأ التالي تلقائياً: ${title}`,
+    hint: `أُغلق السبرنتُ السابق بأدلّته. ابدأ الآن السبرنتَ التالي من ABDO-SPRINTS.md: «${title}»${gate ? ` — بوّابتُه: ${gate}` : ""}. نفّذه بأدواتٍ وأدلّة، حدّث حالتَه في الملفّ حين يجتاز بوّابتَه، ولا تعلن الاكتمالَ الكلّيَّ ما دام سبرنتٌ مفتوحاً.`,
+  })
+}

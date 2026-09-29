@@ -114,23 +114,23 @@ test('page → tap → fill reach the browser as trusted input events, the passw
   const nw=await turn('network');expect(events(nw).some(p=>p.includes('لا طلباتِ شبكةٍ منذ الوصل'))).toBe(true)
   const cs=await turn('console');expect(events(cs).some(p=>p.includes('لا رسائلَ في طرفيّة الصفحة'))).toBe(true)
   const lk=await turn('look r1');expect(events(lk).some(p=>p.includes('Email field text')&&p.includes('font-size'))).toBe(true)
-  // اللقطةُ: إطارُ browser-shot إلى اللوحة، ثم نداءُ النموذج التالي يذهب إلى نموذج الرؤية والصورةُ فيه.
+  // اللقطةُ (09-29 — عينُ الوكيل): إطارُ browser-shot إلى اللوحة، ونموذجُ الرؤية المنفصل يُنادى **أثناء الأداة** بالصورة ويعود
+  // وصفُه إيصالاً للوكيل («👁 ما رآه نموذجُ الرؤية»)، ولا تُعلَّق الصورةُ للنداء التالي — فالوكيلُ يقرّر لا نموذجُ الرؤية.
+  const before3=requests.length
   const sh=await turn('shot')
-  expect(events(sh).some(p=>p.startsWith('التُقطت'))).toBe(true)
+  expect(events(sh).some(p=>p.startsWith('👁 ما رآه نموذجُ الرؤية (fixture/vision) في https://allowed.test/signup'))).toBe(true)
+  expect(events(sh).some(p=>p.startsWith('FAKE_'))).toBe(true)
+  expect(events(sh).some(p=>p.startsWith('— المقيس'))).toBe(false)
+  expect(events(sh).some(p=>p.startsWith('التُقطت'))).toBe(false)
+  expect(requests.slice(before3).some(r=>r.model==='vision'&&r.hasImage)).toBe(true)
   const shots=frames.filter(f=>f.kind==='browser-shot')
   expect(shots.length).toBeGreaterThan(0)
   expect(shots.at(-1).data).toBe(PNG_1x1)
   expect(shots.at(-1).url).toBe('https://allowed.test/signup')
-  const before3=requests.length
-  const ask=await turn('ما الذي تراه في الصفحة؟')
-  const route=frames.find(f=>f.kind==='model-route'&&f.turnId===ask&&f.vision===true)
-  expect(route,'no vision route; frames:\n'+JSON.stringify(frames.filter(f=>f.turnId===ask)).slice(0,1500)).toBeDefined()
-  expect(route.ref).toBe('fixture/vision')
-  expect(requests.slice(before3).some(r=>r.model==='vision'&&r.hasImage)).toBe(true)
-  // اللقطةُ تُستهلك مرّةً: الدورُ التالي بلا صورة يعود إلى نموذج الوكيل.
+  // التوأم: الدورُ التالي نصّيٌّ لنموذج الوكيل بلا صورة ولا مسارِ رؤية — الوصفُ استُهلك في الإيصال.
   const before4=requests.length
-  const plain=await turn('وماذا بعد؟')
-  expect(frames.some(f=>f.kind==='model-route'&&f.turnId===plain&&f.vision===true)).toBe(false)
+  const ask=await turn('ما الذي تراه في الصفحة؟')
+  expect(frames.some(f=>f.kind==='model-route'&&f.turnId===ask&&f.vision===true)).toBe(false)
   expect(requests.slice(before4).every(r=>r.model==='agent'&&!r.hasImage)).toBe(true)
  }finally{child.kill();await child.exited;await reading;await stderr;cdp.stop(true);model.stop(true);rmSync(home,{recursive:true,force:true})}
 },120000)

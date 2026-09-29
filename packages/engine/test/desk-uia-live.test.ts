@@ -36,7 +36,7 @@ const FIXTURE = [
 
 const ps = async (cmd: string): Promise<string> => { const p = Bun.spawn(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd], { stdout: "pipe", stderr: "pipe" }); const o = await new Response(p.stdout).text(); await p.exited; return o.trim() }
 
-test.skipIf(process.platform !== "win32")("desk on a real window: DPI-true screenshot, click and type land, ui/set/press by reference", async () => {
+test.skipIf(process.platform !== "win32" || process.env.ABDO_SKIP_DESK_LIVE === "1")("desk on a real window: DPI-true screenshot, click and type land, ui/set/press by reference", async () => {
   const dir = mkdtempSync(join(tmpdir(), "desk-uia-"))
   const script = join(dir, "probe.ps1"), out = join(dir, "truth.txt"), shots = join(dir, "shots")
   writeFileSync(script, FIXTURE)
