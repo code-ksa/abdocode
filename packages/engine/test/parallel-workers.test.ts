@@ -43,3 +43,13 @@ describe("parallel workers — report and merge guard", () => {
     expect(mergeBranchRefusal("abdocode/task-1a2b3c4d; rm -rf")).toBeDefined()
   })
 })
+
+test("09-29: a bare marker or code fences are not tasks — the usage line reaches the model instead of «<<<»", () => {
+  const bare = parseParallelTasks("parallel <<<")
+  expect(typeof bare).toBe("string")
+  expect(String(bare)).toContain("يحتاج مهمّتين")
+  expect(String(bare)).not.toContain("«<<<»")
+  const fenced = parseParallelTasks("parallel <<<\n```\nAdd a node --test file for GET /api/health and run it\nAdd a link to /status in the home page and build\n```")
+  expect(Array.isArray(fenced)).toBe(true)
+  expect((fenced as string[]).length).toBe(2)
+})

@@ -20,7 +20,9 @@ export function parseParallelTasks(body: string): string[] | string {
     const inline = body.replace(/^\s*parallel\s*/u, "")
     raw = inline.split(/\|\|/u)
   }
-  const tasks = raw.map((t) => t.trim().replace(/^[-*\d.)\s]+/u, "").trim()).filter((t) => t.length > 0 && !t.startsWith("#"))
+  // 09-29 (مقيس على تطبيق المالك): جاء الجسمُ «parallel <<<» بلا مهامّ فقرأ المحلّلُ العلامةَ مهمّةً وقال «أقصر من أن تُفوَّض: «<<<»» —
+  // علامةُ الكتلة وسياجاتُ الشيفرة (```) ليست مهامّ؛ تُهمَل فيصل النموذجَ سطرُ الصيغة الصحيح.
+  const tasks = raw.map((t) => t.trim().replace(/^[-*\d.)\s]+/u, "").trim()).filter((t) => t.length > 0 && !t.startsWith("#") && !/^(?:<<<|>>>|`{3,}\w*)$/u.test(t))
   if (tasks.length < 2) return `parallel يحتاج مهمّتين مستقلّتين على الأقلّ — لمهمّةٍ واحدة نفّذها مباشرةً. ${PARALLEL_USAGE}`
   if (tasks.length > PARALLEL_MAX) return `parallel حتى ${PARALLEL_MAX} مهامّ (وردت ${tasks.length}) — اجمع المتقارب أو قسّم على جولتين.`
   const unique = [...new Set(tasks)]

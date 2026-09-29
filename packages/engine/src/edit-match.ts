@@ -97,6 +97,37 @@ export type EditApply =
   | { readonly ok: false; readonly why: string; readonly occurrences: number }
 
 /** يعدّ المواضع الحرفيّة (بلا تداخل) — `split` وحدها، بلا تعبيرٍ نمطيّ. */
+/**
+ * 09-29 (مقيس على تطبيق المالك: ثلاثُ محاولات edit رُفضت بـ«فاصلٌ ملتبس» ثمّ كتب النموذجُ الملفَّ كلَّه): حين يحمل الذيلُ أكثرَ من
+ * `=>` يُجرَّب كلُّ سهمٍ فاصلاً، والقديمُ الذي يظهر في الملفّ **مرّةً واحدة بالضبط** يحسم — إن كان مرشّحاً واحداً. أكثرُ من مرشّحٍ
+ * أو لا مرشّح = يبقى الرفضُ القديم (لا تخمين). نقيّةٌ: الملفُّ يأتي من المنادي.
+ */
+export const resolveAmbiguousEdit = (rest: string, fileText: string): EditPlan | undefined => {
+  const body = rest.trim()
+  const cut = body.indexOf("::")
+  if (cut < 0) return undefined
+  const head = body.slice(0, cut).trim()
+  const tail = body.slice(cut + 2)
+  if (countOccurrences(tail, "=>") < 2) return undefined
+  const candidates: { oldText: string; newText: string }[] = []
+  let from = 0
+  for (;;) {
+    const at = tail.indexOf("=>", from)
+    if (at < 0) break
+    const oldText = tail.slice(0, at).trim(), newText = tail.slice(at + 2).trim()
+    if (oldText.length > 0 && countOccurrences(fileText, oldText) === 1) candidates.push({ oldText, newText })
+    from = at + 2
+  }
+  // أكثرُ من مرشّحٍ يظهر مرّةً: الأطولُ هو الفاصل — القصيرُ بادئتُه (مثل «.then(data» أمام «.then(data => {\n setModels(data)»)، وما بعد
+  // الفاصل الحقيقيّ لا يظهر في الملفّ. وتعادلُ الطول لا يُحسم (لا تخمين).
+  if (candidates.length === 0) return undefined
+  candidates.sort((a, b) => b.oldText.length - a.oldText.length)
+  if (candidates.length > 1 && candidates[0]!.oldText.length === candidates[1]!.oldText.length) return undefined
+  const all = head.startsWith(`${EDIT_ALL_FLAG} `) || head.endsWith(` ${EDIT_ALL_FLAG}`)
+  const target = head.replace(new RegExp(`^${EDIT_ALL_FLAG}\\s+|\\s+${EDIT_ALL_FLAG}$`, "u"), "").trim()
+  return { target, oldText: candidates[0]!.oldText, newText: candidates[0]!.newText, all }
+}
+
 export const countOccurrences = (haystack: string, needle: string): number =>
   needle.length === 0 ? 0 : haystack.split(needle).length - 1
 

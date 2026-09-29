@@ -89,7 +89,8 @@ describe("S11 — الاعتمادُ يُفحص عند القبول قبل أو�
     expect(cliSource).toContain("{ parseRef: Providers.parseRef, providerOf: Providers.provider, hasCredential: hasProviderKey },")
     expect(cliSource).toContain('language: settingsAtTurn.language ?? "en" },')
     expect(cliSource).toContain("if (admission.failure !== undefined) throw new Error(admission.failure)")
-    expect(cliSource).toContain("if (admission.notice !== undefined) await emitEvent(turn.id, `⚠ ${admission.notice}`)")
+    // 09-29: رفضُ قائمة المزوّدين المخصّصين يُلحق بالتنبيه باسمه — «unresolvable reference» وحدَه أخفى مدخلاً مكرّراً عن المالك.
+    expect(cliSource).toContain("if (admission.notice !== undefined) await emitEvent(turn.id, `⚠ ${admission.notice}${customProviderRefusals.length > 0 ? ` — المزوّدون المخصّصون غيرُ مسجّلين: ${customProviderRefusals.join(\"؛ \")}` : \"\"}`)")
     expect(cliSource).toContain("if (admission.selected !== undefined && admission.selected !== selectedModel.ref) selectedModel = selectionOf(admission.selected, selectedModel.lane) ?? selectedModel")
     expect(cliSource).toContain("const ladder = ownerRungs.filter((rung) => admission.ladder.includes(rung.ref))")
     expect(cliSource).toContain("shotRoute(visionAdmitted ? loadSettings() : { ...loadSettings(), visionModel: undefined })")

@@ -96,7 +96,7 @@ describe("S13.5 — الإعلان يساوي الإذن", () => {
     // والقائمةُ **دالّةٌ حيّة** لا لقطة: مصدرٌ واحدٌ يُسجَّل مرّةً بجوار الخريطة
     // نفسها التي يخدمها `externalTool`، فلا موضعَ تحديثٍ يُنسى ولا مزوّدٌ ميتٌ
     // يبقى معلَناً (هو يُفرغ أدواته عن نفسه). ولا لقطةَ بقيت في الملفّ.
-    expect(source).toContain("setExternalToolSource(() => [...externals.values()].flatMap((s) => s.tools()))")
+    expect(source).toContain("setExternalToolSource(() => {")
     expect(source.match(/setExternalToolSource\(/gu)).toHaveLength(1)
     expect(source).not.toContain("setAdvertisedExternalTools")
     // والصيغةُ تُنسب حيث يُنسب الاسم (`mind/external.ts`) لا هنا — وإلّا رمى
@@ -110,7 +110,7 @@ describe("S13.5 — الإعلان يساوي الإذن", () => {
 
 describe("S13.5 — إصلاح عيب التحرير موصولٌ في المسارين", () => {
   test("المسار النصّيّ يمرّ بوحدة التطابق، ولا استبدالَ بسلسلةٍ بقي", () => {
-    expect(source).toContain("const plan = parseEditCommand(rest)")
+    expect(source).toContain("let plan = parseEditCommand(rest)")
     expect(source).toContain("const applied = applyEdit(before, plan)")
     // م11 (09-14): الرفضُ يحمل ذيلَ التصعيد؛ الحكمُ (رفض/خطأ صيغة) كما كان.
     expect(source).toContain("if (!applied.ok) { const why = applied.why + editRefusals.refused(turnId, checked0.abs, railTier, before.length); return applied.occurrences > 1 ? refused(why) : invalid(why) }")

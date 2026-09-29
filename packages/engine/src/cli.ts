@@ -91,7 +91,7 @@ import { admitCredentials } from "./credential-admission"
 import { PROBE_OUTPUT_TOKENS, probeProvider } from "./provider-probe"
 import { AGENT_DIR, AGENT_FILE_RE, BUILTIN_AGENT_FILES, buildAgentCatalogue, describeAgents, describeAgentsBrief, findAgent, type AgentCatalogue, type AgentDefinition } from "./agent-definitions"
 import { DELEGATE_TOOL, MAX_DELEGATION_DEPTH, NESTED_TEAM_MAX, childToolRefusal, parseDelegateCommand, renderDelegateReport, runDelegatedAgent } from "./delegation"
-import { applyEdit, countOccurrences, nearestHint, parseEditCommand } from "./edit-match"
+import { applyEdit, countOccurrences, nearestHint, parseEditCommand, resolveAmbiguousEdit } from "./edit-match"
 import { EditRefusalTracker, SHRINK_FLAG, shrinkViolation } from "./adaptive-write-guards"
 import { fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine, narratedToolCalls } from "./fabricated-output-guard"
 import { bracketDeleteNote } from "./powershell-bracket-guard"
@@ -147,7 +147,7 @@ import { moduleResolutionHints } from "./module-resolution-hint"
 import { errorPlaybookHints } from "./error-playbooks"
 import { ManagedServers, devPortHint, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
-import { brokenAliasViolation, dangerousShellViolation, killByNameViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
+import { brokenAliasViolation, dangerousShellViolation, fileWriteViaShellViolation, killByNameViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
 import { redactSecretValues, secretInCommandViolation, secretInSourceViolation, sweepResidualSecrets } from "./secret-command-guard"
 import { duplicateCapabilityViolation } from "./duplicate-capability-guard"
 import { gitChanges, gitState } from "./git-state"
@@ -2598,7 +2598,13 @@ const runServeShell = async (): Promise<void> => {
   // S13.5 (إصلاح) — الإعلانُ يقرأ **المصدر الحيّ** لحظةَ بناء الطلب. لقطةٌ
   // تُكتب عند التوصيل والفصل كانت تبقى تُعلن أدواتِ مزوّدٍ مات (وهو يُفرغها عن
   // نفسه)، فتفترق عمّا يخدمه `externalTool` أدناه. مصدرٌ واحدٌ يخدم الاثنين.
-  setExternalToolSource(() => [...externals.values()].flatMap((s) => s.tools()))
+  setExternalToolSource(() => {
+    // 09-29: أدواتُ إضافة المتصفّح لا تُعرض للنموذج إلا مع «browser extension» — ما لا يُعرض لا يُغري.
+    const s0 = loadSettings()
+    const chromeBridgeId = (s0.mcpServers ?? []).find((s) => s.command.includes("mcp-chrome-bridge"))?.id
+    const hideChrome = chromeBridgeId !== undefined && (s0.browserBackend ?? "owned") !== "extension"
+    return [...externals.values()].flatMap((s) => s.tools()).filter((t) => !(hideChrome && t.name.startsWith(`${chromeBridgeId}.`)))
+  })
   const externalTool = (word: string) => {
     const dot = word.indexOf(".")
     if (dot <= 0) return undefined
@@ -3117,7 +3123,16 @@ const runServeShell = async (): Promise<void> => {
       // متكرّرة بصمت (والنموذج يبني على «عُدّل» وهو لم يُعدَّل حيث ظنّ)،
       // ويفسّر `$&` في البديل مرجعاً. التحليل والتطابق صارا في وحدةٍ خالصة:
       // التطابق فريدٌ أو نيّةٌ معلَنة بـ--all، والاستبدال حرفيّ.
-      const plan = parseEditCommand(rest)
+      let plan = parseEditCommand(rest)
+      // 09-29: «فاصلٌ ملتبس» (أكثرُ من =>) يُحسم بالملفّ نفسِه حين يظهر قديمٌ واحد فيه مرّةً واحدة — وإلا يبقى الرفض.
+      if (typeof plan === "string" && plan.startsWith("فاصلٌ ملتبس")) {
+        const headOnly = rest.trim().slice(0, rest.trim().indexOf("::")).replace(/(?:^--all\s+|\s+--all$)/u, "").trim()
+        const probe = brokerPath(headOnly)
+        if (probe.ok && existsSync(probe.abs)) {
+          const resolved = resolveAmbiguousEdit(rest, readFileSync(probe.abs, "utf-8"))
+          if (resolved !== undefined) plan = resolved
+        }
+      }
       if (typeof plan === "string") return invalid(plan)
       target = plan.target
       const checked0 = brokerPath(target)
@@ -3480,6 +3495,12 @@ const runServeShell = async (): Promise<void> => {
     // T12: أداةٌ خارجيّة — نفس البوابة، وصنفُها من إعلانها (المجهول command)
     const ext = externalTool(word)
     if (ext !== undefined) {
+      // 09-29 (بلاغُ المالك: «نوافذ في متصفّحي»): أدواتُ إضافة المتصفّح (chrome.*) تعمل في تبويب المستخدم الحقيقيّ — لا تُستدعى
+      // إلا حين يختار المستخدمُ «browser extension»؛ مع المتصفّح المملوك الطريقُ open/page/shot ولوحُ التطبيق.
+      const chromeBridgeId = (loadSettings().mcpServers ?? []).find((s) => s.command.includes("mcp-chrome-bridge"))?.id
+      if (chromeBridgeId !== undefined && word.startsWith(`${chromeBridgeId}.`) && (loadSettings().browserBackend ?? "owned") !== "extension") {
+        return invalid(`رُفض ${word}: متصفّحُ الوكيل المختار هو المملوك (لوحُ التطبيق) — استعمل open/page/shot/tap؛ أدواتُ ${chromeBridgeId}.* لتبويب المستخدم فقط بعد «browser extension».`)
+      }
       const ok = await gate(turnId, ext.effect, `أداةٌ خارجية ${word}: ${rest0.slice(0, 80)}`, word)
       if (!ok) return denied(`رُفض ${word} — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
       const session = externals.get(word.slice(0, word.indexOf(".")))!
@@ -5368,6 +5389,9 @@ const runServeShell = async (): Promise<void> => {
     // كتالوج 8.14/الحذف الهدّام/جلب-ونفّذ: صيغ صدفةٍ خاطئة أو خطرة.
     const dangerous = violationAcrossVariants(cmd, dangerousShellViolation)
     if (dangerous !== undefined) return refused(dangerous)
+    // 09-29: كتابةُ شيفرةٍ عبر Set-Content/echo > تدخل حلقةَ هروب — الأداةُ write هي الطريق.
+    const shellWrite = violationAcrossVariants(cmd, fileWriteViaShellViolation)
+    if (shellWrite !== undefined) return refused(shellWrite)
     // كتالوج 1.13: أوامر المراقبة لا تعود فتعلق الجولة (vitest بلا run، --watch، tail -f).
     const watchMode = violationAcrossVariants(cmd, watchModeViolation)
     if (watchMode !== undefined) return refused(watchMode)
@@ -5571,6 +5595,8 @@ const runServeShell = async (): Promise<void> => {
     emit(remoteStatusFrame())
   }
   planPublisher = emit // ذ9د — لوحُ الخطّة يُبثّ على قناة القشرة نفسها منذ تعريفها (الترحيبُ الأوّل يُستهلك في المصادقة قبل الحلقة).
+  // 09-29: رفضُ قائمة المزوّدين المخصّصين (عند الإقلاع أو الحفظ) يُذكر باسمه في تنبيه القبول — لا «unresolvable reference» وحدَه.
+  let customProviderRefusals: readonly string[] = []
   const vaultStatus = createVaultStatusReporter({
     providers: () => Providers.listProviders().filter(p => p.vaultKey !== undefined).map(p => p.id),
     hasCredential: hasProviderKey,
@@ -5630,7 +5656,8 @@ const runServeShell = async (): Promise<void> => {
     // ولا يمرّ به إطارٌ أبداً.
     const warnLine = (line: string): void => { process.stderr.write(`${line}\n`) }
     for (const refusal of publishVaultLocation(process.env)) warnLine(`[vault] ${refusal}`)
-    for (const refusal of applyCustomProviders(s.customProviders)) warnLine(`[custom-provider] ${refusal}`)
+    customProviderRefusals = applyCustomProviders(s.customProviders)
+    for (const refusal of customProviderRefusals) warnLine(`[custom-provider] ${refusal}`)
     // تثبيتٌ مشوَّه من البيئة يُسمَّى مرةً ولا يُطبَّق أبداً — «الغياب رفضٌ لا إذن».
     for (const refusal of resolvePlugins(s.plugins, process.env).refusals) warnLine(`[plugins] ${refusal}`)
     const startupModel = typeof s.chatModel === "string" ? s.chatModel : s.model
@@ -6270,6 +6297,7 @@ const runServeShell = async (): Promise<void> => {
       // الالتزام من المحفوظ لا من الرقعة: القائمة الكاملة بعد الدمج هي
       // ما يُسجَّل ويُعلَن للعامل — رقعةٌ بلا customProviders لا تمسح شيئاً.
       const providerRefusals = patch.customProviders === undefined ? [] : applyCustomProviders(next.customProviders)
+      if (patch.customProviders !== undefined) customProviderRefusals = providerRefusals
       if (providerRefusals.length > 0) emit({ kind: "refused", why: `تسجيل ما بعد الحفظ: ${providerRefusals.join("؛ ")}` })
       const primaryModel = next.chatModel ?? next.model
       if (typeof primaryModel === "string") {
@@ -7022,7 +7050,7 @@ const runServeShell = async (): Promise<void> => {
         { parseRef: Providers.parseRef, providerOf: Providers.provider, hasCredential: hasProviderKey },
       )
       if (admission.failure !== undefined) throw new Error(admission.failure)
-      if (admission.notice !== undefined) await emitEvent(turn.id, `⚠ ${admission.notice}`)
+      if (admission.notice !== undefined) await emitEvent(turn.id, `⚠ ${admission.notice}${customProviderRefusals.length > 0 ? ` — المزوّدون المخصّصون غيرُ مسجّلين: ${customProviderRefusals.join("؛ ")}` : ""}`)
       if (admission.selected !== undefined && admission.selected !== selectedModel.ref) selectedModel = selectionOf(admission.selected, selectedModel.lane) ?? selectedModel
       const visionAdmitted = admission.vision !== undefined
       const ladder = ownerRungs.filter((rung) => admission.ladder.includes(rung.ref))

@@ -169,7 +169,12 @@ export function syncCustomProviders(list: readonly CustomProviderSettings[], opt
     if (typeof definition === "string") return [definition]
     if (registry.get(input.id) !== undefined) return [`المعرف «${input.id}» ملك مزوّد مُجمَّع — لا يمكن استبداله`]
     const endpoint = new URL(input.baseUrl).toString().replace(/\/$/u, "")
-    if (next.has(input.id) || endpoints.has(endpoint)) return ["معرف أو عنوان مزوّد مكرر"]
+    // 09-29 (مقيس على تطبيق المالك): مدخلٌ قديم فارغ «ddd» بعنوان NIM نفسِه أسقط القائمةَ كلَّها بصمت — ولم يعرف المالك إلا من «Vault key
+    // missing — nvidia2: unresolvable reference». الرفضُ يبقى للقائمة كلِّها (لا تسجيلَ جزئيّاً)، لكنّه يسمّي المدخلَ وما يكرّره.
+    if (next.has(input.id) || endpoints.has(endpoint)) {
+      const clash = next.has(input.id) ? `المعرّف` : `عنوان ${[...next.values()].find((p) => new URL(p.baseUrl).toString().replace(/\/$/u, "") === endpoint)?.id ?? "مزوّدٍ سابق"}`
+      return [`معرف أو عنوان مزوّد مكرر: «${input.id}» يكرّر ${clash} — احذف أحدهما من الإعدادات؛ القائمةُ كلُّها مرفوضة حتى يُحذف`]
+    }
     next.set(input.id, definition)
     endpoints.add(endpoint)
   }

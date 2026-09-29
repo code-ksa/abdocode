@@ -671,7 +671,8 @@ describe("serve convergence wiring", () => {
     // (u32) ويهدم القناة قبل ready. لا console.log في قشرة الخدمة أصلاً.
     expect(source).toContain("const warnLine = (line: string): void => { process.stderr.write(`${line}\\n`) }")
     expect(source).toContain("for (const refusal of resolvePlugins(s.plugins, process.env).refusals) warnLine(`[plugins] ${refusal}`)")
-    expect(source).toContain("for (const refusal of applyCustomProviders(s.customProviders)) warnLine(`[custom-provider] ${refusal}`)")
+    expect(source).toContain("customProviderRefusals = applyCustomProviders(s.customProviders)")
+    expect(source).toContain("for (const refusal of customProviderRefusals) warnLine(`[custom-provider] ${refusal}`)")
     const shellStart = source.indexOf("const framedStdio = process.env.ABDO_FRAMED_STDIO === \"1\"")
     expect(shellStart).toBeGreaterThan(0)
     expect(source.slice(shellStart)).not.toContain("console.log(`[")
@@ -1074,7 +1075,7 @@ describe("serve convergence wiring", () => {
     // S13.5: التحليلُ انتقل إلى وحدةٍ خالصة (`edit-match`) مع إصلاح عيب
     // «أوّل موضعٍ بصمت» — والفاصلُ هو هو (`"::"` عارياً)، فيبقى `writeTargetOf`
     // متّفقاً معه. الحرفُ يتبع المحلِّل حيث انتقل، ولا يُحذف.
-    expect(source).toContain("const plan = parseEditCommand(rest)")
+    expect(source).toContain("let plan = parseEditCommand(rest)")
     expect(editMatch).toContain('const cut = body.indexOf("::")')
     // (ج٢) وبادئةُ التخطّي مثبَّتةٌ على **منتجِها** لا على نفسها: تغييرُ نصّ
     // الإيصال في `cli.ts` كان يقلب «تُخطّى» إلى «كُتب» والسويتُ خضراء —

@@ -6,7 +6,7 @@
  * الحاليّ — فلو رُدّ الكود القديم سقط هذا الاختبار.
  */
 import { describe, expect, test } from "bun:test"
-import { EDIT_ALL_FLAG, applyEdit, countOccurrences, parseEditCommand } from "../src/edit-match"
+import { EDIT_ALL_FLAG, applyEdit, countOccurrences, parseEditCommand, resolveAmbiguousEdit } from "../src/edit-match"
 import { writeTargetOf } from "../src/turn-memory"
 
 const FILE = ["const a = value", "const b = value", "const c = value"].join("\n")
@@ -122,4 +122,19 @@ describe("edit — تحليل الأمر", () => {
       expect(writeTargetOf(command)).not.toBe(EDIT_ALL_FLAG)
     }
   })
+})
+
+test("09-29: the «=>» ambiguity is resolved against the file when exactly one split's old text occurs once", () => {
+  const file = "useEffect(() => {\n  fetch('/api/models')\n    .then(res => res.json())\n    .then(data => {\n      setModels(data)\n    })\n}, [])\n"
+  const cmd = "src/app/page.tsx ::     .then(data => {\n      setModels(data) =>     .then(data => {\n      setModels(Array.isArray(data) ? data : data.data)"
+  expect(typeof parseEditCommand(cmd)).toBe("string")
+  const plan = resolveAmbiguousEdit(cmd, file)!
+  expect(plan).toBeDefined()
+  expect(plan.target).toBe("src/app/page.tsx")
+  expect(plan.oldText).toBe(".then(data => {\n      setModels(data)")
+  expect(plan.newText).toBe(".then(data => {\n      setModels(Array.isArray(data) ? data : data.data)")
+  // التوأم: لا مرشّحَ يظهر في الملفّ ⇦ undefined (يبقى الرفض)، وأكثرُ من مرشّح ⇦ undefined
+  expect(resolveAmbiguousEdit(cmd, "nothing here")).toBeUndefined()
+  // الأطولُ يحسم: «a => b» يظهر مرّةً وهو أطول من «a» — الفاصلُ هو السهم الثاني
+  expect(resolveAmbiguousEdit("f.ts :: a => b => c", "a => b => c\n")).toEqual({ target: "f.ts", oldText: "a => b", newText: "c", all: false })
 })

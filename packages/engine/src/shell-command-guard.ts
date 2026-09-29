@@ -100,6 +100,20 @@ export function killByNameViolation(cmd: string): string | undefined {
   )
 }
 
+/**
+ * 09-29 (مقيس على تطبيق المالك): كتابةُ ملفِّ شيفرةٍ عبر الصدفة (Set-Content/Add-Content/Out-File/echo >) بحمولةٍ متعدّدة الأسطر
+ * دخلت حلقةَ هروبٍ من ٧ محاولات (`n و\n وعلاماتُ اقتباسٍ متداخلة) — بينما أداةُ write تكتب البايتات كما هي. الحارسُ يمسك
+ * الحمولةَ الشبيهةَ بالشيفرة أو متعدّدةَ الأسطر فقط؛ سطرٌ قصير مثل `echo ok > out.txt` يمرّ. `undefined` = نظيف.
+ */
+export function fileWriteViaShellViolation(cmd: string): string | undefined {
+  const writer = /\b(?:Set-Content|Add-Content|Out-File|sc|ac)\b[^\n]*?-(?:Path|LiteralPath)?\s*['"]?([^\s'"]+\.[A-Za-z0-9]+)/iu.exec(cmd) ?? /\becho\b[^\n]*?>>?\s*['"]?([^\s'"]+\.[A-Za-z0-9]+)/iu.exec(cmd)
+  if (writer === null) return undefined
+  const codeLike = /`n|\\n|\bimport\s|\bexport\s|\bfunction\b|\bconst\s|=>|[{};]\s*(?:`n|\\n)|<\/?[a-z]+>/iu.test(cmd)
+  const multi = (cmd.match(/>>/gu) ?? []).length >= 2 || cmd.length > 220
+  if (!codeLike && !multi) return undefined
+  return `رُفضت كتابةُ ملفٍّ عبر الصدفة (${writer[1]}): الهروبُ يكسر الحمولةَ متعدّدةَ الأسطر — استعمل الأداة: write ${writer[1]} <<< ثمّ محتوى الملفّ كما هو.`
+}
+
 /** أوامر خطرة أو بصيغة صدفةٍ خاطئة على PowerShell. `undefined` = نظيف. */
 export function dangerousShellViolation(cmd: string): string | undefined {
   // صيغة Linux على PowerShell (كتالوج 8.14 — يوسّع رفض runExec القائم).
