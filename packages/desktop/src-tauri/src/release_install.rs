@@ -311,4 +311,32 @@ mod tests {
             env!("CARGO_PKG_VERSION")
         ));
     }
+
+    /// مقيس 2026-09-29: لانشرُ 4.0.76 مرّ اختبارَ النصّ وفشل حيّاً (اقتباسُ Rust كسر السطر). هذا الاختبارُ يشغّل المسارَ
+    /// الحقيقيّ: «مثبِّت» زائفٌ (.cmd يكتب علامةً) يُطلَق عبر launch_installer ويُقاس أثرُه على القرص بعد المهلة.
+    #[test]
+    #[cfg(windows)]
+    fn launcher_really_starts_the_installer_after_the_delay() {
+        let dir = std::env::temp_dir().join(format!("abdo-launch-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("ran.txt");
+        let fake = dir.join("AbdoCode-0.0.0-x64-setup.cmd");
+        fs::write(
+            &fake,
+            format!("@echo off\r\necho %1 %2> \"{}\"\r\n", marker.display()),
+        )
+        .unwrap();
+        launch_installer(&fake).unwrap();
+        assert!(dir.join("AbdoCode-0.0.0-x64-setup.relaunch.cmd").exists());
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while !marker.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        let ran = fs::read_to_string(&marker).unwrap_or_default();
+        assert!(
+            ran.contains("/P") && ran.contains("/R"),
+            "installer did not run with /P /R: {ran:?}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
