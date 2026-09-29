@@ -327,7 +327,9 @@ export class ManagedServers {
         this.#running = this.#running.filter((p) => p.proc.pid !== proc.pid)
         // مهلةٌ قصيرة كي يصل آخرُ ما كُتب على الأنبوبين بعد الخروج.
         await Bun.sleep(150)
-        return `فشل تشغيل الخادم «${display}»: خرج برمز ${proc.exitCode} قبل الإنصات على ${port}.${tail.receipt()} أصلح السبب المذكور (البناء أو الإعداد أو الاعتماديات) قبل إعادة المحاولة — إعادةُ الأمر نفسِه بلا تغيير تعيد الفشلَ نفسَه.`
+        // 09-29: تأكيدُ libuv على مسارٍ قصير 8.3 (…~1) يُسمّى بسببه — لا «أصلح السبب» العامّ الذي أدار العاملَ على --poll وnpm install.
+        const shortPath = /Assertion failed: !_wcsnicmp\(filename, dir, dirlen\)/u.test(tail.receipt()) ? ` السببُ المقيس: مراقبُ ملفّات libuv يسقط على مسارٍ يحمل اسماً قصيراً 8.3 (مثل ABDELR~1) — شغّل الخادم من المسار الطويل للمجلّد (Get-Item .).FullName أو انقل المشروع خارج %TEMP%؛ لا يُصلحه --poll ولا npm install.` : ""
+        return `فشل تشغيل الخادم «${display}»: خرج برمز ${proc.exitCode} قبل الإنصات على ${port}.${tail.receipt()}${shortPath} أصلح السبب المذكور (البناء أو الإعداد أو الاعتماديات) قبل إعادة المحاولة — إعادةُ الأمر نفسِه بلا تغيير تعيد الفشلَ نفسَه.`
       }
     }
     killTree(managed)

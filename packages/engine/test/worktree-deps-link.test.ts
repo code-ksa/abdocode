@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { linkIgnoredDeps, unlinkIgnoredDeps } from "../src/exec-mode"
+import { linkIgnoredDeps, unlinkIgnoredDeps, worktreeRoot } from "../src/exec-mode"
 
 // 09-29 (مقيس على تطبيق المالك): عاملُ parallel بلا node_modules هرع إلى npm install كاملٍ — الوصلةُ تشارك الاعتماديات وتُفكّ قبل الإزالة.
 test("node_modules is linked into the worktree (junction/symlink), readable through the link, and unlinking leaves the base intact", () => {
@@ -25,4 +25,10 @@ test("node_modules is linked into the worktree (junction/symlink), readable thro
   unlinkIgnoredDeps([join(dir, "node_modules")])
   expect(existsSync(join(dir, "node_modules", "real.txt"))).toBe(true)
   rmSync(base, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true })
+})
+
+test("09-29: the worktree root is the long temp path — an 8.3 short name (ABDELR~1) breaks libuv file watchers in workers", () => {
+  const root = worktreeRoot()
+  expect(root.endsWith("abdocode-worktrees")).toBe(true)
+  if (process.platform === "win32") expect(/~\d[\\/]/u.test(root)).toBe(false)
 })

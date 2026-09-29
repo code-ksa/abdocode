@@ -7,7 +7,7 @@
  * القشرة. والفرقُ الوحيد أنّه **لا يملك من يوافق**: كلُّ طلب موافقةٍ يُرفض آليّاً ويُسجَّل في الخلاصة — CI لا يمنح إذناً
  * ضمنيّاً، والتوسعةُ باختيارٍ صريح (`--mode full-access`). ورمزُ الخروج يتبع النتيجة: 0 اكتمل، 1 توقّف بلا إكمال، 2 رُفض أو تعطّل.
  */
-import { existsSync, lstatSync, rmSync, rmdirSync, symlinkSync } from "node:fs"
+import { existsSync, lstatSync, realpathSync, rmSync, rmdirSync, symlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
@@ -157,6 +157,16 @@ const git = (cwd: string, args: readonly string[], env?: Record<string, string |
  * ويندوز، symlink على غيره) — قراءةٌ مشتركة لا نسخ، وتُفكّ الوصلةُ **قبل** إزالة الشجرة كي لا تُحذف الأصولُ عبرها.
  */
 export const LINKED_DEPENDENCY_DIRS: readonly string[] = ["node_modules"]
+/**
+ * 09-29 (مقيس على تطبيق المالك): `tmpdir()` على ويندوز يعود بالاسم القصير 8.3 (`C:\Users\ABDELR~1\…`) ومراقبُ ملفّات libuv يسقط
+ * عليه (`Assertion failed: !_wcsnicmp(filename, dir, dirlen)`) فيخرج `next dev` برمز 0 قبل الإنصات — والعاملُ يدور على --poll وnpm install.
+ * الجذرُ يُحلّ إلى المسار الطويل بـrealpathSync.native؛ وبتعذّره يبقى كما هو.
+ */
+export function worktreeRoot(): string {
+  let base = tmpdir()
+  try { base = realpathSync.native(base) } catch { /* يبقى القصير */ }
+  return join(base, "abdocode-worktrees")
+}
 export function linkIgnoredDeps(base: string, dir: string, progress: (line: string) => void): string[] {
   const linked: string[] = []
   for (const name of LINKED_DEPENDENCY_DIRS) {
@@ -188,7 +198,7 @@ export async function runExecInWorktree(options: ExecOptions, engineArgv: readon
   if (!top.ok) return fail(`--worktree يحتاج مستودعَ git: ${base} ليس فيه (${top.err.slice(0, 120)})`)
   const id = crypto.randomUUID().slice(0, 8)
   const branch = `abdocode/task-${id}`
-  const root = join(tmpdir(), "abdocode-worktrees")
+  const root = worktreeRoot()
   const dir = join(root, id), state = join(root, `${id}-state`)
   const added = git(top.out, ["worktree", "add", "-q", "-b", branch, dir, "HEAD"])
   if (!added.ok) return fail(`تعذّر إنشاءُ شجرة العمل: ${added.err.slice(0, 200)}`)
