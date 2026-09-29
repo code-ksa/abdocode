@@ -8634,6 +8634,24 @@ const projectScriptNames = (dir: string): readonly string[] | undefined => {
     return Object.keys(parsed.scripts ?? {})
   } catch { return undefined }
 }
+/** صيغةُ الكتل «id: X / action: Y / after: Z» تُطوى إلى «X: Y [after: Z]»؛ وبلا سطر id: تعود الأسطرُ كما هي. */
+const planBlockFormToLines = (lines: readonly string[]): string[] => {
+  if (!lines.some((l) => /^id\s*:/iu.test(l))) return [...lines]
+  const out: string[] = []
+  let cur: { id: string; action: string; after: string } | undefined
+  const flush = () => { if (cur) out.push(`${cur.id}: ${cur.action}${cur.after ? ` [after: ${cur.after}]` : ""}`); cur = undefined }
+  for (const line of lines) {
+    const m = line.match(/^(id|action|step|after|بعد|depends(?:On|_on)?)\s*:\s*(.*)$/iu)
+    if (!m) { flush(); out.push(line); continue }
+    const key = m[1]!.toLowerCase(), value = m[2]!.trim()
+    if (key === "id") { flush(); cur = { id: value, action: "", after: "" } }
+    else if (cur === undefined) out.push(line)
+    else if (key === "action" || key === "step") cur.action = value
+    else cur.after = value
+  }
+  flush()
+  return out
+}
 /** الخطواتُ غيرُ المنجَزة — لبوّابة الخطّة حين يدّعي النموذجُ الاكتمال. */
 const planOpenSteps = (): readonly PlanStep[] => planForCurrentProject().filter((s) => s.state !== "done")
 /** 09-29 (LangGraph — الحافّةُ التقدّميّة): لا خطوةَ جارية وثمّة خطوةٌ جاهزة ⇦ تُبدأ أوّلُها تلقائياً؛ يعيد معرّفَها أو undefined. */
@@ -8657,7 +8675,10 @@ const planCommand = async (tail: readonly string[], body: string): Promise<strin
     if (marker?.index === undefined) return PLAN_USAGE
     const goalMatch = body.slice(0, marker.index).match(/plan\s+set\s+(.+)$/u)
     // 09-29 (مقيس على تطبيق المالك): النموذجُ يختم الكتلةَ بـ«>>>» مرّتين قبل أن يصيب — علامةُ إغلاقٍ وحدَها ليست خطوةً فتُهمَل.
-    const lines = body.slice(marker.index + marker[0].length).split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0 && !l.startsWith("#") && l !== ">>>")
+    const rawLines = body.slice(marker.index + marker[0].length).split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0 && !l.startsWith("#") && l !== ">>>")
+    // 09-29 (مقيس على 4.0.85): النموذجُ كتب الخطّةَ كتلاً «id: / action: / after:» فقرأها المحلّلُ خطواتٍ معرّفُها «id» ورفضها
+    // بـ«two steps share the id id». الكتلةُ تُطوى إلى سطرٍ واحد لكلّ خطوة قبل التحليل — صيغةٌ ثانية لا تعليمٌ ثانٍ.
+    const lines = planBlockFormToLines(rawLines)
     const steps: { id: string; action: string; dependsOn: string[] }[] = []
     for (const line of lines) {
       const idMatch = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/u)
