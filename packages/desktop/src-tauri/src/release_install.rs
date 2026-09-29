@@ -196,25 +196,26 @@ fn download_installer(app: &AppHandle, version: &str) -> Result<PathBuf, String>
 
 /// يشغّل المثبِّتَ منفصلاً عن التطبيق بوضع التقدّم وإعادةِ الفتح (`/P /R` من قالب NSIS) — **بعد مهلةٍ** تكفي لخروج التطبيق.
 ///
-/// مقيس 2026-09-28 مرّتين على التطبيق الحقيقيّ: (١) وسيطُ PowerShell كان يموت مع خروج التطبيق فلا يُثبَّت شيء؛ (٢) إطلاقُ
-/// المثبِّت مباشرةً بلا مهلة ثبّت الحمولةَ (المحرّكُ متوقّف) لكنّ `abdocode-desktop.exe` بقي قديماً — المثبِّتُ وصل إليه
-/// والتطبيقُ ما زال يقبضه لحظتَها، فبقي المضيفُ 4.0.73 فوق محرّك 4.0.75. الآن `cmd.exe` منفصلٌ (منفكٌّ عن أيّ Job، بلا
-/// نافذة، بلا مقابض موروثة) ينتظر ~4 ثوانٍ ثمّ يطلق المثبِّت؛ وإن بقي التطبيقُ حيّاً رغمها يُغلقه مديرُ إعادة التشغيل
-/// في الوضع الصامت/التقدّميّ بلا حوار.
+/// مقيس 2026-09-28/29 ثلاثَ مرّات على التطبيق الحقيقيّ: (١) وسيطُ PowerShell كان يموت مع خروج التطبيق فلا يُثبَّت شيء؛
+/// (٢) إطلاقُ المثبِّت مباشرةً بلا مهلة ثبّت الحمولةَ لكنّ `abdocode-desktop.exe` بقي قديماً — التطبيقُ ما زال يقبضه لحظتَها؛
+/// (٣) تمريرُ السطر `ping … & start "" "…" /P /R` وسيطاً لـ`cmd /c` **كسره اقتباسُ Rust**: الاقتباساتُ الداخليّة صارت `\"`
+/// فبقي `cmd.exe` معلّقاً ثلاثَ دقائق ولم يُطلَق المثبِّتُ قطّ (4.0.77 ⇦ 4.0.78 على تطبيق المالك). الآن يُكتب السطرُ في
+/// ملفّ `.cmd` بجانب المثبِّت ويُمرَّر مسارُه وحدَه — لا اقتباسَ يُعاد تفسيرُه. `cmd.exe` منفصلٌ (منفكٌّ عن أيّ Job، بلا نافذة)
+/// ينتظر ~4 ثوانٍ (`ping -n 5`) ثمّ يطلق المثبِّت؛ وإن بقي التطبيقُ حيّاً رغمها يُغلقه مديرُ إعادة التشغيل بلا حوار.
 fn launch_installer(path: &PathBuf) -> Result<(), String> {
     let installer = path.to_string_lossy().to_string();
-    if installer.contains('"')
-        || installer.contains('&')
-        || installer.contains('|')
-        || installer.contains('^')
-    {
+    if installer.contains('"') || installer.contains('%') || installer.contains('!') {
         return Err("مسارُ المثبِّت يحمل محارفَ لا تمرّ عبر cmd.".into());
     }
-    // `ping -n 5` ≈ 4 ثوانٍ بلا الحاجة إلى وحدة تحكّمٍ تفاعليّة (timeout.exe يرفض بلا stdin).
-    let script = format!("ping -n 5 127.0.0.1 >nul & start \"\" \"{installer}\" /P /R");
+    let script_path = path.with_extension("relaunch.cmd");
+    let script =
+        format!("@echo off\r\nping -n 5 127.0.0.1 >nul\r\nstart \"\" \"{installer}\" /P /R\r\n");
+    fs::write(&script_path, script).map_err(|e| format!("تعذّرت كتابةُ سكربت التشغيل: {e}"))?;
     let spawn = |flags: u32| {
         let mut cmd = Command::new("cmd.exe");
-        cmd.args(["/d", "/c", &script])
+        cmd.arg("/d")
+            .arg("/c")
+            .arg(&script_path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());

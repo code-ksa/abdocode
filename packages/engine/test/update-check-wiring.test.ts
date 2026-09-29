@@ -23,8 +23,13 @@ describe("update notifications — wiring", () => {
     expect(install).toContain('const RELEASE_BASE: &str = "https://github.com/code-ksa/abdocode/releases/download/";')
     expect(install).toContain("if actual != expected {")
     expect(install).toContain("crate::stop_engine(&app);")
-    expect(install).toContain('ping -n 5 127.0.0.1 >nul & start')
-    expect(install).toContain('/P /R')
+    // 09-29: السطرُ يُكتب في ملفّ .cmd ويُمرَّر مسارُه وحده — تمريرُه وسيطاً لـcmd /c كسره اقتباسُ Rust (\") فعلّق cmd ولم يُثبَّت شيء.
+    expect(install).toContain('let script_path = path.with_extension("relaunch.cmd");')
+    expect(install).toContain('ping -n 5 127.0.0.1 >nul\\r\\nstart \\"\\" \\"{installer}\\" /P /R')
+    expect(install).toContain("fs::write(&script_path, script)")
+    expect(install).toContain('.arg("/c")')
+    expect(install).toContain(".arg(&script_path)")
+    expect(install).not.toContain('cmd.args(["/d", "/c", &script])')
   })
   test("the feed is read from the public distribution repo only and foreign pages fall back", () => {
     expect(rust).toContain('pub(crate) const FEED_URL: &str = "https://raw.githubusercontent.com/code-ksa/abdocode-addons/main/release/abdocode-desktop.json";')
