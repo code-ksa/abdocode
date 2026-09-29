@@ -19,7 +19,11 @@ export function projectTestPassed(output: string, verdict?: ToolVerdict): boolea
   // فشلٌ صريح: «N failed» أو «# fail N» أو صيغةُ نود «fail N» (N ≥ 1).
   if (/no tests? (?:found|collected)|\b[1-9]\d*\s+(?:failed|fail)\b|(?:#[ \t]*)?\bfail(?:ed)?[ \t]+[1-9]\d*\b/iu.test(output)) return false
   // نجاحٌ صريح: «N passed» أو «# pass N» أو صيغةُ نود «pass N» (N ≥ 1).
-  return /(?:\b[1-9]\d*\s+(?:passed|pass)\b|(?:#[ \t]*)?\bpass(?:ed)?[ \t]+[1-9]\d*\b)/iu.test(output)
+  if (/(?:\b[1-9]\d*\s+(?:passed|pass)\b|(?:#[ \t]*)?\bpass(?:ed)?[ \t]+[1-9]\d*\b)/iu.test(output)) return true
+  // 09-29 — سكربتُ assert بلا عدّاء: يخرج 0 ويطبع «ok» أو «all tests passed» أو «✓» — نودُ نفسُه يعدّ الرميةَ فشلاً (رمز 1)،
+  // فرمزُ 0 مع علامة نجاحٍ صريحة نجاحٌ. مقيس: «△ بلا دليل» على `node test.js … ok` أهدر حقبتين فارغتين رغم التلميح.
+  // («✓» وحدها لا تكفي: `next build` يطبع «✓ Compiled successfully» وليس اختباراً.)
+  return /^\s*ok\b|\ball tests? passed\b|\btests? (?:passed|succeeded)\b|\b[1-9]\d*\s+passing\b/imu.test(output)
 }
 
 /** Project facts are schema-projected, not JSON cut off behind a long goal. */

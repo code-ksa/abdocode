@@ -74,3 +74,20 @@ describe("🔴 والمطابقُ لا يعبر سطراً — الفخُّ ال
     expect(projectTestPassed(NODE_FAIL, { ok: true })).toBe(false)
   })
 })
+
+// 09-29 — سكربتُ assert بلا عدّاء (`node test.js` يطبع «ok» ويخرج 0): نجاحٌ صريح، لا «بلا دليل» — أهدر حقبتين فارغتين رغم التلميح.
+describe("assert scripts without a runner", () => {
+  test("exit 0 plus an explicit success token passes; exit 0 with nothing, or with a failure marker, does not", () => {
+    const EXIT0 = "\nانتهى الأمر برمز 0"
+    for (const out of ["Testing math...\nok" + EXIT0, "All tests passed" + EXIT0, "12 passing (40ms)" + EXIT0, "Tests passed." + EXIT0]) {
+      expect(projectTestPassed(out)).toBe(true)
+    }
+    expect(projectTestPassed("انتهى الأمر برمز 0")).toBe(false)
+    // «✓» وحدها ليست اختباراً: خرجُ next build.
+    expect(projectTestPassed("✓ Compiled successfully" + EXIT0)).toBe(false)
+    expect(projectTestPassed("token ok" + EXIT0)).toBe(false)
+    expect(projectTestPassed("ok\n1 failed" + EXIT0)).toBe(false)
+    expect(projectTestPassed("ok\nانتهى الأمر برمز 1")).toBe(false)
+    expect(projectTestPassed("No tests found\nok" + EXIT0)).toBe(false)
+  })
+})

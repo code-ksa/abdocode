@@ -99,6 +99,8 @@ export const TOOLS: readonly ToolSpec[] = [
   { name: "recipe", effect: "read", usage: "recipe [list | <slug> | forget <slug>]", summary: "وصفاتُ الإعداد المتعلَّمة من نجاحاتٍ سابقة (nginx/pm2/docker/سقالات flutter وexpo وswift…) محفوظةً سكربتاتٍ عند المستخدم وتعبر المشاريع — اقرأها قبل إعادة الاكتشاف؛ التشغيلُ عبر run", agentCallable: true, runner: "exec" },
   { name: "logs", effect: "read", usage: "logs <معرّف> [عدد الأسطر]", summary: "ذيلُ سجلّ تشغيلٍ خلفيّ (run --bg) وحالتُه: جارٍ أو انتهى برمز", agentCallable: true, runner: "exec" },
   { name: "stop", effect: "command", usage: "stop <معرّف>", summary: "إيقافُ تشغيلٍ خلفيّ بدأته هذه الجلسة مع شجرة عمليّاته", agentCallable: true, runner: "exec" },
+  // 09-29 — فحصُ خادم التطوير في نداءٍ واحد (كان كلُّ رابطٍ نداءَ نموذجٍ عبر Invoke-WebRequest، وأوّلُها ينفجر بلا -UseBasicParsing).
+  { name: "probe", aliases: ["افحص"], effect: "read", usage: "probe <رابط محلّي أو /مسار> [/مسار …]", summary: "فحصُ صفحات خادم التطوير المحلّيّ (localhost/127.0.0.1) كلِّها في نداءٍ واحد: رمزُ الحالة والحجم والنوع ومقتطف لكلّ رابط — بديلُ حلقات Invoke-WebRequest", agentCallable: true, runner: "exec" },
 
   { name: "patch", effect: "edit", usage: "patch <<< *** Begin Patch … *** End Patch", summary: "رقعةٌ متعدّدة الملفّات بصيغة Codex — تُترجَم إلى تحريراتنا المبوَّبة (سحابيّ فقط)", agentCallable: true, runner: "patch", cloudOnly: true },
   { name: "codemode", effect: "command", usage: "codemode <<< سطرٌ لكلّ أمر أدوات", summary: "تنفيذُ سيناريو أدواتٍ مكتوبٍ سطراً سطراً بالسجلّ وحده — كلّ خطوةٍ ببوّابتها (سحابيّ فقط)", agentCallable: true, runner: "patch", cloudOnly: true },

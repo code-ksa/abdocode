@@ -94,6 +94,8 @@ import { applyEdit, countOccurrences, nearestHint, parseEditCommand } from "./ed
 import { EditRefusalTracker, SHRINK_FLAG, shrinkViolation } from "./adaptive-write-guards"
 import { fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine, narratedToolCalls } from "./fabricated-output-guard"
 import { bracketDeleteNote } from "./powershell-bracket-guard"
+import { killByPidTargets, killRefusal, pidCommandLine, pidOwnedByProject } from "./process-ownership"
+import { probeTargets, probeUrls, renderProbe } from "./probe-targets"
 import { powershellCallOperatorRepair } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
 import { terminalDialectLine, toolVocabulary, browserBridgeHint, policyLine } from "./tool-vocabulary"
@@ -140,7 +142,7 @@ import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFr
 import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation } from "./project-dependency-guard"
 import { moduleResolutionHints } from "./module-resolution-hint"
 import { errorPlaybookHints } from "./error-playbooks"
-import { ManagedServers, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
+import { ManagedServers, devPortHint, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
 import { brokenAliasViolation, dangerousShellViolation, killByNameViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
 import { redactSecretValues, secretInCommandViolation, secretInSourceViolation, sweepResidualSecrets } from "./secret-command-guard"
@@ -3596,6 +3598,13 @@ const runServeShell = async (): Promise<void> => {
           const hit = recipeStore.get(verb)
           return hit === undefined ? invalid(`لا وصفةَ بالاسم «${verb.slice(0, 40)}» — recipe list للقائمة`) : okText(describeRecipe(hit, join(recipeStore.dir, `${hit.slug}.${hit.shell === "powershell" ? "ps1" : "sh"}`)))
         }
+        if (spec.name === "probe") {
+          // 09-29 — المضيفُ المحلّيّ وحده؛ الأصلُ الافتراضيّ منفذُ خادمٍ مُدار إن وُجد وإلا منفذُ الكومة.
+          const managedPort = turnServers.snapshot().find((s) => s.alive)?.port ?? devServers.snapshot().find((s) => s.alive)?.port ?? devPortHint(PROJECT_DIR) ?? 3000
+          const plan = probeTargets(rest, `http://127.0.0.1:${managedPort}`)
+          if (plan.urls.length === 0) return invalid(plan.refused.length > 0 ? `probe: لا رابطَ محلّيّاً صالحاً — رُفض: ${plan.refused.join("، ")}. الصيغة: ${spec.usage}` : `الصيغة: ${spec.usage}`)
+          return okText(renderProbe(await probeUrls(plan.urls), plan.refused))
+        }
         if (spec.name === "stop") {
           const run = backgroundRuns.get(rest.trim())
           if (run === undefined) {
@@ -5230,6 +5239,18 @@ const runServeShell = async (): Promise<void> => {
     // وأمرٌ يتجاوز حدَّ التحليل يُرفض ولا يُقال عنه نظيف.
     const killByName = violationAcrossVariants(cmd, killByNameViolation)
     if (killByName !== undefined) return refused(killByName)
+    // 09-29 — القتلُ بالرقم يُقاس: ما تديره النواة أو بدأته الجلسة يمرّ، وما سواه يُسأل عن سطر أوامره فيمرّ إن كان في المشروع.
+    const pidTargets = killByPidTargets(cmd)
+    if (pidTargets.length > 0) {
+      const owned = new Set<number>([
+        ...turnServers.snapshot().flatMap((s) => (s.pid === undefined ? [] : [s.pid])),
+        ...devServers.snapshot().flatMap((s) => (s.pid === undefined ? [] : [s.pid])),
+        ...[...backgroundRuns.values()].map((r) => r.pid),
+      ])
+      const query = (pid: number) => pidCommandLine(pid, (argv) => { const r = Bun.spawnSync(argv, { stdout: "pipe", stderr: "pipe", timeout: 8_000 }); return { ok: r.exitCode === 0, stdout: new TextDecoder().decode(r.stdout) } })
+      const foreign = pidTargets.filter((pid) => !pidOwnedByProject(pid, PROJECT_DIR, owned, query))
+      if (foreign.length > 0) return refused(killRefusal(foreign))
+    }
     // كتالوج 6.1: curl/wget المستعارتان المشوّهتان في PowerShell.
     const brokenAlias = violationAcrossVariants(cmd, brokenAliasViolation)
     if (brokenAlias !== undefined) return refused(brokenAlias)

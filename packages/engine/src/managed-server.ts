@@ -317,7 +317,7 @@ export class ManagedServers {
         managed.listenerPid = listenerOf(port)
         return (
           `⚙ الخادم يعمل تحت إدارة النواة: «${display}» على http://127.0.0.1:${port} (pid ${managed.listenerPid ?? proc.pid}).${leaseNote}\n` +
-          `افحصه الآن بـInvoke-WebRequest -UseBasicParsing. سيُوقف تلقائياً عند نهاية الدور — لا توقفه بـStop-Process الأعمى؛ لإيقافه أو إعادة تشغيله: stop ${managed.listenerPid ?? proc.pid}، وسجلّه: logs ${managed.listenerPid ?? proc.pid}.`
+          `افحصه الآن بـprobe / /المسار… (نداءٌ واحد لكلّ الصفحات) لا بحلقة Invoke-WebRequest. سيُوقف تلقائياً عند نهاية الدور — لا توقفه بـStop-Process الأعمى؛ لإيقافه أو إعادة تشغيله: stop ${managed.listenerPid ?? proc.pid}، وسجلّه: logs ${managed.listenerPid ?? proc.pid}.`
         )
       }
       if (proc.exitCode !== null) {

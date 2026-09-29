@@ -320,3 +320,21 @@ describe("narrated ⚙ calls are executed, not merely corrected (09-29)", () => 
     expect(source).toContain("diagnosis += bracketDeleteNote(cmd, PROJECT_DIR, existsSync)")
   })
 })
+
+describe("kill-by-pid ownership and the probe tool (09-29)", () => {
+  test("a by-pid kill is measured against managed servers, background runs, and the process command line before it runs", () => {
+    expect(source).toContain("const pidTargets = killByPidTargets(cmd)")
+    const at = source.indexOf("const pidTargets = killByPidTargets(cmd)")
+    const block = source.slice(at, at + 1400)
+    expect(block).toContain("turnServers.snapshot()")
+    expect(block).toContain("devServers.snapshot()")
+    expect(block).toContain("[...backgroundRuns.values()].map((r) => r.pid)")
+    expect(block).toContain("pidOwnedByProject(pid, PROJECT_DIR, owned, query)")
+    expect(block).toContain("return refused(killRefusal(foreign))")
+    expect(at).toBeGreaterThan(source.indexOf("if (killByName !== undefined) return refused(killByName)"))
+  })
+  test("probe is an exec tool that plans loopback-only targets and renders one receipt", () => {
+    expect(source).toContain('if (spec.name === "probe") {')
+    expect(source).toContain("return okText(renderProbe(await probeUrls(plan.urls), plan.refused))")
+  })
+})
