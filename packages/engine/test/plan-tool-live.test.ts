@@ -82,7 +82,8 @@ test.skipIf(process.platform !== "win32")("plan: set/start/done/fail/show with r
     expect(done[0]).toContain("(1/3 منجزة)")
     expect(done[0]).toContain("✓ s1")
     expect(planFrames().at(-1).steps[0].state).toBe("done")
-    expect(await systemOfNextTurn()).toContain("لوحُ الخطّة: 1/3 منجزة — التالي: s2: اختبر")
+    // 09-29 (LangGraph): إنجازُ s1 يبدأ s2 تلقائياً — فالخلاصةُ تقول «جارية: s2» لا «التالي: s2».
+    expect(await systemOfNextTurn()).toContain("لوحُ الخطّة: 1/3 منجزة — جارية: s2")
     // إعادةُ تخطيطٍ تُسقط s1 المُثبَتة تُرفض؛ وإسقاطُ s3 غير المثبَتة مع إبقاء s1 يمرّ، تحفظ s1 حالتَها والهدفُ يبقى
     const dropProven = await turn("نفّذ: plan set <<<\ns2: اختبر\ns3: انشر [after: s2]")
     expect(dropProven[0]).toContain("إعادةُ التخطيط مرفوضة")

@@ -369,6 +369,12 @@ describe("LangGraph-style plan routing and the OpenJev-style browser next step (
     expect(source).toContain("const open = planOpenSteps()")
     expect(source).toContain('const touched = allCommands.some((c) => /^plan\\s+(?!show\\b)/u.test(c)) || open.some((s) => s.state === "running")')
     expect(source).toContain("↻ بوّابةُ الخطّة (${planStalls}/2)")
+    // الحافّةُ التقدّميّة: أوّلُ أداةِ عملٍ بعد لمس الخطّة تبدأ الجاهزةَ الأولى، وplan done يبدأ التالية.
+    expect(source).toContain("const planAutoStart = (): string | undefined => {")
+    expect(source).toContain('const started = head === "done" ? planAutoStart() : undefined')
+    expect(source).toContain("▶ الخطّة: بدأت الخطوةُ «${startedStep}» تلقائياً مع أوّل أداة")
+    // اللمسُ يُقرأ من إيصالات الحقبة الجارية أيضاً — allCommands لا تُضاف إليها الحقبةُ إلا بعد انتهائها.
+    expect(source).toContain("[...allCommands, ...receipts.map((r) => r.command)].some((c) => /^plan\\s+(?!show\\b)/u.test(c))")
   })
   test("next reads the page's candidates, asks the decision model for one line, and executes only with --go through the same dispatcher", () => {
     expect(source).toContain('if (name === "next") {')

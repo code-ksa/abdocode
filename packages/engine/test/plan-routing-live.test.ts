@@ -65,6 +65,14 @@ test.skipIf(process.platform !== "win32")("plan routing: the completion gate nam
     // (٣) التوأمُ السالب: دورٌ يعرض اللوحَ فقط ويدّعي الاكتمال لا يُوجَّه.
     const t3 = await turn("نفّذ: plan show", "تمّ.")
     expect(t3.events.filter((e) => e.startsWith("↻ بوّابةُ الخطّة"))).toHaveLength(0)
+    // (٤) الحافّةُ التقدّميّة: خطّةٌ جديدة ثمّ أوّلُ أداةِ عمل ⇦ تبدأ a1 تلقائياً؛ وplan done a1 يبدأ a2 من نفسه.
+    const t4 = await turn("نفّذ: plan set تقدّم <<<\na1: اقرأ الحزمة\na2: اكتب الملخّص [after: a1]", "نفّذ: read package.json", "نفّذ: plan done a1", "نفّذ: plan show", "تمّ.", "تمّ.", "تمّ.")
+    expect(t4.events.some((e) => e.startsWith("▶ الخطّة: بدأت الخطوةُ «a1» تلقائياً مع أوّل أداة"))).toBe(true)
+    const done = t4.results.find((r) => r.includes("▶ بدأت الخطوةُ التالية تلقائياً: a2"))
+    expect(done).toBeDefined()
+    expect(done).toContain("✓ a1")
+    const last = t4.results.filter((r) => r.includes("الخطّة (1/2 منجزة)")).at(-1)
+    expect(last).toContain("▶ a2")
   } finally {
     child.kill(); await child.exited; server.stop(true); await errors
     for (let i = 0; i < 20; i += 1) { try { rmSync(base, { recursive: true, force: true }); break } catch { await Bun.sleep(250) } }

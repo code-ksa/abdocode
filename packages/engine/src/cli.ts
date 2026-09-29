@@ -7589,6 +7589,11 @@ const runServeShell = async (): Promise<void> => {
             tap?.observe(cmd, output, verdict, epoch)
             observeAcceptanceReceipt(cmd, output, verdict)
             // 09-29 (LangGraph): الخطوةُ الجارية تسقط بأداتها الفاشلة وسببها يُحفظ في اللوح — الرسمُ يتغيّر من الإيصال لا من الادّعاء.
+            // 09-29 (LangGraph): أوّلُ أداةِ عملٍ بعد خطّةٍ لمسها الدور بلا خطوةٍ جارية ⇦ تبدأ الخطوةُ الجاهزة الأولى تلقائياً.
+            if (!/^plan\b/u.test(cmd) && [...allCommands, ...receipts.map((r) => r.command)].some((c) => /^plan\s+(?!show\b)/u.test(c))) {
+              const startedStep = planAutoStart()
+              if (startedStep !== undefined) void emitEvent(turn.id, `▶ الخطّة: بدأت الخطوةُ «${startedStep}» تلقائياً مع أوّل أداة`)
+            }
             const toolFailed = verdict?.ok === false || (/^run\b/u.test(cmd) && !exitZero(output, verdict))
             if (toolFailed && !/^plan\b/u.test(cmd)) {
               const failure = verdict !== undefined && verdict.ok === false ? (verdict.detail ?? verdict.reason) : undefined
@@ -8624,6 +8629,17 @@ const planAutoFail = (reason: string): string | undefined => {
 }
 /** الخطواتُ غيرُ المنجَزة — لبوّابة الخطّة حين يدّعي النموذجُ الاكتمال. */
 const planOpenSteps = (): readonly PlanStep[] => planForCurrentProject().filter((s) => s.state !== "done")
+/** 09-29 (LangGraph — الحافّةُ التقدّميّة): لا خطوةَ جارية وثمّة خطوةٌ جاهزة ⇦ تُبدأ أوّلُها تلقائياً؛ يعيد معرّفَها أو undefined. */
+const planAutoStart = (): string | undefined => {
+  const plan = planForCurrentProject()
+  if (plan.length === 0 || plan.some((s) => s.state === "running")) return undefined
+  const { ready } = require("./mind/planner") as typeof import("./mind/planner")
+  const next = ready(plan)[0]
+  if (next === undefined) return undefined
+  sessionPlan = sessionPlan.map((s) => (s.id === next.id ? { ...s, state: "running" as const } : s))
+  publishPlan()
+  return next.id
+}
 const publishPlan = (): void => { planPublisher?.({ kind: "plan", turnId: "session", goal: planGoal || "الخطّة", steps: planForCurrentProject().map((s) => ({ id: s.id, cmd: s.action, action: s.action, state: s.state, dependsOn: s.dependsOn, ...(planReasons.has(s.id) ? { reason: planReasons.get(s.id) } : {}) })) }) }
 const planCommand = async (tail: readonly string[], body: string): Promise<string> => {
   const { validate, replan } = await import("./mind/planner")
@@ -8672,7 +8688,9 @@ const planCommand = async (tail: readonly string[], body: string): Promise<strin
     else planReasons.delete(id)
     sessionPlan = sessionPlan.map((s) => (s.id === id ? { ...s, state } : s))
     publishPlan()
-    return planBoardText()
+    // 09-29 (LangGraph): إنجازُ خطوةٍ يبدأ التاليةَ الجاهزة تلقائياً — الرسمُ يتقدّم بحافّته لا بأمرٍ ثانٍ.
+    const started = head === "done" ? planAutoStart() : undefined
+    return `${planBoardText()}${started === undefined ? "" : `\n▶ بدأت الخطوةُ التالية تلقائياً: ${started}`}`
   }
   return PLAN_USAGE
 }
