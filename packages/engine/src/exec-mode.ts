@@ -7,7 +7,7 @@
  * القشرة. والفرقُ الوحيد أنّه **لا يملك من يوافق**: كلُّ طلب موافقةٍ يُرفض آليّاً ويُسجَّل في الخلاصة — CI لا يمنح إذناً
  * ضمنيّاً، والتوسعةُ باختيارٍ صريح (`--mode full-access`). ورمزُ الخروج يتبع النتيجة: 0 اكتمل، 1 توقّف بلا إكمال، 2 رُفض أو تعطّل.
  */
-import { rmSync } from "node:fs"
+import { existsSync, lstatSync, rmSync, rmdirSync, symlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
@@ -151,6 +151,35 @@ const git = (cwd: string, args: readonly string[], env?: Record<string, string |
   return { ok: run.exitCode === 0, out: run.stdout.toString().trim(), raw: run.stdout.toString(), err: run.stderr.toString().trim() }
 }
 
+/**
+ * 09-29 (مقيس على تطبيق المالك — فكرةُ Verdent على مشروع Node): شجرةُ العمل تُنشأ من HEAD بلا `node_modules` (متجاهَلة في git)،
+ * فيفشل بناءُ العامل ويهرع إلى `npm install` كاملٍ في كلّ عامل. الاعتمادياتُ المتجاهَلة تُوصَل من المشروع الأصل وصلةً (junction على
+ * ويندوز، symlink على غيره) — قراءةٌ مشتركة لا نسخ، وتُفكّ الوصلةُ **قبل** إزالة الشجرة كي لا تُحذف الأصولُ عبرها.
+ */
+export const LINKED_DEPENDENCY_DIRS: readonly string[] = ["node_modules"]
+export function linkIgnoredDeps(base: string, dir: string, progress: (line: string) => void): string[] {
+  const linked: string[] = []
+  for (const name of LINKED_DEPENDENCY_DIRS) {
+    const src = join(base, name), dst = join(dir, name)
+    if (!existsSync(src) || existsSync(dst)) continue
+    try {
+      if (process.platform === "win32") {
+        const made = Bun.spawnSync(["cmd.exe", "/d", "/c", "mklink", "/J", dst, src], { stdout: "pipe", stderr: "pipe" })
+        if (made.exitCode !== 0) { progress(`⚠ تعذّر وصلُ ${name}: ${made.stderr.toString().trim().slice(0, 120)}`); continue }
+      } else symlinkSync(src, dst, "dir")
+      linked.push(dst)
+      progress(`🔗 ${name} موصولٌ من المشروع الأصل — لا تثبيتَ في كلّ عامل`)
+    } catch (error) { progress(`⚠ تعذّر وصلُ ${name}: ${String((error as Error).message ?? error).slice(0, 120)}`) }
+  }
+  return linked
+}
+/** فكُّ الوصلة وحدَها (rmdir على junction/symlink يزيل الرابط لا الهدف) — لا يُلمس ما ليس وصلة. */
+export function unlinkIgnoredDeps(links: readonly string[]): void {
+  for (const link of links) {
+    try { if (lstatSync(link).isSymbolicLink()) rmdirSync(link) } catch { /* وصلةٌ زالت أو لم تُنشأ */ }
+  }
+}
+
 export async function runExecInWorktree(options: ExecOptions, engineArgv: readonly string[], env: Record<string, string | undefined>, progress: (line: string) => void): Promise<ExecSummary> {
   const started = Date.now()
   const base = options.project ?? process.cwd()
@@ -164,6 +193,7 @@ export async function runExecInWorktree(options: ExecOptions, engineArgv: readon
   const added = git(top.out, ["worktree", "add", "-q", "-b", branch, dir, "HEAD"])
   if (!added.ok) return fail(`تعذّر إنشاءُ شجرة العمل: ${added.err.slice(0, 200)}`)
   progress(`🌿 فرعٌ معزول ${branch} في ${dir}`)
+  const links = linkIgnoredDeps(top.out, dir, progress)
   try {
     const summary = await runExec({ ...options, project: dir }, engineArgv, { ...env, ABDO_CODE_STATE_DIR: state }, progress)
     // 09-29 (كشفه اختبارُ الجودة الحيّ): `trim()` على خرج porcelain كان يأكل فراغَ أوّل سطرٍ (« M README.md» ⇦ «M README.md») فيصير
@@ -178,6 +208,7 @@ export async function runExecInWorktree(options: ExecOptions, engineArgv: readon
     }
     return { ...summary, worktree: { branch, ...(commit === undefined ? {} : { commit }), changedFiles: changed } }
   } finally {
+    unlinkIgnoredDeps(links)
     git(top.out, ["worktree", "remove", "--force", dir])
     rmSync(state, { recursive: true, force: true })
     // فرعٌ بلا إيداع ولا تغيير لا يُبقى أثراً.
