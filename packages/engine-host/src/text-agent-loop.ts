@@ -326,7 +326,7 @@ type CommandParse =
  * `team`/`delegate`/`plan`/`shot`/`scroll` مصنَّفةٌ «قراءة» في السجلّ لكنّها ليست منها: تُنجب أو تُغيّر حالة.
  * السقفُ أربعة: النافذةُ تحتمل، والزيادةُ تُخفي أيَّ نتيجةٍ قاد إلى أيّ خطوة.
  */
-const BATCH_CLASS = /^(?:read|list|ls|glob|grep|docs|recall|git|find|console|look|page|logs|status)\b/u
+const BATCH_CLASS = /^(?:read|list|ls|glob|grep|docs|recall|git|find|console|look|page|logs|status|probe)\b/u
 const BATCH_MAX = 4
 
 /**

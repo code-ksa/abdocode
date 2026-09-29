@@ -213,7 +213,7 @@ describe("turn budget wiring in the live cli path", () => {
   })
 
   test("TB-3: a turn-cap refusal of the semantic-verifier ask hands back turn_budget with its own ⏱ line instead of blaming the model", () => {
-    const verifierAsk = source.indexOf("const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], selectedModel)")
+    const verifierAsk = source.indexOf("const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], judge)")
     const trip = source.indexOf("if (turnMeter !== undefined && turnMeter.snapshot().tripped) {")
     const unjudged = source.indexOf("⚠ غير محكّم دلالياً: النموذج لم ينتج حكماً صالحاً")
     expect(verifierAsk).toBeGreaterThan(0)
@@ -336,5 +336,25 @@ describe("kill-by-pid ownership and the probe tool (09-29)", () => {
   test("probe is an exec tool that plans loopback-only targets and renders one receipt", () => {
     expect(source).toContain('if (spec.name === "probe") {')
     expect(source).toContain("return okText(renderProbe(await probeUrls(plan.urls), plan.refused))")
+  })
+})
+
+describe("ideas on our system (09-29): decision model, parallel worktree workers, merge", () => {
+  test("the three fixed-label judgments ask the decision model, which falls back to the turn model", () => {
+    expect(source).toContain("const resolveDecisionModel = (selected: ModelSelection): ModelSelection => {")
+    expect(source).toContain("return selectionOf(configured, selected.lane) ?? selected")
+    expect(source).toContain("}, [], reviewJudge)")
+    expect(source).toContain("}, [], resolveDecisionModel(selectedModel))")
+    expect(source).toContain("const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], judge)")
+    expect(source).toContain('"routerGate", "gateModel", "decisionModel", "plugins",')
+  })
+  test("parallel runs each task through runExecInWorktree with the parent's settings, and merge is --no-ff with abort on conflict", () => {
+    expect(source).toContain('if (spec.name === "parallel") {')
+    expect(source).toContain("const tasks = parseParallelTasks(body)")
+    expect(source).toContain('{ task, project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true }')
+    expect(source).toContain("{ ...process.env, ABDO_CODE_SETTINGS: SETTINGS_FILE }")
+    expect(source).toContain('if (spec.name === "merge") {')
+    expect(source).toContain('"merge", "--no-ff", "--no-edit", branch]')
+    expect(source).toContain('"merge", "--abort"]')
   })
 })

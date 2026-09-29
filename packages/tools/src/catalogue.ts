@@ -100,6 +100,9 @@ export const TOOLS: readonly ToolSpec[] = [
   { name: "logs", effect: "read", usage: "logs <معرّف> [عدد الأسطر]", summary: "ذيلُ سجلّ تشغيلٍ خلفيّ (run --bg) وحالتُه: جارٍ أو انتهى برمز", agentCallable: true, runner: "exec" },
   { name: "stop", effect: "command", usage: "stop <معرّف>", summary: "إيقافُ تشغيلٍ خلفيّ بدأته هذه الجلسة مع شجرة عمليّاته", agentCallable: true, runner: "exec" },
   // 09-29 — فحصُ خادم التطوير في نداءٍ واحد (كان كلُّ رابطٍ نداءَ نموذجٍ عبر Invoke-WebRequest، وأوّلُها ينفجر بلا -UseBasicParsing).
+  // 09-29 (فكرةُ Verdent): عمّالٌ متوازون في worktrees عبر exec --worktree، والدمجُ قرارٌ صريح.
+  { name: "parallel", aliases: ["بالتوازي"], effect: "command", usage: "parallel <<<\nمهمّة ١\nمهمّة ٢ (حتى ٤، سطرٌ لكلّ مهمّة مستقلّة)", summary: "عمّالٌ متوازون: كلُّ مهمّةٍ تُنفَّذ بمحرّكٍ كامل في git worktree وفرعٍ خاصّ بلا تزاحم، ويعود تقريرٌ بفروعها وملفّاتها — ثمّ merge لكلّ فرع", agentCallable: true, runner: "exec" },
+  { name: "merge", aliases: ["ادمج"], effect: "command", usage: "merge <فرع abdocode/task-XXXXXXXX>", summary: "دمجُ فرع عاملٍ متوازٍ في الفرع الحاليّ (--no-ff)؛ يُلغى تلقائياً عند التعارض — ابنِ واختبر بعد كلّ دمج", agentCallable: true, runner: "exec" },
   { name: "probe", aliases: ["افحص"], effect: "read", usage: "probe <رابط محلّي أو /مسار> [/مسار …]", summary: "فحصُ صفحات خادم التطوير المحلّيّ (localhost/127.0.0.1) كلِّها في نداءٍ واحد: رمزُ الحالة والحجم والنوع ومقتطف لكلّ رابط — بديلُ حلقات Invoke-WebRequest", agentCallable: true, runner: "exec" },
 
   { name: "patch", effect: "edit", usage: "patch <<< *** Begin Patch … *** End Patch", summary: "رقعةٌ متعدّدة الملفّات بصيغة Codex — تُترجَم إلى تحريراتنا المبوَّبة (سحابيّ فقط)", agentCallable: true, runner: "patch", cloudOnly: true },

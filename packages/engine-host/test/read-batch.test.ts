@@ -92,3 +92,10 @@ describe("ذ9و — حزمةُ القراءة في حلقة النصّ", () => {
     expect(h.asks[1]!.prompt).not.toContain("حزمة القراءة")
   })
 })
+
+// 09-29 — probe (فحصُ الصفحات) قارئٌ خالص: يجوز في حزمةٍ مع القراءات (فكرةُ Qwen-Agent: نداءاتٌ متوازية في ردٍّ واحد).
+test("probe joins a read batch", async () => {
+  const h = await run(["نفّذ: read package.json\nنفّذ: probe /\nنفّذ: list src", "تمّ."], { isCallable: (name: string) => ["read", "probe", "list"].includes(name) })
+  expect(h.dispatched).toEqual(["read package.json", "probe /", "list src"])
+  expect(h.rejections).toEqual([])
+})

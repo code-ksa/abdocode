@@ -96,6 +96,7 @@ import { fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine, 
 import { bracketDeleteNote } from "./powershell-bracket-guard"
 import { killByPidTargets, killRefusal, pidCommandLine, pidOwnedByProject } from "./process-ownership"
 import { probeTargets, probeUrls, renderProbe } from "./probe-targets"
+import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport } from "./parallel-workers"
 import { powershellCallOperatorRepair } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
 import { terminalDialectLine, toolVocabulary, browserBridgeHint, policyLine } from "./tool-vocabulary"
@@ -1235,6 +1236,9 @@ type Settings = {
   routerGate?: "off" | "cheap" | "auto"
   /** نموذج البوابة «مزوّد/نموذج»؛ غيابه أو فساده = نموذج حارة الدردشة كما يحلّه selectTurnModel. */
   gateModel?: string
+  /** 09-29 (فكرةُ OpenJev): نموذجُ القرار — يُستعمل للأحكام ذات التسميات الثابتة (المحكّم الدلاليّ، مراجعة Super Abdo، التفنيد) بدل
+   * نموذج الدور؛ غيابُه أو فسادُه = نموذجُ الدور. نموذجٌ صغير رخيص يكفي للحكم، والتوليدُ يبقى للكبير. */
+  decisionModel?: string
   /** ذ1 — نموذجُ الرؤية: يُختار حين يحمل الدورُ صوراً؛ بلا ضبطٍ يبقى نموذجُ الحارة ويُرفض صراحةً إن لم يقبل الصور. */
   visionModel?: string
   /** الفجوة #11 — نموذجُ توليد الصور «مزوّد/نموذج» (الافتراض qwen-token-plan/wan2.7-image). */
@@ -1317,7 +1321,7 @@ const SECRETISH = /sk-[A-Za-z0-9]{12,}|Bearer\s|[A-Za-z0-9_-]{40,}/
 // غير معروف» (سطر التحقّق أدناه). فشلٌ صامتٌ مزدوج: المِرساةُ تتحرّك في الشاشة
 // ولا تنجو من إعادة التشغيل، والرفضُ يظهر إشعاراً لا يربطه المستخدمُ بالسحب.
 // **حارسٌ يُفحص بعائده يمرّ وهو ينسى حقلاً — الفحصُ الحاكم يقرأ الملفّ.**
-const SETTINGS_KEYS = new Set<keyof Settings>(["model", "chatModel", "agentModel", "modelRole", "mode", "theme", "project", "railPolicy", "routerGate", "gateModel", "plugins", "language", "customProviders", "panelDocks", "mcpServers", "approvalTimeoutSeconds", "superAbdo", "projectInstructions", "computerUseEnabled", "desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnRenewals", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled", "semanticMemoryEnabled", "sensitiveMemoryEnabled", "projectRoots", "inferredMemoryEnabled", "modelLadder", "visionModel", "imageGenModel", "workMode", "priceTable", "sellPlan", "sessionAffinity"])
+const SETTINGS_KEYS = new Set<keyof Settings>(["model", "chatModel", "agentModel", "modelRole", "mode", "theme", "project", "railPolicy", "routerGate", "gateModel", "decisionModel", "plugins", "language", "customProviders", "panelDocks", "mcpServers", "approvalTimeoutSeconds", "superAbdo", "projectInstructions", "computerUseEnabled", "desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnRenewals", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled", "semanticMemoryEnabled", "sensitiveMemoryEnabled", "projectRoots", "inferredMemoryEnabled", "modelLadder", "visionModel", "imageGenModel", "workMode", "priceTable", "sellPlan", "sessionAffinity"])
 
 const loadSettings = (): Settings => {
   try {
@@ -1373,11 +1377,11 @@ const validateSettingsPatch = (value: Record<string, unknown>): Settings | strin
       .map((c) => (c as Record<string, unknown> | undefined)?.id)
       .filter((id): id is string => typeof id === "string"),
   )
-  for (const key of ["model", "chatModel", "agentModel", "gateModel", "visionModel"] as const) {
+  for (const key of ["model", "chatModel", "agentModel", "gateModel", "visionModel", "decisionModel"] as const) {
     const ref = value[key]
     if (ref === undefined) continue
     // ذ1: نموذجُ الرؤية اختياريّ — الفراغُ من اللوحة يعني «بلا نموذج رؤية» ويُحذف عند الحفظ، لا يُرفض بالاسم.
-    if (key === "visionModel" && ref === "") continue
+    if ((key === "visionModel" || key === "decisionModel") && ref === "") continue
     if (typeof ref !== "string" || ref.length > 512) return `${key} يحتاج مرجع مزوّد/نموذج صالحاً`
     if (Providers.parseRef(ref) !== undefined) continue
     const slash = ref.indexOf("/")
@@ -1598,6 +1602,12 @@ const ownerLadder = (): readonly ModelRung[] => {
   return Object.freeze(rungs.map((ref, index) => Object.freeze({ ref, why: `الدرجة ${index + 1} من سلّم المالك` })))
 }
 
+// 09-29 (فكرةُ OpenJev — فصلُ القرار عن التوليد): نموذجُ القرار للأحكام ذات التسميات الثابتة؛ غيابُه = نموذجُ الدور نفسُه.
+const resolveDecisionModel = (selected: ModelSelection): ModelSelection => {
+  const configured = loadSettings().decisionModel
+  if (typeof configured !== "string" || configured.length === 0) return selected
+  return selectionOf(configured, selected.lane) ?? selected
+}
 // IDEA 4 — نموذج البوابة: settings.gateModel إن صحّ مرجعه، وإلا نموذج حارة الدردشة
 // كما يحلّه selectTurnModel (المُختار إن كان دردشة، وإلا chatModel أو الافتراض).
 const resolveGateModel = (selected: ModelSelection): ModelSelection => {
@@ -3597,6 +3607,49 @@ const runServeShell = async (): Promise<void> => {
           if (verb === "forget") { const slug = more[0] ?? ""; return recipeStore.forget(slug) ? okText(`نُسيت الوصفة ${slug}.`) : invalid(`لا وصفةَ بالاسم «${slug.slice(0, 40)}»`) }
           const hit = recipeStore.get(verb)
           return hit === undefined ? invalid(`لا وصفةَ بالاسم «${verb.slice(0, 40)}» — recipe list للقائمة`) : okText(describeRecipe(hit, join(recipeStore.dir, `${hit.slug}.${hit.shell === "powershell" ? "ps1" : "sh"}`)))
+        }
+        if (spec.name === "parallel") {
+          // 09-29 (فكرةُ Verdent): عمّالٌ متوازون، كلٌّ محرّكٌ كامل في worktree وفرعٍ خاصّ (exec --worktree) — لا تزاحمَ كتابات،
+          // والدمجُ قرارٌ لاحق بـmerge. الإعداداتُ نفسُها (النموذج والمفاتيح)، والنمطُ نمطُ الإعدادات؛ الموافقاتُ تُرفض آليّاً في العامل.
+          const tasks = parseParallelTasks(body)
+          if (typeof tasks === "string") return invalid(tasks)
+          const top = Bun.spawnSync(["git", "-C", PROJECT_DIR, "rev-parse", "--show-toplevel"], { stdout: "pipe", stderr: "pipe" })
+          if (top.exitCode !== 0) return invalid("parallel يحتاج مستودعَ git في المشروع (git init ثمّ إيداعٌ أوّل) — العمّالُ يعملون في فروعٍ معزولة.")
+          const { runExecInWorktree } = await import("./exec-mode")
+          // شجراتُ عملٍ يتيمة من دورٍ قُطع أو قُتل أبوه تُقلَّم أوّلاً — لا تتراكم.
+          Bun.spawnSync(["git", "-C", PROJECT_DIR, "worktree", "prune"], { stdout: "pipe", stderr: "pipe" })
+          const workerMode = ((): "read-only" | "auto" | "full-access" => { const m = loadSettings().mode; return m === "read-only" || m === "full-access" ? m : "auto" })()
+          await emitEvent(turnId, `🧵 ${tasks.length} عمّالٍ متوازين في شجرات عملٍ معزولة (النمط ${workerMode}) — كلٌّ محرّكٌ كامل على فرعه`)
+          const outcomes = await Promise.all(tasks.map(async (task, i) => {
+            const s = await runExecInWorktree(
+              { task, project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true },
+              selfEngineArgv(),
+              { ...process.env, ABDO_CODE_SETTINGS: SETTINGS_FILE },
+              (line) => { void emitEvent(turnId, `🧵 [${i + 1}] ${line.slice(0, 200)}`) },
+            )
+            return {
+              task, outcome: s.outcome, ...(s.stop === undefined ? {} : { stop: s.stop }), durationMs: s.durationMs,
+              toolCount: s.tools.length, failedTools: s.tools.filter((t) => t.ok === false).length,
+              ...(s.worktree === undefined ? { changedFiles: [] as string[] } : { branch: s.worktree.branch, ...(s.worktree.commit === undefined ? {} : { commit: s.worktree.commit }), changedFiles: s.worktree.changedFiles }),
+              answer: s.answer, ...(s.reason === undefined ? {} : { reason: s.reason }), ...(s.gates === undefined ? {} : { gates: s.gates }),
+            }
+          }))
+          return okText(renderParallelReport(outcomes))
+        }
+        if (spec.name === "merge") {
+          const branch = rest.trim()
+          const refusal = mergeBranchRefusal(branch)
+          if (refusal !== undefined) return invalid(refusal)
+          const dirty = Bun.spawnSync(["git", "-C", PROJECT_DIR, "status", "--porcelain"], { stdout: "pipe", stderr: "pipe" })
+          if (new TextDecoder().decode(dirty.stdout).trim().length > 0) return invalid("merge يحتاج شجرةً نظيفة: أودع أو ألغِ التغييرات الحاليّة أوّلاً.")
+          const merged = Bun.spawnSync(["git", "-C", PROJECT_DIR, "merge", "--no-ff", "--no-edit", branch], { stdout: "pipe", stderr: "pipe" })
+          const out = `${new TextDecoder().decode(merged.stdout)}\n${new TextDecoder().decode(merged.stderr)}`.trim()
+          if (merged.exitCode !== 0) {
+            Bun.spawnSync(["git", "-C", PROJECT_DIR, "merge", "--abort"], { stdout: "pipe", stderr: "pipe" })
+            return { output: `تعذّر دمجُ ${branch} وأُلغي الدمج (الشجرة كما كانت):\n${out.slice(0, 1200)}\nحلّ التعارضَ يدويّاً: ادمج فرعاً واحداً ثمّ ابنِ ثمّ التالي.`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: out.slice(0, 160) } }
+          }
+          const stat = new TextDecoder().decode(Bun.spawnSync(["git", "-C", PROJECT_DIR, "diff", "--stat", "HEAD~1..HEAD"], { stdout: "pipe", stderr: "pipe" }).stdout).trim()
+          return okText(`✓ دُمج ${branch} في الفرع الحاليّ (--no-ff).\n${stat.slice(0, 1500)}\nابنِ واختبر الآن قبل الدمج التالي.`)
         }
         if (spec.name === "probe") {
           // 09-29 — المضيفُ المحلّيّ وحده؛ الأصلُ الافتراضيّ منفذُ خادمٍ مُدار إن وُجد وإلا منفذُ الكومة.
@@ -7905,11 +7958,12 @@ const runServeShell = async (): Promise<void> => {
             const verificationProblem = superAbdoVerificationProblem(superAbdo, superEvidence)
             let review: SemanticVerdict | undefined
             if (verificationProblem === undefined && superAbdo.independentReview) {
-              await emitEvent(turn.id, "Super Abdo: reviewing execution evidence in a separate context, with no tools.")
+              const reviewJudge = resolveDecisionModel(selectedModel)
+              await emitEvent(turn.id, `Super Abdo: reviewing execution evidence in a separate context, with no tools.${reviewJudge.ref === selectedModel.ref ? "" : ` 🧠 نموذجُ القرار: ${reviewJudge.ref}`}`)
               try {
                 const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), {
                   ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: SUPER_ABDO_REVIEW_SYSTEM,
-                }, [], selectedModel)
+                }, [], reviewJudge)
                 review = parseSuperAbdoReview(reply)
               } catch { review = undefined }
               if (hooks.signal?.aborted === true) { lastStop = "acceptance-pending"; break }
@@ -7931,7 +7985,7 @@ const runServeShell = async (): Promise<void> => {
                 const verdicts = await Promise.all(REFUTE_LENSES.map(async (lens) => {
                   const reply = await ask(buildRefutePrompt(effectiveGoal, loop.answer, allReceipts, lens), {
                     ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REFUTE_SYSTEM,
-                  }, [], selectedModel)
+                  }, [], resolveDecisionModel(selectedModel))
                   return parseRefutation(lens.key, typeof reply === "string" ? reply : String(reply))
                 }))
                 const outcome = judgeRefutations(verdicts)
@@ -7965,7 +8019,9 @@ const runServeShell = async (): Promise<void> => {
           if (verifierOn && verifierRejections < 2) {
             let verdict: SemanticVerdict | undefined
             try {
-              const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], selectedModel)
+              const judge = resolveDecisionModel(selectedModel)
+              if (judge.ref !== selectedModel.ref) await emitEvent(turn.id, `🧠 المحكّمُ الدلاليّ بنموذج القرار ${judge.ref}`)
+              const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], judge)
               verdict = parseVerdict(reply)
             } catch { verdict = undefined }
             // مقاطعة المشغّل أثناء التحكيم ليست «غير محكّم» — الدور يُحفظ

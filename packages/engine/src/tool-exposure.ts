@@ -7,7 +7,7 @@
 export const TOOL_FAMILIES: Readonly<Record<string, readonly string[]>> = Object.freeze({
   browser: ["ui", "page", "open", "tap", "fill", "shot", "scroll", "hover", "key", "find", "dismiss", "wait", "network", "console", "look", "surface", "browser", "bridge", "sessions", "history", "select", "upload", "drag", "tabs", "back", "forward", "design"],
   desktop: ["desk", "ui-book"],
-  delegation: ["team", "delegate", "handoff", "agents"],
+  delegation: ["team", "delegate", "handoff", "agents", "parallel", "merge"],
 })
 const FAMILY_OF = new Map<string, string>()
 for (const [family, names] of Object.entries(TOOL_FAMILIES)) for (const name of names) FAMILY_OF.set(name, family)

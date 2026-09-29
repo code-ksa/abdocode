@@ -336,7 +336,7 @@ describe("serve convergence wiring", () => {
     const desktop = await Bun.file(new URL("../../desktop/ui/index.html", import.meta.url)).text()
     expect(source).toContain('import { GATE_OUTPUT_TOKENS, buildGateSystem, condenseForGate, gateEligibility, gateEventLine, interpretGateTurn, normalizeArabic, parseGateMode, type GateDecision } from "./front-gate"') // ن4 (09-15): normalizeArabic لمطابقة wait
     // المفتاحان مسطّحان في Settings/SETTINGS_KEYS — لا بلاجين منطقي (اللوحة تسلسل [data-plugin] كمنطقيّات).
-    expect(source).toContain('"railPolicy", "routerGate", "gateModel", "plugins"')
+    expect(source).toContain('"railPolicy", "routerGate", "gateModel", "decisionModel", "plugins"')
     expect(source).toContain('routerGate?: "off" | "cheap" | "auto"')
     expect(source).toContain("gateModel?: string")
     expect(source).not.toContain("plugins?.routerGate")
@@ -353,7 +353,7 @@ describe("serve convergence wiring", () => {
     // التحقّق: قيمة مجهولة تُرفض بالاسم، وgateModel مرجعٌ كـchatModel.
     expect(source).toContain('if (value.routerGate !== undefined && value.routerGate !== "off" && value.routerGate !== "cheap" && value.routerGate !== "auto") return "routerGate غير معروف"')
     // ذ1: نموذجُ الرؤية مفتاحٌ خامس بالتحقّق نفسه.
-    expect(source).toContain('for (const key of ["model", "chatModel", "agentModel", "gateModel", "visionModel"] as const) {')
+    expect(source).toContain('for (const key of ["model", "chatModel", "agentModel", "gateModel", "visionModel", "decisionModel"] as const) {')
     // يُقرأ مرةً لكل دور؛ off = لا شيء آخر يُقيَّم: gateEligibility( تظهر مرةً واحدة وداخل كتلة gateMode !== "off".
     expect(source).toContain('const gateMode = parseGateMode(loadSettings().routerGate)')
     expect(source.match(/parseGateMode\(/gu)).toHaveLength(1)
@@ -663,7 +663,7 @@ describe("serve convergence wiring", () => {
     expect(source).toContain("const bumpsRevision = seamOnWrite && Object.prototype.hasOwnProperty.call(patch, \"plugins\")")
     expect(source).toContain("expectedPluginsRevision")
     expect(source).toContain("تعارض إعدادات الإضافات: قرأتَ المراجعة")
-    expect(source).toContain('"railPolicy", "routerGate", "gateModel", "plugins"')
+    expect(source).toContain('"railPolicy", "routerGate", "gateModel", "decisionModel", "plugins"')
     expect(source).not.toContain('"plugins", "pluginsRevision"')
     expect(source).toContain("pluginsRevision?: number")
     // تثبيتٌ مشوَّه من البيئة يُسمَّى مرةً عند الإقلاع ولا يُطبَّق — **على stderr**:
