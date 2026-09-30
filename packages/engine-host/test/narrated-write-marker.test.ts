@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { runTextAgentLoop } from "../src"
-import { healNarratedWrite } from "../src/text-agent-loop"
+import { healNarratedReads, healNarratedWrite } from "../src/text-agent-loop"
 
 const drive = async (replies: readonly string[]) => {
   const script = [...replies, "تم"]
@@ -48,5 +48,31 @@ describe("a whole write narrated with the receipt glyph", () => {
     expect(await drive(["⚙ run npm test\n✓ 12 pass\nline\nline"])).toEqual([])
     const prose = "كتبتُ الخطّة:\n⚙ write PLAN.md <<<\n# a\n# b\n# c"
     expect(healNarratedWrite(prose)).toBe(prose)
+  })
+})
+
+
+// 10-01 — الدور 15: حزمةُ قراءةٍ برمز ⚙ عُدّت جواباً نهائيّاً سبعَ حقب حتى مات الدور «duplicate».
+describe("a read batch sent with the receipt glyph", () => {
+  const callable = (name: string) => ["write", "read", "run", "list", "grep"].includes(name)
+  const driveReads = async (replies: readonly string[]) => {
+    const script = [...replies, "تم"]
+    const dispatched: string[] = []
+    await runTextAgentLoop({ input: "اقرأ", history: [], maxRounds: 6, ask: async () => script.shift()!, dispatch: async (command) => { dispatched.push(command); return `محتوى ${command}` }, isCallable: callable })
+    return dispatched
+  }
+
+  test("the measured reply — on one line or three, with or without the broken character — runs as three reads", async () => {
+    for (const reply of [
+      "\uFFFD⚙ read src/lib/api.ts ⚙ read src/components/ui/tabs.tsx ⚙ read src/app/models/page.tsx",
+      "⚙ read src/lib/api.ts\n⚙ read src/components/ui/tabs.tsx\n⚙ read src/app/models/page.tsx",
+    ]) expect(await driveReads([reply])).toEqual(["read src/lib/api.ts", "read src/components/ui/tabs.tsx", "read src/app/models/page.tsx"])
+  })
+
+  test("the twins: a receipt tail, prose around it, or a non-read verb are not healed", () => {
+    expect(healNarratedReads("⚙ read src/a.ts ✓ 12 سطراً")).toBe("⚙ read src/a.ts ✓ 12 سطراً")
+    expect(healNarratedReads("قرأتُ الملفّات:\n⚙ read src/a.ts")).toBe("قرأتُ الملفّات:\n⚙ read src/a.ts")
+    expect(healNarratedReads("⚙ run npm test")).toBe("⚙ run npm test")
+    expect(healNarratedReads("⚙ read a.ts\n⚙ run rm x")).toBe("⚙ read a.ts\n⚙ run rm x")
   })
 })

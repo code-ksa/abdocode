@@ -403,6 +403,20 @@ export const healNarratedWrite = (text: string): string => {
   return `نفّذ: ${m[1]}\n${m[2]}`
 }
 
+/**
+ * 10-01 — مقيس على مهمّة OpenRouter (الدور 15): ثلاثُ حقبٍ ردُّها «�⚙ read src/lib/api.ts ⚙ read src/components/ui/tabs.tsx ⚙ read src/app/models/page.tsx»
+ * — حزمةُ قراءةٍ برمز الإيصال بدل «نفّذ:». قاعدةُ «سطر سجلّ» لا تذكر read فعُدّ الردُّ جواباً نهائيّاً، ثمّ نفّذ الحارسُ السرديُّ القراءاتِ
+ * فوجدها مكرَّرة فقطع الحقبة — سبعُ حقبٍ حتى مات الدورُ «duplicate». ردٌّ **كلُّ** أسطره (أو مقاطعُ سطره بين ⚙) أوامرُ قراءةٍ خالصة
+ * برمز ⚙ هو حزمةُ قراءة: قراءةٌ لا أثرَ لها، فإيصالٌ منسوخ لا يضرّ؛ والسطرُ الذي يحمل ذيلَ إيصال (⏎ ✓ ✕ →) لا يُشفى.
+ */
+const GLYPH_HEAD = String.raw`[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]*⚙[\uFE0E\uFE0F]?\s+`
+const GLYPH_READ_LINE = new RegExp(String.raw`^${GLYPH_HEAD}((?:read|list|ls|glob|grep|docs|recall|look|page|probe|logs|status|ui-book\s+(?:list|show))\b[^⏎✓✕→\r\n]*)$`, "u")
+export const healNarratedReads = (text: string): string => {
+  const pieces = text.split(/\r?\n/u).flatMap((line) => line.split(/\s+(?=⚙)/u)).map((piece) => piece.trim()).filter((piece) => piece.length > 0)
+  if (pieces.length === 0 || !pieces.every((piece) => GLYPH_READ_LINE.test(piece))) return text
+  return pieces.map((piece) => `نفّذ: ${GLYPH_READ_LINE.exec(piece)![1]!.trim()}`).join("\n")
+}
+
 export const healCallMarker = (text: string): string => text
   .replace(/^([ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})?\s*)نفّ?\uFFFD\s*:/gmu, "$1نفّذ:")
   // مقيس 2026-09-28 (nemotron-120b يجيب بالإنجليزية لأنّ المالك فضّلها): كتب «Execute: write package.json <<<» —
@@ -460,7 +474,7 @@ const parseCommand = (text: string, verifiedEffect = false, seen = ""): CommandP
   // Arabic diacritics are optional orthography, not an execution boundary.
   // Normalize only an exact line-leading imperative plus colon; all ordinary
   // multi-call, payload and registered-tool checks still run afterwards.
-  const stripped = unwrapMarkdownCall(trimCallMarkerIndent(stripMeasure(healCallMarker(healNarratedWrite(text))))).replace(/^نفّ?ذ\s*:\s*/gmu, "نفّذ: ")
+  const stripped = unwrapMarkdownCall(trimCallMarkerIndent(stripMeasure(healCallMarker(healNarratedReads(healNarratedWrite(text)))))).replace(/^نفّ?ذ\s*:\s*/gmu, "نفّذ: ")
   if (stripped.startsWith("رُفض إخراج النموذج:")) return Object.freeze({ kind: "invalid", why: stripped })
   const fencedCommand = stripped.match(/^```(?:text)?\s*\r?\n(نفّذ:[\s\S]*?)\r?\n```$/iu)?.[1]
   // Some Qwen completions use a textual XML tool envelope even on the
