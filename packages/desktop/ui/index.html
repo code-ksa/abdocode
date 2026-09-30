@@ -4060,6 +4060,12 @@
 
     el("panego").onclick = () => paneGo();
     el("panesearch").onclick = () => paneGo(el("paneurl").value, true);
+    // KF-30: تنقّلٌ تبدأه الصفحةُ لا يمرّ بردّ التنقّل على ويندوز، فيحرسه القياسُ الدوريّ في الخلفيّة ويُرجع اللوحة.
+    // الرجوعُ الصامت يبدو عطلاً — يُسمّى هنا.
+    listen("pane-blocked", (e) => {
+      const blocked = String(e.payload?.url || "");
+      notice(uiText(`Blocked by site policy: ${blocked}`, `حجبَتْه سياسةُ المواقع: ${blocked}`));
+    });
     el("paneurl").addEventListener("keydown", (e) => { if (e.key === "Enter") paneGo(); });
     el("paneback").onclick = () => pane.active && invoke("pane_back", { label: pane.active }).catch(() => {});
     el("panefwd").onclick = () => pane.active && invoke("pane_forward", { label: pane.active }).catch(() => {});

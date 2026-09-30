@@ -1028,7 +1028,94 @@ fn pane_open(
             tauri::LogicalSize::new(w, h),
         )
         .map_err(|e| format!("تعذّر فتح اللوحة: {e}"))?;
+    spawn_pane_policy_guard(app.clone(), label, url);
     Ok(())
+}
+
+/// KF-30 (مقيس 2026-09-20 في فورك إيجنت أدمن ولم يُنقل إلى العامّ حتى 09-30): ردُّ `on_navigation` للوحة — webview ابن على
+/// ويندوز — لا يُستدعى، فرابطٌ تنقره الصفحةُ أو تنقّلٌ تبدأه سكربتاتُها يمرّ بلا سياسة المواقع. الحكمُ على الرابط الحيّ خالصٌ
+/// كي يُختبر بلا نافذة: «about:blank» وروابطُ البيانات وصفحاتُ خطأ المحرّك (chrome-error/edge-error) ليست تنقّلاً إلى مضيف —
+/// ولو حُجبت صفحةُ الخطأ لأُعيدت اللوحةُ إلى صفحةٍ تفشل كلَّ 600ms بلا نهاية. أمّا file: وأيُّ مخطّطٍ آخر فتحكمه السياسة.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum PaneVerdict {
+    Ignore,
+    Remember,
+    Block,
+}
+
+pub(crate) fn pane_policy_verdict(current: &str, last_allowed: &str, allowed: bool) -> PaneVerdict {
+    if current.is_empty()
+        || current == last_allowed
+        || current == "about:blank"
+        || current.starts_with("data:")
+        || current.starts_with("chrome-error:")
+        || current.starts_with("edge-error:")
+    {
+        return PaneVerdict::Ignore;
+    }
+    if allowed { PaneVerdict::Remember } else { PaneVerdict::Block }
+}
+
+#[cfg(test)]
+mod pane_policy_tests {
+    use super::{pane_policy_verdict, PaneVerdict};
+
+    #[test]
+    fn blocks_page_initiated_navigation_outside_policy() {
+        // الحالةُ التي يفتحها KF-30: الصفحةُ نفسُها تنقّلت، فلا ردَّ تنقّلٍ يُستدعى.
+        assert_eq!(pane_policy_verdict("https://evil.example/x", "https://www.google.com/search?q=a", false), PaneVerdict::Block);
+        assert_eq!(pane_policy_verdict("file:///C:/Users/x/secrets.txt", "https://ok.example/", false), PaneVerdict::Block);
+    }
+
+    #[test]
+    fn remembers_allowed_and_ignores_noise() {
+        // التوأمُ الإيجابيّ: حارسٌ يحجب كلَّ شيء ليس حارساً بل عطل.
+        assert_eq!(pane_policy_verdict("https://ok.example/a", "https://ok.example/", true), PaneVerdict::Remember);
+        assert_eq!(pane_policy_verdict("about:blank", "https://ok.example/", false), PaneVerdict::Ignore);
+        assert_eq!(pane_policy_verdict("data:text/html,x", "https://ok.example/", false), PaneVerdict::Ignore);
+        assert_eq!(pane_policy_verdict("https://ok.example/", "https://ok.example/", false), PaneVerdict::Ignore);
+        assert_eq!(pane_policy_verdict("", "https://ok.example/", false), PaneVerdict::Ignore);
+    }
+
+    #[test]
+    fn engine_error_pages_do_not_start_a_revert_loop() {
+        assert_eq!(pane_policy_verdict("chrome-error://chromewebdata/", "http://127.0.0.1:3000/", false), PaneVerdict::Ignore);
+        assert_eq!(pane_policy_verdict("edge-error://x/", "http://127.0.0.1:3000/", false), PaneVerdict::Ignore);
+    }
+}
+
+/// KF-30 — السياسةُ تُفرض بالقياس لا بردٍّ لا يأتي: كلّ 600ms يُقرأ رابطُ اللوحة الحيّ؛ فإن خرج عن السياسة رجعت اللوحةُ إلى
+/// آخر رابطٍ مسموح وأُعلم المشغّل (الرجوعُ الصامت يبدو عطلاً). ينتهي الخيطُ بانتهاء اللوحة: get_webview يعود None بعد الإغلاق.
+fn spawn_pane_policy_guard(app: tauri::AppHandle, label: String, start: String) {
+    std::thread::spawn(move || {
+        let mut last_allowed = start;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            let Some(view) = app.get_webview(&label) else { return };
+            let Ok(url) = view.url() else { continue };
+            let current = url.to_string();
+            let allowed = workspace::browser_url_allowed(&app, &current).is_ok();
+            match pane_policy_verdict(&current, &last_allowed, allowed) {
+                PaneVerdict::Ignore => continue,
+                PaneVerdict::Remember => last_allowed = current,
+                PaneVerdict::Block => {
+                    let back = last_allowed.clone();
+                    let target = app.clone();
+                    let target_label = label.clone();
+                    let _ = app.run_on_main_thread(move || {
+                        if let Some(pane) = target.get_webview(&target_label) {
+                            if let Ok(parsed) = back.parse::<tauri::Url>() {
+                                let _ = pane.navigate(parsed);
+                            }
+                        }
+                    });
+                    if let Some(main) = app.get_webview_window("main") {
+                        let _ = tauri::Emitter::emit(&main, "pane-blocked", serde_json::json!({ "label": &label, "url": current }));
+                    }
+                }
+            }
+        }
+    });
 }
 
 #[tauri::command]
