@@ -211,6 +211,7 @@ import { TurnAwareness, projectMap } from "./turn-awareness"
 import { approvePlan, planApproved, planningToolAllowed, planningWriteViolation, projectDocumentReadLimit } from "./project-planning-phase"
 import { noEditGoalRefusal } from "./goal-no-edit"
 import { bookedSinceNote } from "./ui-book"
+import { newEvidenceClock, noteEvidence, sprintEvidenceRefusal } from "./sprint-evidence"
 import { modelOutputViolation } from "./model-output-guard"
 import { excessiveMetadataDescription } from "./public-content-quality-guard"
 import { grepRegex } from "./grep-pattern"
@@ -225,6 +226,8 @@ installEgressGuard()
 const COMPILED = !/bun(\.exe)?$/i.test(process.execPath)
 const ROOT = COMPILED ? join(process.execPath, "..") : import.meta.dir
 const STATE_ROOT = resolve(process.env.ABDO_CODE_STATE_DIR ?? ROOT)
+// 09-30: متى قيست صفحةٌ ومتى عُدّلت شيفرة — `sprint done` لا يقبل «الصفحة تعرض…» بلا قياسٍ بعد آخر تعديل (sprint-evidence.ts).
+const sprintEvidence = newEvidenceClock()
 /** وصفاتُ الإعداد المتعلَّمة — عند مستوى المستخدم (لا المشروع) لأنّ قيمتَها عبورُ المشاريع. */
 const recipeStore = new RecipeStore(STATE_ROOT)
 // Desktop profiles select a new directory on their first launch. Create that
@@ -7446,6 +7449,7 @@ const runServeShell = async (): Promise<void> => {
       nestedEffectObserver = invalidateAcceptanceFor
       // الحكم الصريح يحكم إن وُجد؛ غيابه يعود إلى نصّ الإيصال (exitZero) — لا fail-open.
       const observeAcceptanceReceipt = (command: string, output: string, verdict?: ToolVerdict): string | undefined => {
+        noteEvidence(sprintEvidence, command, verdict?.ok !== false)
         // ذ4 — الأعلامُ كما كانت حرفاً (لا تُطفأ هنا إلا اختباراتٌ فشلت)، والتتبّعُ الثلاثيّ يُكتب معها.
         if (isTestCommand(command)) { successfulTests = projectTestPassed(output, verdict); gateTracks.tests = { ran: true, passed: successfulTests, evidence: gateEvidence(output), ...(!successfulTests && exitZero(output, verdict) ? { unproven: true } : {}) } }
         if (isTypecheckCommand(command)) { const ok = exitZero(output, verdict); if (ok) successfulTypecheck = true; gateTracks.typecheck = { ran: true, passed: ok, evidence: gateEvidence(output) } }
@@ -9046,7 +9050,10 @@ const executeBody = async (body: string, hooks: AskHooks = {}): Promise<string> 
       if (verb === "done") {
         if (process.env.ABDO_PARALLEL_WORKER === "1") return "رُفض: إغلاقُ السبرنتات للأب بعد دمج الفروع — أنت عاملٌ في فرعٍ معزول؛ أنهِ مهمّتَك وأثبتها وحسب."
         const cut = body.indexOf("::")
-        return sprintDone(PROJECT_DIR, Number.parseInt(num ?? "", 10), cut < 0 ? "" : body.slice(cut + 2)).text
+        const evidence = cut < 0 ? "" : body.slice(cut + 2)
+        const unmeasured = sprintEvidenceRefusal(evidence, sprintEvidence)
+        if (unmeasured !== undefined) return unmeasured
+        return sprintDone(PROJECT_DIR, Number.parseInt(num ?? "", 10), evidence).text
       }
       return SPRINT_USAGE
     }
