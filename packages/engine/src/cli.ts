@@ -4813,7 +4813,7 @@ const runServeShell = async (): Promise<void> => {
           await surface.navigate(url)
           surfaceGeneration += 1
           surfaceRefs = []
-          surfaceUrl = url
+          surfaceUrl = url; surfaceLoadedAt = Date.now() // 09-30: تنقّلٌ حقيقيّ يختم وقتَ التحميل (لا إعادةَ تحميلٍ زائدة قبل اللقطة)
           await paneShot()
           const note = await landed(url)
           return `فُتحت الواجهة واتصل متصفح الوكيل — ${url}. استعمل page لقراءة الصفحة ثم tap أو fill للتحقق.${restored}${note}`
@@ -4841,7 +4841,7 @@ const runServeShell = async (): Promise<void> => {
         await surface.navigate(url)
         surfaceGeneration += 1
         surfaceRefs = []
-        surfaceUrl = url
+        surfaceUrl = url; surfaceLoadedAt = Date.now() // 09-30: تنقّلٌ حقيقيّ يختم وقتَ التحميل (لا إعادةَ تحميلٍ زائدة قبل اللقطة)
         await paneShot()
         const note = await landed(url)
         return `فُتحت الواجهة — «${await untilTitled(surface)}» (${url}). استعمل page لقراءتها.${restored}${note}`
@@ -4874,7 +4874,7 @@ const runServeShell = async (): Promise<void> => {
           await existing.navigate(url)
           surfaceGeneration += 1
           surfaceRefs = []
-          surfaceUrl = url
+          surfaceUrl = url; surfaceLoadedAt = Date.now() // 09-30: تنقّلٌ حقيقيّ يختم وقتَ التحميل (لا إعادةَ تحميلٍ زائدة قبل اللقطة)
           const note = await landed(url)
           return `وُصل بمتصفّحٍ قائمٍ على ${port} وفُتحت الواجهة — «${await untilTitled(existing)}» (${url}). استعمل page لقراءتها.${restored}${note}`
         } catch (error) {
@@ -4911,7 +4911,7 @@ const runServeShell = async (): Promise<void> => {
       await browser.navigate(url)
       surfaceGeneration = 1
       surfaceRefs = []
-      surfaceUrl = url
+      surfaceUrl = url; surfaceLoadedAt = Date.now() // 09-30: تنقّلٌ حقيقيّ يختم وقتَ التحميل (لا إعادةَ تحميلٍ زائدة قبل اللقطة)
       const note = await landed(url)
       return `أُطلق متصفّح القشرة وفُتحت الواجهة — «${await untilTitled(browser)}» (${url}). استعمل page لقراءتها.${restored}${note}`
     }
