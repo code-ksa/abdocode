@@ -97,7 +97,7 @@ import { fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine, 
 import { bracketDeleteNote } from "./powershell-bracket-guard"
 import { killByPidTargets, killRefusal, pidCommandLine, pidOwnedByProject } from "./process-ownership"
 import { probeTargets, probeUrls, renderProbe } from "./probe-targets"
-import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport } from "./parallel-workers"
+import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport, workerTask, workerPortOffset } from "./parallel-workers"
 import { buildNextStepPrompt, candidatesFrom, commandFor as nextStepCommand, parseNextStep, renderNextStep } from "./browser-next-step"
 import { powershellCallOperatorRepair } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
@@ -145,7 +145,7 @@ import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFr
 import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation } from "./project-dependency-guard"
 import { moduleResolutionHints } from "./module-resolution-hint"
 import { errorPlaybookHints } from "./error-playbooks"
-import { ManagedServers, devPortHint, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
+import { ManagedServers, devPortHint, listenerPidOf, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
 import { brokenAliasViolation, dangerousShellViolation, fileWriteViaShellViolation, killByNameViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
 import { redactSecretValues, secretInCommandViolation, secretInSourceViolation, sweepResidualSecrets } from "./secret-command-guard"
@@ -2009,7 +2009,7 @@ const askOnce = async (
   const projectSkillsAdvert = projectSkillList.length === 0 ? "" :
     "\nمهاراتٌ قطّرها هذا المشروع (حمّل ما يناسب المهمّة بـskill <مرجع>):\n" +
     projectSkillList.slice(0, 12).map((s) => "- " + s.ref + (s.description.length > 0 ? " — " + s.description.slice(0, 110) : "")).join("\n")
-  const skillsAdvert = (hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' && !planningPhase ? localSkillsBrief(SETTINGS_FILE) : "") + (hooks.conversationMode === "chat" || hooks.reviewSystem !== undefined ? "" : planBrief() + sprintBrief(PROJECT_DIR)) + projectSkillsAdvert
+  const skillsAdvert = (hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' && !planningPhase ? localSkillsBrief(SETTINGS_FILE) : "") + (hooks.conversationMode === "chat" || hooks.reviewSystem !== undefined ? "" : planBrief() + (process.env.ABDO_PARALLEL_WORKER === "1" ? "" : sprintBrief(PROJECT_DIR))) + projectSkillsAdvert
   const preferenceLanguage=loadSettings().language||'en';
   const replyLanguage=/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u.test(preferenceLanguage)?preferenceLanguage:'en';
   const languageInstruction='\nPreferred response language: '+replyLanguage+'. Use this language unless the user explicitly requests another. Do not translate file paths or code.\n';
@@ -3152,6 +3152,10 @@ const runServeShell = async (): Promise<void> => {
       return refused("رُفضت الكتابة إلى next-env.d.ts: هذا ملف يولده Next.js. إن كان ملفاً قديماً أو تالفاً فاحذفه بأمر PowerShell ثم شغّل البناء ليُعاد توليده.")
     }
     const normalizedTarget = target.replace(/\\/g, "/").replace(/^\.\//u, "")
+    // 09-30: عاملُ parallel لا يكتب الخطّةَ ولا التسليم — كتابتاهما من عاملين تعارضتا في الدمج، والإغلاقُ للأب.
+    if (process.env.ABDO_PARALLEL_WORKER === "1" && /(?:^|\/)ABDO-(?:SPRINTS|HANDOFF)\.md$/iu.test(normalizedTarget)) {
+      return refused("رُفضت الكتابة: ABDO-SPRINTS.md وABDO-HANDOFF.md للأب بعد الدمج — أنت عاملٌ في فرعٍ معزول؛ نفّذ مهمّتَك وحدها.")
+    }
     // 09-16 — خطّةٌ مكتوبةٌ بلا اعتماد: ملفّاتُ المنتج مرفوضةٌ باسم plan-approve (غيابُ الخطّة أصلاً يحكمه sprintPlanWriteViolation أدناه).
     const planAwaitingApproval = process.env.ABDO_REQUIRE_SPRINT_PLAN === "1" && sprintPlanReady(PROJECT_DIR, true) && !planApproved(PROJECT_DIR, true)
     const planningProblem = planningWriteViolation(normalizedTarget, process.env.ABDO_AGENT_PHASE === "planning" || planAwaitingApproval)
@@ -3650,9 +3654,10 @@ const runServeShell = async (): Promise<void> => {
           await emitEvent(turnId, `🧵 ${tasks.length} عمّالٍ متوازين في شجرات عملٍ معزولة (النمط ${workerMode}) — كلٌّ محرّكٌ كامل على فرعه`)
           const outcomes = await Promise.all(tasks.map(async (task, i) => {
             const s = await runExecInWorktree(
-              { task, project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true },
+              { task: workerTask(task), project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true },
               selfEngineArgv(),
-              { ...process.env, ABDO_CODE_SETTINGS: SETTINGS_FILE },
+              // 09-30: العاملُ يعرف أنّه عامل (لا خطّةَ سبرنتات ولا إغلاق) ومنفذُه في عشرته الخاصّة.
+              { ...process.env, ABDO_CODE_SETTINGS: SETTINGS_FILE, ABDO_PARALLEL_WORKER: "1", ABDO_WORKER_PORT_OFFSET: String(workerPortOffset(i)) },
               (line) => { void emitEvent(turnId, `🧵 [${i + 1}] ${line.slice(0, 200)}`) },
             )
             return {
@@ -3687,9 +3692,18 @@ const runServeShell = async (): Promise<void> => {
         if (spec.name === "probe") {
           // 09-29 — المضيفُ المحلّيّ وحده؛ الأصلُ الافتراضيّ منفذُ خادمٍ مُدار إن وُجد وإلا منفذُ الكومة.
           const managedPort = turnServers.snapshot().find((s) => s.alive)?.port ?? devServers.snapshot().find((s) => s.alive)?.port ?? devPortHint(PROJECT_DIR) ?? 3000
+          const ownServer = turnServers.snapshot().some((s) => s.alive) || devServers.snapshot().some((s) => s.alive)
           const plan = probeTargets(rest, `http://127.0.0.1:${managedPort}`)
           if (plan.urls.length === 0) return invalid(plan.refused.length > 0 ? `probe: لا رابطَ محلّيّاً صالحاً — رُفض: ${plan.refused.join("، ")}. الصيغة: ${spec.usage}` : `الصيغة: ${spec.usage}`)
-          return okText(renderProbe(await probeUrls(plan.urls), plan.refused))
+          const report = renderProbe(await probeUrls(plan.urls), plan.refused)
+          // 09-30 (مقيس: الأبُ فحص /about و/api/stats بعد الدمج بلا خادمٍ له، فأجاب خادمُ عاملٍ من شجرته — وقبلت المراجعةُ ذلك دليلاً على
+          // الشجرة المدموجة): بلا خادمٍ مُدارٍ لهذا المحرّك يُسمّى المُنصت، والإيصالُ ليس دليلاً على شيفرة هذا المشروع.
+          if (!ownServer) {
+            const ports = [...new Set(plan.urls.map((u) => { try { return Number(new URL(u).port || 80) } catch { return 0 } }).filter((n) => n > 0))]
+            const owners = ports.map((port) => { const pid = listenerPidOf(port); return pid === undefined ? undefined : `${port} ⇦ pid ${pid}` }).filter((x): x is string => x !== undefined)
+            if (owners.length > 0) return { output: `${report}\n⚠ لا خادمَ مُدارَ لهذا المشروع في هذا الدور — أجاب مُنصتٌ آخر (${owners.join("، ")}) قد يكون خادمَ عاملٍ أو جلسةٍ أخرى: هذا ليس دليلاً على شيفرتك. ابنِ ثمّ شغّل خادمَك بـrun --bg وأعد الفحص.`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "probe answered by a server this engine does not manage" } }
+          }
+          return okText(report)
         }
         if (spec.name === "stop") {
           const run = backgroundRuns.get(rest.trim())
@@ -6638,12 +6652,14 @@ const runServeShell = async (): Promise<void> => {
       : undefined
     const effectiveGoal = priorGoal?.goal ?? turn.body
     // 09-29 (سبرنتات): عددُ السبرنتات المفتوحة عند بدء الدور — إغلاقُ واحدٍ منها أثناءه حافّةُ تقدّمٍ تبدأ التالي تلقائياً.
-    let sprintOpenAtStart = openSprintCount(PROJECT_DIR)
+    // 09-30: عاملُ parallel لا يرى خطّةَ السبرنتات ولا ينتقل فيها — مهمّتُه وحدها (WORKER_SCOPE_NOTE).
+    const parallelWorker = process.env.ABDO_PARALLEL_WORKER === "1"
+    let sprintOpenAtStart = parallelWorker ? undefined : openSprintCount(PROJECT_DIR)
     let sprintAdvances = 0
     desktopTaskText = `${turn.body}\n${priorGoal?.goal ?? ""}`
     turnReadPaths.clear(); turnCreatedPaths.clear(); turnScopeStartedAt = Date.now()
     currentGoalText = turn.body
-    sprintFocusText = openSprintSection(PROJECT_DIR)
+    sprintFocusText = parallelWorker ? "" : openSprintSection(PROJECT_DIR)
     // 09-30 (مقيس): المراجِعُ المستقلّ حكم على «اكمل» وحدَها فقرأ نصَّ السبرنت مقلوباً («الصفحةُ لا تزال تعرض الكتالوج ولا تُظهر الخطأ
     // المطلوب»). حين يكون الدورُ استئنافاً على خطّة سبرنتات، هدفُ الحكّام (المراجعة، المحكّم، التفنيد) هو متابعةُ الخطّة بحالها الآن.
     const judgeGoal = (): string => sprintFocusText.length > 0 || (isResumeIntent(turn.body) && existsSync(join(PROJECT_DIR, "ABDO-SPRINTS.md")))
@@ -8987,6 +9003,7 @@ const executeBody = async (body: string, hooks: AskHooks = {}): Promise<string> 
       const [verb, num] = tail
       if (verb === undefined || verb === "show") return sprintShow(PROJECT_DIR)
       if (verb === "done") {
+        if (process.env.ABDO_PARALLEL_WORKER === "1") return "رُفض: إغلاقُ السبرنتات للأب بعد دمج الفروع — أنت عاملٌ في فرعٍ معزول؛ أنهِ مهمّتَك وأثبتها وحسب."
         const cut = body.indexOf("::")
         return sprintDone(PROJECT_DIR, Number.parseInt(num ?? "", 10), cut < 0 ? "" : body.slice(cut + 2)).text
       }

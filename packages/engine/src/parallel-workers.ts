@@ -68,3 +68,12 @@ export function mergeBranchRefusal(branch: string): string | undefined {
   if (!WORKER_BRANCH.test(branch.trim())) return `${MERGE_USAGE} — «${branch.slice(0, 40)}» ليس فرعَ عاملٍ متوازٍ.`
   return undefined
 }
+
+/**
+ * 09-30 (مقيس: «اكمل» على خطّة سبرنتين مستقلّين بعاملين): كلُّ عاملٍ قرأ ABDO-SPRINTS.md وتسليمَها فنفّذ السبرنتين معاً وأغلق
+ * سبرنتَ غيره — وتعارض الدمجُ الثاني في ثلاثة ملفّات. العاملُ ينفّذ مهمّتَه وحدها، والخطّةُ وإغلاقُها للأب بعد الدمج.
+ */
+export const WORKER_SCOPE_NOTE = "أنت عاملٌ في فرعٍ معزول بين عمّالٍ متوازين: نفّذ هذه المهمّةَ وحدها — لا تنفّذ مهامَّ غيرِك ولو رأيتها في خطّةٍ أو تسليم، ولا تعدّل ABDO-SPRINTS.md ولا ABDO-HANDOFF.md؛ إغلاقُ السبرنتات للأب بعد الدمج. خادمُك على المنفذ الذي يسمّيه إيصالُ run --bg — افحص به لا بمنفذٍ تفترضه."
+export const workerTask = (task: string): string => `${task}\n\n(${WORKER_SCOPE_NOTE})`
+/** إزاحةُ منفذ العامل: كلُّ عاملٍ في عشرةٍ خاصّة (3010، 3020…) — عاملان يقلعان في اللحظة نفسها لا يتسابقان على 3000. */
+export const workerPortOffset = (index: number): number => 10 * (index + 1)

@@ -98,6 +98,8 @@ interface ManagedProcess {
 }
 
 /** مَن يُنصت على المنفذ فعلاً — ملكية بالقياس لا بالنسب. */
+/** مالكُ المنفذ المُنصت (pid) — للفحص حين لا خادمَ مُدارَ لهذا المحرّك: من أجاب؟ */
+export const listenerPidOf = (port: number): number | undefined => listenerOf(port)
 const listenerOf = (port: number): number | undefined => {
   try {
     const netstat = Bun.spawnSync([systemTool("netstat"), "-ano", "-p", "tcp"], { stdout: "pipe", stderr: "ignore" })
@@ -249,6 +251,9 @@ export class ManagedServers {
 
   /** يشغّل خادماً مملوكاً للنواة ويعيد إيصالاً بعد قياس الإنصات. */
   async start(command: ServerCommand, cwd: string): Promise<string> {
+    // 09-30: عاملُ parallel يحمل إزاحةَ منفذه (ABDO_WORKER_PORT_OFFSET) — عاملان يقلعان معاً على 3000 تسابقا فأجاب أحدُهما عن الآخر.
+    const workerOffset = Math.min(200, Math.max(0, Number.parseInt(process.env.ABDO_WORKER_PORT_OFFSET ?? "0", 10) || 0))
+    if (workerOffset > 0) command = { ...command, port: command.port + workerOffset }
     // خادمُنا نحن يعمل على المنفذ فعلاً؟ الإيصال يقول ذلك — لا رفضٌ يكذب.
     // (قيس حيّاً: رفضنا منفذاً يملكه الدور نفسه بعبارة «ليست من هذا الدور»
     // فأضاع النموذج حقباً في التفاوض مع رسالة خاطئة.)

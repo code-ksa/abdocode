@@ -7,7 +7,7 @@
  * القشرة. والفرقُ الوحيد أنّه **لا يملك من يوافق**: كلُّ طلب موافقةٍ يُرفض آليّاً ويُسجَّل في الخلاصة — CI لا يمنح إذناً
  * ضمنيّاً، والتوسعةُ باختيارٍ صريح (`--mode full-access`). ورمزُ الخروج يتبع النتيجة: 0 اكتمل، 1 توقّف بلا إكمال، 2 رُفض أو تعطّل.
  */
-import { existsSync, lstatSync, realpathSync, rmSync, rmdirSync, symlinkSync } from "node:fs"
+import { cpSync, existsSync, lstatSync, readdirSync, realpathSync, rmSync, rmdirSync, statSync, symlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
@@ -183,6 +183,39 @@ export function linkIgnoredDeps(base: string, dir: string, progress: (line: stri
   }
   return linked
 }
+/**
+ * 09-30 (مقيس: عاملُ /api/stats أعاد {"models":0,"providers":0} وأغلق سبرنتَه بهذا «الدليل»): `data/` متجاهَلة في git فالشجرةُ بلا قاعدة
+ * بيانات والتطبيقُ ينشئ قاعدةً فارغة. تُنسخ (لا تُوصل) مجلّداتُ البيانات المتجاهَلة الصغيرة — العاملُ يقرأ بياناتٍ حقيقيّة وكتاباتُه
+ * لا تمسّ الأصل. السقفُ 64MB؛ ما فوقه يُقال ولا يُنسخ.
+ */
+export const COPIED_DATA_DIRS: readonly string[] = ["data", "db"]
+const COPY_CAP_BYTES = 64 * 1024 * 1024
+const dirBytes = (dir: string): number => {
+  let total = 0
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name)
+    const st = statSync(full)
+    total += st.isDirectory() ? dirBytes(full) : st.size
+    if (total > COPY_CAP_BYTES) return total
+  }
+  return total
+}
+export function copyIgnoredData(base: string, dir: string, progress: (line: string) => void): string[] {
+  const copied: string[] = []
+  for (const name of COPIED_DATA_DIRS) {
+    const src = join(base, name), dst = join(dir, name)
+    if (!existsSync(src) || existsSync(dst)) continue
+    try {
+      const bytes = dirBytes(src)
+      if (bytes > COPY_CAP_BYTES) { progress(`⚠ ${name} أكبر من 64MB — لم يُنسخ إلى شجرة العامل؛ بياناتُه قد تكون فارغة`); continue }
+      cpSync(src, dst, { recursive: true })
+      copied.push(dst)
+      progress(`📦 نسخةٌ من ${name} (${Math.round(bytes / 1024)} ك.ب) — العاملُ يقرأ بياناتٍ حقيقيّة وكتاباتُه لا تمسّ الأصل`)
+    } catch (error) { progress(`⚠ تعذّر نسخُ ${name}: ${String((error as Error).message ?? error).slice(0, 120)}`) }
+  }
+  return copied
+}
+
 /** فكُّ الوصلة وحدَها (rmdir على junction/symlink يزيل الرابط لا الهدف) — لا يُلمس ما ليس وصلة. */
 export function unlinkIgnoredDeps(links: readonly string[]): void {
   for (const link of links) {
@@ -204,6 +237,7 @@ export async function runExecInWorktree(options: ExecOptions, engineArgv: readon
   if (!added.ok) return fail(`تعذّر إنشاءُ شجرة العمل: ${added.err.slice(0, 200)}`)
   progress(`🌿 فرعٌ معزول ${branch} في ${dir}`)
   const links = linkIgnoredDeps(top.out, dir, progress)
+  copyIgnoredData(top.out, dir, progress)
   try {
     const summary = await runExec({ ...options, project: dir }, engineArgv, { ...env, ABDO_CODE_STATE_DIR: state }, progress)
     // 09-29 (كشفه اختبارُ الجودة الحيّ): `trim()` على خرج porcelain كان يأكل فراغَ أوّل سطرٍ (« M README.md» ⇦ «M README.md») فيصير
