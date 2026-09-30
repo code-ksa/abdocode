@@ -193,9 +193,11 @@ export function browserProofVerdict(
   const ok = receipts.filter((r) => receiptSucceeded(r.output, r.verdict)).map((r) => r.command.trim().toLowerCase())
   const has = (re: RegExp) => ok.some((c) => re.test(c))
   const missing: string[] = []
-  if (wantsOpen && !has(/^(?:open|ui)\s/u)) missing.push("open <الرابط> (فتحُ الصفحة في متصفّح الوكيل)")
-  if (wantsShot && !has(/^shot\b/u)) missing.push("shot full (لقطةُ الصفحة)")
-  if (wantsClick && !has(/^tap\s/u)) missing.push("tap <مرجع> (النقرُ الفعليّ على الروابط)")
+  // 09-30 (مقيس على تطبيق المالك): إيصالاتُ إضافة المتصفّح (chrome.open/chrome.shot/chrome.tap — تبويبُ المستخدم الحقيقيّ) دليلٌ
+  // كإيصالات المتصفّح المملوك؛ كان الشرطُ يطالب بـopen/shot حرفاً فرفض أربعاً دوراً فتح الصفحةَ وقرأها والتقطها عبر الإضافة.
+  if (wantsOpen && !has(/^(?:[a-z][\w-]*\.)?(?:open|ui)\b/u)) missing.push("open <الرابط> (فتحُ الصفحة في متصفّح الوكيل)")
+  if (wantsShot && !has(/^(?:[a-z][\w-]*\.)?shot\b/u)) missing.push("shot full (لقطةُ الصفحة)")
+  if (wantsClick && !has(/^(?:[a-z][\w-]*\.)?tap\b/u)) missing.push("tap <مرجع> (النقرُ الفعليّ على الروابط)")
   if (missing.length === 0) return undefined
   return `الهدف يطلب تحقّقاً في المتصفّح ولا إيصالَ ناجح له: ${missing.join("، ")} — البناءُ الأخضر والخادمُ العامل لا يثبتان الصفحة؛ افتحها والتقطها وانقر قبل التسليم.`
 }

@@ -155,3 +155,12 @@ describe("output evidence verdict — explicit tool verdicts decide which receip
     expect(outputEvidenceVerdict(goal, [{ command: "run node app.js", output, verdict: failed }])).toContain("Hello Riyadh")
   })
 })
+
+test("09-30: extension receipts (chrome.open / chrome.shot / chrome.tap) prove the browser like open / shot / tap", () => {
+  const goal = "افتح الصفحة الرئيسية في متصفحك والتقط لقطة وانقر على الروابط"
+  const ok = (command: string) => ({ command, output: "⚙ done", verdict: { ok: true } as never })
+  expect(browserProofVerdict(goal, [ok("chrome.open http://localhost:3000"), ok("chrome.shot"), ok("chrome.tap r4")])).toBeUndefined()
+  // التوأم: إيصالٌ فاشل لا يُحسب، وقراءةُ الصفحة وحدها ليست لقطة
+  const failedShot = { command: "chrome.shot", output: "✕ chrome.shot\nFailed to capture tab", verdict: { ok: false, reason: "tool_failed" } as never }
+  expect(browserProofVerdict(goal, [ok("chrome.open http://localhost:3000"), failedShot, ok("chrome.page"), ok("chrome.tap r4")])).toContain("shot full")
+})

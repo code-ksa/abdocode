@@ -3672,7 +3672,12 @@ const runServeShell = async (): Promise<void> => {
             return { output: `تعذّر دمجُ ${branch} وأُلغي الدمج (الشجرة كما كانت):\n${out.slice(0, 1200)}\nحلّ التعارضَ يدويّاً: ادمج فرعاً واحداً ثمّ ابنِ ثمّ التالي.`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: out.slice(0, 160) } }
           }
           const stat = new TextDecoder().decode(Bun.spawnSync(["git", "-C", PROJECT_DIR, "diff", "--stat", "HEAD~1..HEAD"], { stdout: "pipe", stderr: "pipe" }).stdout).trim()
-          return okText(`✓ دُمج ${branch} في الفرع الحاليّ (--no-ff).\n${stat.slice(0, 1500)}\nابنِ واختبر الآن قبل الدمج التالي.`)
+          // 09-30 (مقيس على تطبيق المالك): عاملٌ أعاد تسميةَ الحزمة إلى «1a071169-openrouter-clone» (معرّفُ شجرته) وبدّل السكربتات
+          // إلى npx … --poll وهو يصارع فخَّ المسار القصير — ودخل ذلك المشروعَ بالدمج بلا كلمة. تغييرُ اسم الحزمة يُقال صراحةً.
+          const nameOf = (rev: string): string | undefined => { const r = Bun.spawnSync(["git", "-C", PROJECT_DIR, "show", `${rev}:package.json`], { stdout: "pipe", stderr: "pipe" }); if (r.exitCode !== 0) return undefined; try { return (JSON.parse(new TextDecoder().decode(r.stdout)) as { name?: string }).name } catch { return undefined } }
+          const nameBefore = nameOf("HEAD~1"), nameAfter = nameOf("HEAD")
+          const renamed = nameBefore !== undefined && nameAfter !== undefined && nameBefore !== nameAfter ? `\n⚠ الدمجُ غيّر اسمَ الحزمة في package.json: «${nameBefore}» ⇦ «${nameAfter}» — عاملٌ لا يملك اسمَ المشروع؛ أعده إن لم يُطلب.` : ""
+          return okText(`✓ دُمج ${branch} في الفرع الحاليّ (--no-ff).\n${stat.slice(0, 1500)}${renamed}\nابنِ واختبر الآن قبل الدمج التالي.`)
         }
         if (spec.name === "probe") {
           // 09-29 — المضيفُ المحلّيّ وحده؛ الأصلُ الافتراضيّ منفذُ خادمٍ مُدار إن وُجد وإلا منفذُ الكومة.
