@@ -175,6 +175,17 @@ export const sprintBrief = (projectDir: string): string => {
 }
 
 /**
+ * 09-30 (مقيس: «اكمل» وحدَها فتحت الأدواتِ الأساسيّة فقط — 38/75 بلا متصفّح — وبوّابةُ السبرنت تطلب shot): نصُّ أوّل سبرنتٍ مفتوح
+ * (العنوان والمطلوب والبوّابة) هو **نيّةُ الدور** حين يكون الطلبُ استئنافاً؛ يُمسح لعائلات الأدوات ويُعطى للعين معياراً. "" بلا ملفّ.
+ */
+export const openSprintSection = (projectDir: string): string => {
+  let text: string
+  try { text = readFileSync(join(projectDir, "ABDO-SPRINTS.md"), "utf-8") } catch { return "" }
+  const first = sprintSectionsOf(text).find(sprintIsOpen)
+  return first === undefined ? "" : first.replace(/\r/gu, "").trim().slice(0, 1200)
+}
+
+/**
  * حافّةُ التقدّم بين السبرنتات: انخفض عددُ المفتوح منذ بدء الدور وبقي مفتوحٌ ⇦ التالي يُقال ويبدأ. لا شيءَ آخرُ يحرّكه:
  * لا الادّعاءُ ولا البناءُ وحدَه — تغييرُ الحالة في الملفّ هو الحافّة (والبوّاباتُ تحكم الادّعاءَ من جهتها).
  */

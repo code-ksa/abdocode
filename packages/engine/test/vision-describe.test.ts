@@ -41,7 +41,7 @@ describe("عينُ الوكيل — vision-describe", () => {
     const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
     expect(cli).toContain('import { renderVisionReport, VISION_EYE_SYSTEM, visionReportUsable, visionRubric } from "./vision-describe"')
     expect(cli).toContain("const describeShots = async (")
-    expect(cli).toContain("ask(visionRubric(currentGoalText, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, attachments: { descriptions: [], text: \"\", images:")
+    expect(cli).toContain("ask(visionRubric(eyeGoal, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, attachments: { descriptions: [], text: \"\", images:")
     // لقطةُ الخطأ التلقائيّة تُوصف هي الأخرى بدل أن تُعلَّق لدورٍ لاحق
     expect(cli).toContain('const described = errorRoute.reaches && errorRoute.via === "vision" ? await describeShots([{ mime: "image/jpeg", data }], errorRoute.ref, surfaceUrl, Math.round(data.length * 3 / 4), 1, turnId) : undefined')
     expect(cli).toContain('if (pendingShot !== undefined && route.reaches && route.via === "vision") {')

@@ -60,7 +60,8 @@ export function exposureLine(exposed: number, total: number, families: ReadonlyS
  * الشبكة — لا إلى كلّ قراءة: كلماتٌ مثل «صفحة» و«تصميم» و`ui` تملأ الشيفرةَ العاديّة،
  * فمسحُها كلِّها يفتح كلَّ عائلةٍ دائماً ويُبطل توفيرَ التوكنات الذي وُضع الإظهارُ لأجله.
  */
-const INSTRUCTION_FILE = /(?:^|[\\/])(?:TASK|README|SPEC|INSTRUCTIONS?|AGENTS|BRIEF|PLAN)[^\\/]*\.(?:md|markdown|txt|rst)$/iu
+// 09-30: ABDO-SPRINTS.md وABDO-HANDOFF.md (خطّةُ «اكمل» وتسليمُها) آمرةٌ كـPLAN/TASK — كانت لا تُطابق فبقي المتصفّحُ مغلقاً.
+const INSTRUCTION_FILE = /(?:^|[\\/])(?:ABDO-(?:SPRINTS|HANDOFF)|TASK|README|SPEC|INSTRUCTIONS?|AGENTS|BRIEF|PLAN|SPRINTS?|HANDOFF)[^\\/]*\.(?:md|markdown|txt|rst)$/iu
 
 /** سقفُ المسح: أوّلُ عشرين ألفَ محرفٍ — النيّةُ تُعلن في صدر الملفّ لا في ذيله. */
 export const RESULT_SCAN_LIMIT = 20_000

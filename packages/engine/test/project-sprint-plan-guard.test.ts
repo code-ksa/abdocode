@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance } from "../src/project-sprint-plan-guard"
+import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection } from "../src/project-sprint-plan-guard"
 
 const project = () => mkdtempSync(join(tmpdir(), "abdo-sprints-"))
 const completePlan = "# منتج Next.js عربي RTL لشركة السعادة مع SQLite ولوحة الإدارة وتواصل العملاء\n" + Array.from({ length: 8 }, (_, index) => `## سبرنت ${index + 1}\nالحالة: [ ]\nبوابة القبول: npm run ${index === 7 ? "build" : "test"} وHTTP 200\nالأدلة: نتيجة Playwright أو vitest وفحص المتصفح\n${"نطاق واضح للعمل المطلوب. ".repeat(9)}`).join("\n") + "\n## الاستئناف\nABDO-HANDOFF.md\nNEXT_ACTION"
@@ -220,4 +220,16 @@ describe("09-29 — الوعيُ بالسبرنتات: خلاصةٌ للنظام
     expect(sprintAdvance(dir, 2)).toBeUndefined()
     expect(sprintAdvance(dir, undefined)).toBeUndefined()
   })
+})
+
+test("09-30: the first open sprint's own text is the resume focus; none without a plan or when all are closed", () => {
+  const dir = mkdtempSync(join(tmpdir(), "abdo-sprint-focus-"))
+  expect(openSprintSection(dir)).toBe("")
+  writeFileSync(join(dir, "ABDO-SPRINTS.md"), "## سبرنت 1: أ\nالحالة: مكتمل\n\n## سبرنت 2: إصلاح الصفحة\nالحالة: غير مكتمل\nبوابة القبول: shot للصفحة الرئيسية\n\n## سبرنت 3: ج\nالحالة: غير مكتمل\n")
+  const focus = openSprintSection(dir)
+  expect(focus.startsWith("سبرنت 2: إصلاح الصفحة")).toBe(true)
+  expect(focus).toContain("shot للصفحة الرئيسية")
+  expect(focus).not.toContain("سبرنت 3")
+  writeFileSync(join(dir, "ABDO-SPRINTS.md"), "## سبرنت 1: أ\nالحالة: مكتمل\n")
+  expect(openSprintSection(dir)).toBe("")
 })

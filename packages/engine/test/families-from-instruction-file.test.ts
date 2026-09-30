@@ -47,3 +47,11 @@ describe("intent can live in what the agent reads, not only in what was asked", 
     expect(families.size).toBe(0)
   })
 })
+
+test("09-30: the sprint plan and its handoff are instruction files — reading them opens the families they name", () => {
+  expect(resultCarriesIntent("read", "read ABDO-SPRINTS.md")).toBe(true)
+  expect(resultCarriesIntent("read", "read ABDO-HANDOFF.md")).toBe(true)
+  const fams = new Set<string>()
+  expect(familiesFromResult("read", "read ABDO-SPRINTS.md", "## سبرنت 2\nبوابة القبول: shot للصفحة الرئيسية بعد تشغيل الخادم", fams)).toEqual(["browser"])
+  expect(resultCarriesIntent("read", "read src/sprints.ts")).toBe(false)
+})

@@ -41,3 +41,11 @@ export function earlyAttemptBudgetMs(maxOutputTokens: number | undefined): numbe
     : 0
   return CLOUD_EARLY_ATTEMPT_TIMEOUT_MS + capped * OUTPUT_MS_PER_TOKEN
 }
+
+/**
+ * 09-30 (مقيس: nemotron-3-ultra لم يُجب ٦٠ ثانيةً في مسبارٍ صغير بينما super-120b أجاب في 1.2 ث، ودورُ «اكمل» انتظر 300 ثانيةٍ مرّتين
+ * بلا أداةٍ واحدة وأمامه سبعٌ = ٣٥ دقيقة قبل سلّم المالك): **مهلتُنا التي انقضت بلا بايتٍ واحد** ليست ازدحاماً يزول في ثوانٍ — المزوّدُ
+ * لم يُجب في دقائق. محاولتان ثمّ يُرمى الفشلُ فيصعد `ask` سلّمَ المالك. أمّا 429/503 والانقطاعُ السريع فتبقى سبعاً كما كانت.
+ */
+export const MODEL_TIMEOUT_ATTEMPTS = 2
+export const timedOutWithoutResponse = (reason: string): boolean => /transport failed before response: .*timed out after \d+ms/iu.test(reason)

@@ -60,7 +60,7 @@ import type { HarnessToolDefinition, ModelMessage } from "@abdo/harness"
 import { CHAT_SYSTEM, acceptsImages, conversationMode, resolveAttachments, type ConversationMode, type ResolvedAttachments } from './conversation-attachments'
 import { BoundedWireDecoder, classifyModelFailure } from "@abdo/model-gateway"
 import { ModelRequestFailure, modelRequestFailure } from "./model-request-failure"
-import { earlyAttemptBudgetMs } from "./attempt-budget"
+import { earlyAttemptBudgetMs, MODEL_TIMEOUT_ATTEMPTS, timedOutWithoutResponse } from "./attempt-budget"
 import { fallbackLadder, spentRefs } from "./outage-ladder"
 import { definedCssClasses, tailwindUtilityCount, TAILWIND_REFUSAL_THRESHOLD } from "./jsx-class-guard"
 import { globalInstallRefused } from "./global-install-guard"
@@ -139,7 +139,7 @@ import { projectBuildViolation } from "./project-build-acceptance"
 import { nextAppPageShellViolation } from "./next-app-structure-guard"
 import { unsupportedPublicContactClaim } from "./public-content-evidence-guard"
 import { tsxSourceViolation } from "./tsx-source-guard"
-import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance } from "./project-sprint-plan-guard"
+import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection } from "./project-sprint-plan-guard"
 import { projectAuthAudit, projectAuthViolation } from "./project-auth-guard"
 import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFrom, mergeProjectAwareness, projectAwarenessBrief } from "./project-awareness"
 import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation } from "./project-dependency-guard"
@@ -1837,6 +1837,11 @@ async function requestWithBoundedRetry(providerId: string, attempt: (n: number) 
     try { response = await attempt(n) } catch (error) {
       const failure = classifyModelFailure({ error })
       if (!options.retryTransport || failure.retry !== "bounded-backoff" || n >= MODEL_RETRY_ATTEMPTS || options.signal?.aborted === true) throw error
+      // 09-30: مهلتُنا انقضت بلا بايت — محاولتان ثمّ يصعد السلّم (attempt-budget: MODEL_TIMEOUT_ATTEMPTS).
+      if (timedOutWithoutResponse(failure.reason) && n >= MODEL_TIMEOUT_ATTEMPTS) {
+        options.onRetry?.(`⏳ المزوّد ${providerId}: لم يُجب خلال المهلة ${n} مرّات — لا إعادةَ ثالثة؛ يُصعَد سلّمُ النماذج إن ضُبط`)
+        throw error
+      }
       const waitMs = MODEL_RETRY_BACKOFF_MS[n - 1] ?? 4_000
       process.stderr.write(`model ${providerId} attempt ${n}/${MODEL_RETRY_ATTEMPTS}: ${failure.reason} — retrying\n`)
       options.onRetry?.(`⏳ المزوّد ${providerId}: ${failure.reason} — المحاولة ${n}/${MODEL_RETRY_ATTEMPTS}، أعيد بعد ${Math.round(waitMs / 1000)} ث`)
@@ -4565,7 +4570,8 @@ const runServeShell = async (): Promise<void> => {
     if (sel === undefined) return undefined
     try {
       await emitEvent(turnId, `👁 نموذجُ الرؤية ${ref} يصف اللقطة${tiles > 1 ? ` (${tiles} بلاطات)` : ""}…`)
-      const reply = await ask(visionRubric(currentGoalText, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, attachments: { descriptions: [], text: "", images: images.map((i) => ({ mime: i.mime, data: i.data })) } }, [], Object.freeze({ ...sel, vision: true as const }))
+      const eyeGoal = sprintFocusText.length > 0 ? `${currentGoalText} — السبرنت الجاري: ${sprintFocusText.slice(0, 400)}` : currentGoalText
+      const reply = await ask(visionRubric(eyeGoal, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, attachments: { descriptions: [], text: "", images: images.map((i) => ({ mime: i.mime, data: i.data })) } }, [], Object.freeze({ ...sel, vision: true as const }))
       const text = typeof reply === "string" ? reply : String(reply)
       if (!visionReportUsable(text)) { await emitEvent(turnId, `👁 نموذجُ الرؤية لم يُعطِ وصفاً صالحاً (${text.replace(/\s+/gu, " ").slice(0, 80)}) — تُرسَل اللقطةُ إلى النداء التالي كما كان.`); return undefined }
       return renderVisionReport(ref, text, { bytes, url, tiles })
@@ -5602,6 +5608,8 @@ const runServeShell = async (): Promise<void> => {
   planPublisher = emit // ذ9د — لوحُ الخطّة يُبثّ على قناة القشرة نفسها منذ تعريفها (الترحيبُ الأوّل يُستهلك في المصادقة قبل الحلقة).
   // 09-29: رفضُ قائمة المزوّدين المخصّصين (عند الإقلاع أو الحفظ) يُذكر باسمه في تنبيه القبول — لا «unresolvable reference» وحدَه.
   let customProviderRefusals: readonly string[] = []
+  // 09-30: نصُّ السبرنت المفتوح حين يكون الطلبُ استئنافاً («اكمل») — يفتح عائلاتِ أدواته ويعطي العينَ معياراً.
+  let sprintFocusText = ""
   const vaultStatus = createVaultStatusReporter({
     providers: () => Providers.listProviders().filter(p => p.vaultKey !== undefined).map(p => p.id),
     hasCredential: hasProviderKey,
@@ -6611,7 +6619,8 @@ const runServeShell = async (): Promise<void> => {
     desktopTaskText = `${turn.body}\n${priorGoal?.goal ?? ""}`
     turnReadPaths.clear(); turnCreatedPaths.clear(); turnScopeStartedAt = Date.now()
     currentGoalText = turn.body
-    turnFamilies = familiesFor(effectiveGoal, turnFamilies)
+    sprintFocusText = openSprintSection(PROJECT_DIR)
+    turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\n${sprintFocusText}` : effectiveGoal, turnFamilies)
     // د2 — المحرّك الدلاليّ (plugins.semanticFrame): إطارٌ حتميّ للطلب قبل أوّل نداء —
     // لغةٌ ولهجةٌ وفعلٌ وهدف — وسطرُ إيصالٍ 🧭، وعثورٌ حتميّ على المجلّد المطلوب بالاسم
     // المنطوق يُحقن في الحقبة الأولى كي يبدأ النموذجُ من الحقيقة لا من التخمين (سلّم
@@ -8206,6 +8215,8 @@ const runServeShell = async (): Promise<void> => {
           if (advance !== undefined && sprintAdvances < 3) {
             sprintAdvances += 1
             sprintOpenAtStart = advance.open
+            sprintFocusText = openSprintSection(PROJECT_DIR)
+            for (const family of familiesFor(sprintFocusText)) turnFamilies.add(family)
             superAccepted = !superActive
             semanticStamp = ""
             lastStop = "acceptance-pending"
