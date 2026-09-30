@@ -99,7 +99,7 @@ import { killByPidTargets, killRefusal, pidCommandLine, pidOwnedByProject } from
 import { probeTargets, probeUrls, renderProbe } from "./probe-targets"
 import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport, workerTask, workerPortOffset } from "./parallel-workers"
 import { buildNextStepPrompt, candidatesFrom, commandFor as nextStepCommand, deterministicNextStep, parseNextStep, renderNextStep } from "./browser-next-step"
-import { powershellCallOperatorRepair, powershellChainRepair } from "./powershell-call-repair"
+import { powershellCallOperatorRepair, powershellChainRepair, powershellLiteralPathRepair } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
 import { terminalDialectLine, toolVocabulary, browserBridgeHint, policyLine } from "./tool-vocabulary"
 import { projectTestPassed, recallExecutionFact } from "./project-test-acceptance"
@@ -5416,6 +5416,9 @@ const runServeShell = async (): Promise<void> => {
     // 09-30: سلسلةُ && (أو || واحدة) خارج الاقتباس تُترجم حتميّاً بدل رفضها — كلُّ رفضٍ كان نداءَ نموذجٍ كاملاً لإعادة الصياغة.
     const chainRepair = powershellChainRepair(cmd)
     if (chainRepair !== undefined) { await emitEvent(turnId, `🔧 ${chainRepair.note}`); cmd = chainRepair.command }
+    // 10-01: مسارُ [id] (مجلّدُ Next.js الديناميكيّ) نمطُ بدلٍ في PowerShell — يُحذف/يُفحص بـ-LiteralPath لا بصمتٍ لا يفعل شيئاً.
+    const literalRepair = powershellLiteralPathRepair(cmd)
+    if (literalRepair !== undefined) { await emitEvent(turnId, `🔧 ${literalRepair.note}`); cmd = literalRepair.command }
     if (!sprintPlanReady(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1")) {
       // كتالوج 15.y (قفل التشديد الرجعي): خطةٌ موجودة كانت مقبولةً ثم شدّدت
       // بوابة حزمتها بينهما — قفلُ كل أداة قفلٌ ذاتي؛ النواة تجسّد قالبها

@@ -66,3 +66,54 @@ export function powershellChainRepair(command: string): CallRepair | undefined {
     note: `أُصلح الأمر آليّاً: ${split.ops.length} × «${split.ops[0]}» تُرجمت إلى PowerShell 5.1 (${kinds.has("&&") ? "if ($?)" : "if (-not $?)"}) — المقاطعُ بترتيبها ويقف كلٌّ عند فشل سابقه.`,
   }
 }
+
+/**
+ * 10-01 — مقيس على مهمّة OpenRouter: `Remove-Item -Recurse -Force src/app/api/models/[id]` لم يحذف شيئاً ولم يشكُ — PowerShell يعدّ `[id]`
+ * نمطَ بدلٍ (حرفٌ من i أو d) فلا يطابق المجلّد — فضاع نداءان قبل أن يصل النموذجُ إلى -LiteralPath. مجلّداتُ Next.js الديناميكيّة
+ * (`[id]`، `[provider]`، `[...slug]`) تجعل الفخَّ يوميّاً. أمرٌ واحد (بلا ; ولا | ولا {) لأحد هذه الأوامر، مسارُه يحمل [ ] بلا * ولا ?،
+ * وبلا -LiteralPath، يصير مسارُه `-LiteralPath '…'`. نمطُ البدل الحقيقيّ (* أو ?) لا يُمسّ.
+ */
+const LITERAL_CMDLETS = new Set(["remove-item", "rm", "del", "ri", "rmdir", "get-childitem", "gci", "ls", "dir", "get-item", "gi", "test-path", "get-content", "gc", "cat", "type", "copy-item", "cp", "copy", "move-item", "mv", "move", "rename-item", "ren", "resolve-path", "rvpa"])
+const VALUE_FLAGS = /^-(?:filter|include|exclude|depth|destination|newname|encoding|tail|totalcount|head|first|last|delimiter|readcount|itemtype|value|pathtype)$/iu
+
+const tokenize = (command: string): string[] | undefined => {
+  const out: string[] = []
+  let current = ""
+  let quote: string | undefined
+  for (const ch of command) {
+    if (quote !== undefined) { current += ch; if (ch === quote) quote = undefined; continue }
+    if (ch === "'" || ch === '"') { quote = ch; current += ch; continue }
+    if (/\s/u.test(ch)) { if (current.length > 0) { out.push(current); current = "" } continue }
+    current += ch
+  }
+  if (quote !== undefined) return undefined
+  if (current.length > 0) out.push(current)
+  return out
+}
+
+/** يعيد الأمرَ بـ-LiteralPath حين يحمل مسارُه أقواساً مربّعة بلا نمط بدل؛ وإلا undefined. */
+export function powershellLiteralPathRepair(command: string): CallRepair | undefined {
+  if (!/\[[^\]]*\]/u.test(command) || /[;|{}]/u.test(command)) return undefined
+  const tokens = tokenize(command.trim())
+  if (tokens === undefined || tokens.length < 2) return undefined
+  if (!LITERAL_CMDLETS.has(tokens[0]!.toLowerCase())) return undefined
+  if (tokens.some((t) => /^-(?:literalpath|lp|pspath)$/iu.test(t))) return undefined
+  let at = -1
+  let drop = -1
+  for (let i = 1; i < tokens.length; i += 1) {
+    const t = tokens[i]!
+    if (/^-path$/iu.test(t)) { at = i + 1; drop = i; break }
+    if (t.startsWith("-")) { if (VALUE_FLAGS.test(t)) i += 1; continue }
+    at = i
+    break
+  }
+  const raw = at > 0 ? tokens[at] : undefined
+  if (raw === undefined) return undefined
+  const path = raw.replace(/^(['"])(.*)\1$/u, "$2")
+  if (!/\[[^\]]*\]/u.test(path) || /[*?]/u.test(path)) return undefined
+  const repaired = tokens.map((t, i) => (i === at ? `-LiteralPath '${path.replace(/'/gu, "''")}'` : t)).filter((_, i) => i !== drop)
+  return {
+    command: repaired.join(" "),
+    note: `أُصلح الأمر آليّاً: «${path}» يحمل [ ] فيعدّه PowerShell نمطَ بدلٍ لا يطابق المجلّد — استُعمل -LiteralPath.`,
+  }
+}
