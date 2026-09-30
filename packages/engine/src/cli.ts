@@ -99,7 +99,7 @@ import { killByPidTargets, killRefusal, pidCommandLine, pidOwnedByProject } from
 import { probeTargets, probeUrls, renderProbe } from "./probe-targets"
 import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport, workerTask, workerPortOffset } from "./parallel-workers"
 import { buildNextStepPrompt, candidatesFrom, commandFor as nextStepCommand, deterministicNextStep, parseNextStep, renderNextStep } from "./browser-next-step"
-import { powershellCallOperatorRepair } from "./powershell-call-repair"
+import { powershellCallOperatorRepair, powershellChainRepair } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
 import { terminalDialectLine, toolVocabulary, browserBridgeHint, policyLine } from "./tool-vocabulary"
 import { projectTestPassed, recallExecutionFact } from "./project-test-acceptance"
@@ -5410,6 +5410,9 @@ const runServeShell = async (): Promise<void> => {
     // م11 — إصلاحٌ حتميّ معلَن (لا تخمين): مسارٌ مقتبس ينتهي بـ.exe في صدر الأمر يحتاج & في PowerShell — أسقطه omni ثمّ super-120b (09-14).
     const callRepair = powershellCallOperatorRepair(cmd)
     if (callRepair !== undefined) { await emitEvent(turnId, `🔧 ${callRepair.note}`); cmd = callRepair.command }
+    // 09-30: سلسلةُ && (أو || واحدة) خارج الاقتباس تُترجم حتميّاً بدل رفضها — كلُّ رفضٍ كان نداءَ نموذجٍ كاملاً لإعادة الصياغة.
+    const chainRepair = powershellChainRepair(cmd)
+    if (chainRepair !== undefined) { await emitEvent(turnId, `🔧 ${chainRepair.note}`); cmd = chainRepair.command }
     if (!sprintPlanReady(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1")) {
       // كتالوج 15.y (قفل التشديد الرجعي): خطةٌ موجودة كانت مقبولةً ثم شدّدت
       // بوابة حزمتها بينهما — قفلُ كل أداة قفلٌ ذاتي؛ النواة تجسّد قالبها
