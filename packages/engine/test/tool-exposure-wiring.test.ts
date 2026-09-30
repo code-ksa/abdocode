@@ -9,7 +9,7 @@ describe("tool exposure wiring", () => {
     expect(source).toContain('import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"')
     expect(source).toContain("let turnFamilies = new Set<string>()")
     // 09-30: الهدفُ الفعليّ ومعه نصُّ السبرنت المفتوح حين يكون الدورُ استئنافاً على خطّة (openSprintSection).
-    const set = source.indexOf("turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\\n${sprintFocusText}` : effectiveGoal, turnFamilies)")
+    const set = source.indexOf("turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\\n${sprintFocusText}\\n${sprintBrief(PROJECT_DIR)}` : effectiveGoal, turnFamilies)")
     const goal = source.indexOf("currentGoalText = turn.body")
     expect(goal).toBeGreaterThan(0); expect(set).toBeGreaterThan(goal); expect(set - goal).toBeLessThan(1500)
     const spec = source.indexOf("const spec = Tools.tool(word)")

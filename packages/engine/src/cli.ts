@@ -6649,7 +6649,8 @@ const runServeShell = async (): Promise<void> => {
     const judgeGoal = (): string => sprintFocusText.length > 0 || (isResumeIntent(turn.body) && existsSync(join(PROJECT_DIR, "ABDO-SPRINTS.md")))
       ? `${effectiveGoal}\n\nالمطلوبُ في هذا الدور: متابعةُ خطّة ABDO-SPRINTS.md — إنجازُ السبرنتات المفتوحة بترتيبها وإغلاقُ كلٍّ ببوّابته ودليله. حالُها الآن (✓ مكتمل، ○ مفتوح):\n${sprintShow(PROJECT_DIR)}`
       : effectiveGoal
-    turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\n${sprintFocusText}` : effectiveGoal, turnFamilies)
+    // 09-30: ومعه خلاصةُ الخطّة (فيها NEXT_ACTION من ABDO-HANDOFF.md) — «نفّذهما بالتوازي بوكيلين» في التسليم تفتح عائلةَ التفويض.
+    turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\n${sprintFocusText}\n${sprintBrief(PROJECT_DIR)}` : effectiveGoal, turnFamilies)
     // د2 — المحرّك الدلاليّ (plugins.semanticFrame): إطارٌ حتميّ للطلب قبل أوّل نداء —
     // لغةٌ ولهجةٌ وفعلٌ وهدف — وسطرُ إيصالٍ 🧭، وعثورٌ حتميّ على المجلّد المطلوب بالاسم
     // المنطوق يُحقن في الحقبة الأولى كي يبدأ النموذجُ من الحقيقة لا من التخمين (سلّم
