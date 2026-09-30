@@ -41,7 +41,9 @@ const run = async (script: string, onOutput?: (c: { stream: string; text: string
 describe("بثُّ خرج الأوامر", () => {
   test("المبثوثُ المجموعُ يساوي المُعادَ حرفاً بحرف — والعربيّةُ لا تُشوَّه", async () => {
     // مئتا سطرٍ عربيّ بكتاباتٍ متتابعة: القطعُ تنقطع حتماً وسط حرفٍ متعدّد البايت.
-    const script = `for (let i = 0; i < 200; i++) process.stdout.write(${JSON.stringify(ARABIC_LINE)} + i + "\\n");\n`
+    // 09-30 (CI لينكس 4.0.93): ~20KB متزامنة تسعها قراءةٌ واحدة من أنبوبٍ سعتُه 64KB فوصلت قطعةً واحدة واحمرّ «أكثر من قطعة» —
+    // اختبارٌ يعتمد على التوقيت. أربعُ دفعاتٍ بفواصلِ مؤقّتٍ تضمن قراءاتٍ منفصلة، والمقارنةُ بايتاً بايتاً كما هي.
+    const script = `(async () => { for (let batch = 0; batch < 4; batch++) { for (let j = 0; j < 50; j++) { const i = batch * 50 + j; process.stdout.write(${JSON.stringify(ARABIC_LINE)} + i + "\\n") } await new Promise((r) => setTimeout(r, 40)) } })();\n`
     const chunks: string[] = []
     const result = (await run(script, (c) => { if (c.stream === "stdout") chunks.push(c.text) })) as { outcome: string; stdout?: string }
     expect(result.outcome).toBe("ran")
