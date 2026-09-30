@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { UI_BOOK_CAP, UI_BOOK_DIR, UI_BOOK_TREE_CAP, UI_BOOK_USAGE, appSlug, codeHints, listBook, parseUiBookCommand, recordScreen, relatedCodePaths, renderBookList, renderScreen, screenSlug, showScreen, slugify, treeFromDesk, treeFromPage, type UiBookEntry } from "../src/ui-book"
+import { UI_BOOK_CAP, UI_BOOK_DIR, UI_BOOK_TREE_CAP, UI_BOOK_USAGE, appSlug, bookedSinceNote, codeHints, listBook, parseUiBookCommand, recordScreen, relatedCodePaths, renderBookList, renderScreen, screenSlug, showScreen, slugify, treeFromDesk, treeFromPage, type UiBookEntry } from "../src/ui-book"
 
 // S8 (09-18) — دفترُ الواجهات: تدوينٌ لكلّ شاشةٍ عُمل عليها، مسقوفٌ (٥٠٠ لكلّ تطبيق، الأقدمُ يُطرد)، وقراءةٌ بالاسم.
 
@@ -115,5 +115,39 @@ describe("S8 — التدوينُ والقراءةُ والسقف", () => {
     expect(parseUiBookCommand("show notepad/untitled-notepad")).toEqual({ op: "show", ref: "notepad/untitled-notepad" })
     expect((parseUiBookCommand("show") as { error: string }).error).toContain("ui-book show")
     expect((parseUiBookCommand("zap") as { error: string }).error).toBe(UI_BOOK_USAGE)
+  })
+})
+
+
+// 09-30 — مقيس: الحقبةُ الثانية أعادت مسحَ 13 صفحة بعد قصّ السياق والصفحاتُ كلُّها في الدفتر. السطرُ يسمّيها للحقبة التالية.
+describe("booked screens survive a context trim", () => {
+  test("names the screens recorded since the turn began, and how to read them", () => {
+    const root = mkdtempSync(join(tmpdir(), "abdo-booknote-"))
+    try {
+      recordScreen(root, entry({ capturedAt: "2026-09-30T09:00:00.000Z", title: "Old", route: "/old", slug: screenSlug("Old", "/old") }))
+      recordScreen(root, entry({ capturedAt: "2026-09-30T16:01:00.000Z", app: "https://openrouter.ai", title: "Models", route: "/models", slug: screenSlug("Models", "/models") }))
+      recordScreen(root, entry({ capturedAt: "2026-09-30T16:02:00.000Z", app: "https://openrouter.ai", title: "Keys", route: "/workspaces/default/keys", slug: screenSlug("Keys", "/workspaces/default/keys") }))
+      const note = bookedSinceNote(root, Date.parse("2026-09-30T16:00:00.000Z"))
+      expect(note).toContain("(2)")
+      expect(note).toContain("ui-book show")
+      expect(note).toContain("openrouter-ai/models، openrouter-ai/workspaces-default-keys") // the form ui-book show accepts
+      expect(note).not.toContain("old")
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+  test("the twin: nothing booked in this turn means no text at all", () => {
+    const root = mkdtempSync(join(tmpdir(), "abdo-booknote-"))
+    try {
+      expect(bookedSinceNote(root, Date.now())).toBe("")
+      recordScreen(root, entry({ capturedAt: "2026-09-30T09:00:00.000Z" }))
+      expect(bookedSinceNote(root, Date.parse("2026-09-30T16:00:00.000Z"))).toBe("")
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+  test("the continuation of every later epoch carries it", () => {
+    const cli = readFileSync(join(import.meta.dir, "..", "src", "cli.ts"), "utf8")
+    const later = cli.indexOf("`واصل الهدف الأصلي من نقطة التوقف، ولا تبدأ من جديد:")
+    const note = cli.indexOf("bookedSinceNote(STATE_ROOT, turnStartedAt)", later)
+    expect(later).toBeGreaterThan(0)
+    expect(note).toBeGreaterThan(later)
+    expect(note - later).toBeLessThan(1200)
   })
 })

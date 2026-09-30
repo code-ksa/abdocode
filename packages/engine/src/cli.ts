@@ -210,6 +210,7 @@ import { agentEpochBudget } from "./agent-epoch-budget"
 import { TurnAwareness, projectMap } from "./turn-awareness"
 import { approvePlan, planApproved, planningToolAllowed, planningWriteViolation, projectDocumentReadLimit } from "./project-planning-phase"
 import { noEditGoalRefusal } from "./goal-no-edit"
+import { bookedSinceNote } from "./ui-book"
 import { modelOutputViolation } from "./model-output-guard"
 import { excessiveMetadataDescription } from "./public-content-quality-guard"
 import { grepRegex } from "./grep-pattern"
@@ -7659,7 +7660,9 @@ const runServeShell = async (): Promise<void> => {
             `${summaryBrief}${summaryAsk}` +
             (awarenessBrief.length > 0 ? `${awarenessBrief}` : "") +
             `نُفّذت ${allCommands.length} أداة في الحقب السابقة. ` +
-            (pending === undefined ? continuationHint : `الأداة التالية المقترحة ولم تُنفّذ بعد:\n${pending}`) + forcedReceipt
+            (pending === undefined ? continuationHint : `الأداة التالية المقترحة ولم تُنفّذ بعد:\n${pending}`) + forcedReceipt +
+            // 09-30: ما قُرئ في المتصفّح محفوظٌ في دفتر الواجهات — يُسمّى للحقبة كي لا تعيد المسحَ بعد قصّ السياق.
+            bookedSinceNote(STATE_ROOT, turnStartedAt)
         // A missing or stale autonomous plan is an acceptance failure just as
         // real as a failed build.  Previously the outer epoch guard noticed it
         // only after the text loop had already accepted prose as completion;

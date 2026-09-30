@@ -211,3 +211,15 @@ export function parseUiBookCommand(rest: string): UiBookCommand | { readonly err
     default: return { error: UI_BOOK_USAGE }
   }
 }
+
+/**
+ * 09-30 — مقيس على مهمّة «أكمل موقع OpenRouter»: الحقبةُ الأولى قرأت 13 صفحة (28 أداة) ثمّ قُصّ سياقُها (أثرٌ 66,774 بايتاً فوق ميزانيّة 48KB)،
+ * فأعادت الحقبةُ الثانية المسحَ من الرئيسيّة (30 أداة) ولم يُكتب ملفُّ المسح قطّ — والصفحاتُ كلُّها كانت في هذا الدفتر على القرص.
+ * سطرٌ للحقبة التالية يسمّي ما دُوِّن في هذا الدور وكيف يُقرأ؛ فارغٌ حين لا شيء (لا نصّ زائد في المهامّ التي لا تتصفّح).
+ */
+export function bookedSinceNote(root: string, sinceMs: number, max = 40): string {
+  const booked = listBook(root).flatMap((a) => a.screens.filter((s) => Date.parse(s.capturedAt) >= sinceMs).map((s) => `${a.app}/${s.slug}`))
+  if (booked.length === 0) return ""
+  const shown = booked.slice(0, max).join("، ")
+  return `\nالشاشاتُ التي قرأتَها في هذا الدور محفوظةٌ في دفتر الواجهات (${booked.length}) ولا تُفتح ثانيةً لإعادة المسح — اقرأ ما تحتاجه منها بـ«ui-book show <تطبيق>/<شاشة>» ودوّن خلاصتَها في ملفّ المشروع قبل أيّ تصفّحٍ جديد: ${shown}${booked.length > max ? "، …" : ""}\n`
+}
