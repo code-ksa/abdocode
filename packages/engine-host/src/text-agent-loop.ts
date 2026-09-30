@@ -326,7 +326,9 @@ type CommandParse =
  * `team`/`delegate`/`plan`/`shot`/`scroll` مصنَّفةٌ «قراءة» في السجلّ لكنّها ليست منها: تُنجب أو تُغيّر حالة.
  * السقفُ أربعة: النافذةُ تحتمل، والزيادةُ تُخفي أيَّ نتيجةٍ قاد إلى أيّ خطوة.
  */
-const BATCH_CLASS = /^(?:read|list|ls|glob|grep|docs|recall|git|find|console|look|page|logs|status|probe)\b/u
+// 09-30: `ui-book list|show` تقرأ دفترَ الواجهات من القرص وحده — كـdocs/recall. مقيس على مهمّة OpenRouter: 29 تصحيحاً مقابل 49 أداة
+// تتجمّع حول عرضِ شاشاتٍ محفوظة. بقيّةُ أوامر ui-book (إن وُجدت) لا تدخل.
+const BATCH_CLASS = /^(?:(?:read|list|ls|glob|grep|docs|recall|git|find|console|look|page|logs|status|probe)\b|ui-book\s+(?:list|show)(?:\s|$))/u
 const BATCH_MAX = 4
 
 /**
@@ -386,6 +388,19 @@ const fencedJsonWrite = (text: string): string | undefined => {
  * شيفرة فيبقى مرفوضاً كما كان (التوأم في الاختبار).
  */
 /** حرفُ «ذ» يصل أحياناً U+FFFD من المزوّد (مقيس 09-14) — علامةٌ مكسورة في صدر السطر تُشفى إلى «نفّذ:»؛ لا يُمسّ غيرُ صدر السطر. */
+/**
+ * 09-30 — مقيس على مهمّة «أكمل موقع OpenRouter» (ultra عبر NIM): بعد مسحٍ من 38 أداة كتب النموذجُ خطّةَ السبرنتات كاملةً
+ * في ردٍّ يبدأ بـ«⚙ write ABDO-SPRINTS.md <<<» — رمزَ الإيصال بدل «نفّذ:» — فرُفض سطرَ سجلّ، وضاعت الخطّةُ (ثلاثُ دقائق توليد)
+ * وأُعيدت من الصفر. الردُّ الذي **يبدأ** بـ`⚙ write <ملف> <<<` وتتبعه حمولةٌ من ثلاثة أسطرٍ غيرِ فارغةٍ فأكثر نداءٌ لا لبسَ فيه.
+ * إيصالُ كتابةٍ منسوخ يحمل سطرَه الأوّل وحده، فلا يُشفى — وإلا مسح الملفَّ بسطرٍ واحد. وبقيّةُ أسطر ⚙ (run…) تبقى مرفوضة.
+ */
+export const healNarratedWrite = (text: string): string => {
+  const m = /^\s*⚙\s+(write\s+\S+\s+<<<[^\n]*)\r?\n([\s\S]+)$/u.exec(text)
+  if (m === null) return text
+  if (m[2]!.split(/\r?\n/u).filter((line) => line.trim().length > 0).length < 3) return text
+  return `نفّذ: ${m[1]}\n${m[2]}`
+}
+
 export const healCallMarker = (text: string): string => text
   .replace(/^([ \t]*(?:[-*•]\s+)?(?:\*\*|__|`{1,3})?\s*)نفّ?\uFFFD\s*:/gmu, "$1نفّذ:")
   // مقيس 2026-09-28 (nemotron-120b يجيب بالإنجليزية لأنّ المالك فضّلها): كتب «Execute: write package.json <<<» —
@@ -443,7 +458,7 @@ const parseCommand = (text: string, verifiedEffect = false, seen = ""): CommandP
   // Arabic diacritics are optional orthography, not an execution boundary.
   // Normalize only an exact line-leading imperative plus colon; all ordinary
   // multi-call, payload and registered-tool checks still run afterwards.
-  const stripped = unwrapMarkdownCall(trimCallMarkerIndent(stripMeasure(healCallMarker(text)))).replace(/^نفّ?ذ\s*:\s*/gmu, "نفّذ: ")
+  const stripped = unwrapMarkdownCall(trimCallMarkerIndent(stripMeasure(healCallMarker(healNarratedWrite(text))))).replace(/^نفّ?ذ\s*:\s*/gmu, "نفّذ: ")
   if (stripped.startsWith("رُفض إخراج النموذج:")) return Object.freeze({ kind: "invalid", why: stripped })
   const fencedCommand = stripped.match(/^```(?:text)?\s*\r?\n(نفّذ:[\s\S]*?)\r?\n```$/iu)?.[1]
   // Some Qwen completions use a textual XML tool envelope even on the

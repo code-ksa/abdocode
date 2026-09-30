@@ -99,3 +99,21 @@ test("probe joins a read batch", async () => {
   expect(h.dispatched).toEqual(["read package.json", "probe /", "list src"])
   expect(h.rejections).toEqual([])
 })
+
+
+// 09-30 — ui-book list/show تقرأ الدفترَ من القرص وحده؛ وكانت خارج الحزمة فرُفضت حزمُ عرضِ الشاشات المحفوظة (29 تصحيحاً مقابل 49 أداة).
+test("ui-book list/show join a read batch", async () => {
+  const callable = { isCallable: (name: string) => ["read", "ui-book", "list", "write"].includes(name) }
+  const h = await run(["نفّذ: ui-book list\nنفّذ: ui-book show openrouter-ai/models\nنفّذ: ui-book show openrouter-ai/chat", "تمّ."], callable)
+  expect(h.dispatched).toEqual(["ui-book list", "ui-book show openrouter-ai/models", "ui-book show openrouter-ai/chat"])
+  expect(h.rejections).toEqual([])
+})
+
+test("the twin: an unknown ui-book verb, or a write, still breaks the batch", async () => {
+  const callable = { isCallable: (name: string) => ["read", "ui-book", "list", "write"].includes(name) }
+  const other = await run(["نفّذ: ui-book show a/b\nنفّذ: ui-book forget a/b", "تمّ."], callable)
+  expect(other.dispatched).toEqual([])
+  expect(other.rejections.length).toBeGreaterThan(0)
+  const mixed = await run(["نفّذ: ui-book show a/b\nنفّذ: write x.md <<< y", "تمّ."], callable)
+  expect(mixed.dispatched).toEqual([])
+})
