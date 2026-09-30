@@ -182,9 +182,19 @@ export function secretInSourceViolation(input: { normalizedTarget: string; after
   }
 
   // 5.11 — تضمين متغير نصياً في استعلام SQL (حقن).
-  const sqlConcat = /(?:query|execute|exec|prepare|run|all|get)\s*\(\s*[`"'][^`"']*(?:SELECT|INSERT|UPDATE|DELETE|DROP|WHERE)[^`"']*(?:\$\{|["']\s*\+|`\s*\+)/iu
-  if (sqlConcat.test(source)) {
-    return "رُفض بناء SQL بتضمين متغيّر نصياً (حقن — حادثةٌ مقيسة: 28 موضعاً في مشروعٍ واحد). استعمل معاملات مرتبطة (?، $1) ومرّر القيم منفصلةً، لا سلسلةً مبنية."
+  // 09-30 — ثغرةٌ وجدها اختبارٌ يشغّل: `[^`"']*` كان يقف عند أوّل اقتباسٍ داخل الـSQL، فأخطر صيغةٍ على الإطلاق
+  // `prepare(`SELECT … WHERE name LIKE '%${q}%'`)` **مرّت**. لكلّ صيغة نصٍّ نمطُها: القالبُ لا ينتهي إلا بـ`، والمقتبسُ بمثل اقتباسه.
+  const SQL_CALL = String.raw`(?:query|execute|exec|prepare|run|all|get)\s*\(\s*`
+  const SQL_WORD = String.raw`(?:SELECT|INSERT|UPDATE|DELETE|DROP|WHERE)`
+  const sqlConcat = [
+    new RegExp(String.raw`${SQL_CALL}\x60[^\x60]*${SQL_WORD}[^\x60]*\$\{`, "iu"), // قالبٌ يضمّن قيمة
+    new RegExp(String.raw`${SQL_CALL}\x60[^\x60]*${SQL_WORD}[^\x60]*\x60\s*\+`, "iu"), // قالبٌ يُوصل
+    new RegExp(String.raw`${SQL_CALL}(["'])(?:(?!\1)[^\r\n])*${SQL_WORD}(?:(?!\1)[^\r\n])*\1\s*\+`, "iu"), // مقتبسٌ يُوصل
+  ]
+  if (sqlConcat.some((pattern) => pattern.test(source))) {
+    // 09-30 (مقيس على مهمّة OpenRouter): النموذجُ كتب مسارَ /api/models بفلاترَ اختياريّة فرُفض ستَّ مرّاتٍ متتالية (~9 دقائق) قبل أن يصل
+    // بنفسه إلى البنية الثابتة الآمنة. الكشفُ كما هو؛ الرفضُ يسمّي الآن تلك البنية كي تكون المحاولةُ الثانية هي الصحيحة.
+    return "رُفض بناء SQL بتضمين متغيّر نصياً (حقن — حادثةٌ مقيسة: 28 موضعاً في مشروعٍ واحد). استعمل معاملات مرتبطة (?، $1) ومرّر القيم منفصلةً، لا سلسلةً مبنية. للفلاتر الاختياريّة بنيةٌ ثابتة تُمرَّر قيمُها كلُّها: `WHERE (? = 0 OR name LIKE ?) AND (? = '' OR provider = ?)` ثمّ `.all(hasSearch ? 1 : 0, like, provider, provider)`؛ والترتيبُ المتغيّر `ORDER BY CASE ? WHEN 'price' THEN price END, name`؛ و`LIMIT ? OFFSET ?`."
   }
 
   return undefined
