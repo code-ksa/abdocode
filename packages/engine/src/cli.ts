@@ -209,6 +209,7 @@ import { acquireStateDirLock, releaseStateDirLock } from "./state-dir-lock"
 import { agentEpochBudget } from "./agent-epoch-budget"
 import { TurnAwareness, projectMap } from "./turn-awareness"
 import { approvePlan, planApproved, planningToolAllowed, planningWriteViolation, projectDocumentReadLimit } from "./project-planning-phase"
+import { noEditGoalRefusal } from "./goal-no-edit"
 import { modelOutputViolation } from "./model-output-guard"
 import { excessiveMetadataDescription } from "./public-content-quality-guard"
 import { grepRegex } from "./grep-pattern"
@@ -3500,6 +3501,10 @@ const runServeShell = async (): Promise<void> => {
     if (!projectSelected && !["project-create","project-template","templates","project-locate","project-open"].includes(word)) return denied("No project selected. Use project-create <absolute path> before project tools.", "policy_denied")
     const planningPhase = process.env.ABDO_AGENT_PHASE === "planning" || !sprintPlanReady(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1") || !planApproved(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1")
     if (!planningToolAllowed(Tools.tool(word)?.name ?? word, planningPhase)) return denied("رُفضت الأداة: مرحلة التخطيط تسمح بقراءة ملفات المشروع وكتابة الخطة والتسليم وطلب اعتمادها (plan-approve) فقط", "policy_denied")
+    // 09-30 — هدفٌ يحظر التعديل («لا تعدّل أيّ ملفّ») يُحترم هنا عند المُوزِّع الواحد: قيس على المثبَّت 4.0.94 أنّ النموذج قرأه
+    // ثمّ نفّذ `npm update next …` فاستبدل الاعتماديات كلَّها. الحظرُ المقيَّد والاستثناءُ لا يُطلقانه (goal-no-edit.ts).
+    const noEditRefusal = noEditGoalRefusal(currentGoalText, Tools.tool(word)?.name ?? word, body.trim())
+    if (noEditRefusal !== undefined) return denied(noEditRefusal, "policy_denied")
     const rest0 = body.trim().slice(word.length).trim()
     // T12: أداةٌ خارجيّة — نفس البوابة، وصنفُها من إعلانها (المجهول command)
     const ext = externalTool(word)
@@ -7393,7 +7398,7 @@ const runServeShell = async (): Promise<void> => {
       const gateTracks: Record<"build" | "typecheck" | "tests" | "audit", GateTrack> = { build: { ran: false, passed: false }, typecheck: { ran: false, passed: false }, tests: { ran: false, passed: false }, audit: { ran: false, passed: false } }
       const gateEvidence = (output: string): string => output.trim().slice(-160)
       const currentGateReceipts = () => gateReceipts(
-        { build: requiresBuild, typecheck: requiresTypecheck, tests: (requiresTests && testsApplicable()) || (verifyTestCommand !== undefined && codeEditedThisTurn), audit: requiresNpmAudit && existsSync(join(PROJECT_DIR, "package.json")) },
+        { build: requiresBuild, typecheck: requiresTypecheck, tests: (requiresTests && testsApplicable()) || (verifyTestCommand !== undefined && codeEditedThisTurn), audit: requiresNpmAudit && (codeEditedThisTurn || depsTouchedThisTurn) && existsSync(join(PROJECT_DIR, "package.json")) },
         gateTracks,
       )
       const gateReceiptOf = (gate: "build" | "typecheck" | "tests" | "audit") => currentGateReceipts().find((r) => r.gate === gate) ?? { gate, state: "unverified" as const }
@@ -8101,12 +8106,14 @@ const runServeShell = async (): Promise<void> => {
             continue
           }
         }
-        if (loop.stopReason === "complete" && requiresNpmAudit && !successfulAudit && gateTracks.audit.preexisting === true && !auditPreexistingTold) {
+        if (loop.stopReason === "complete" && requiresNpmAudit && (codeEditedThisTurn || depsTouchedThisTurn) && !successfulAudit && gateTracks.audit.preexisting === true && !auditPreexistingTold) {
           // 09-29: ثغراتٌ سابقةٌ في اعتمادياتٍ لم تمسّها الجولة — تُقال مرّةً ولا تحجب (قيس: بناءٌ ✓ وprobe ✓ ثمّ acceptance-pending على glob الموروثة).
           auditPreexistingTold = true
           await emitEvent(turn.id, `△ التدقيق: ${gateShortfall(gateReceiptOf("audit"))}`)
         }
-        if (loop.stopReason === "complete" && requiresNpmAudit && !successfulAudit && gateTracks.audit.preexisting !== true && existsSync(join(PROJECT_DIR, "package.json"))) {
+        // 09-30: التدقيقُ شرطٌ لجولةٍ عدّلت شيفرةً أو اعتماديات — قيس أنّه طالب مهمّةَ قراءةٍ («لا تعدّل أيّ ملفّ») ذُكرت فيها كلمةُ npm
+        // بتدقيقٍ، فكان الدفعُ نحو «إصلاح» الحزم هو ما قاد إلى `npm update`.
+        if (loop.stopReason === "complete" && requiresNpmAudit && (codeEditedThisTurn || depsTouchedThisTurn) && !successfulAudit && gateTracks.audit.preexisting !== true && existsSync(join(PROJECT_DIR, "package.json"))) {
           lastStop = "acceptance-pending"
           pending = "run npm audit --audit-level=high"
           // مساحة عمل pnpm انساقت إلى `npm audit`/`npm i --package-lock-only` (قيس 2026-09-02):
