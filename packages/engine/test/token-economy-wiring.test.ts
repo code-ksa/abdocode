@@ -213,7 +213,7 @@ describe("turn budget wiring in the live cli path", () => {
   })
 
   test("TB-3: a turn-cap refusal of the semantic-verifier ask hands back turn_budget with its own ⏱ line instead of blaming the model", () => {
-    const verifierAsk = source.indexOf("const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], judge)")
+    const verifierAsk = source.indexOf("const reply = await ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], judge)")
     const trip = source.indexOf("if (turnMeter !== undefined && turnMeter.snapshot().tripped) {")
     const unjudged = source.indexOf("⚠ غير محكّم دلالياً: النموذج لم ينتج حكماً صالحاً")
     expect(verifierAsk).toBeGreaterThan(0)
@@ -345,7 +345,7 @@ describe("ideas on our system (09-29): decision model, parallel worktree workers
     expect(source).toContain("return selectionOf(configured, selected.lane) ?? selected")
     expect(source).toContain("}, [], reviewJudge)")
     expect(source).toContain("}, [], resolveDecisionModel(selectedModel))")
-    expect(source).toContain("const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], judge)")
+    expect(source).toContain("const reply = await ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], judge)")
     expect(source).toContain('"routerGate", "gateModel", "decisionModel", "plugins",')
   })
   test("parallel runs each task through runExecInWorktree with the parent's settings, and merge is --no-ff with abort on conflict", () => {

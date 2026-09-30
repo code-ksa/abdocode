@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection } from "../src/project-sprint-plan-guard"
+import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection, sprintDone, sprintShow } from "../src/project-sprint-plan-guard"
 
 const project = () => mkdtempSync(join(tmpdir(), "abdo-sprints-"))
 const completePlan = "# منتج Next.js عربي RTL لشركة السعادة مع SQLite ولوحة الإدارة وتواصل العملاء\n" + Array.from({ length: 8 }, (_, index) => `## سبرنت ${index + 1}\nالحالة: [ ]\nبوابة القبول: npm run ${index === 7 ? "build" : "test"} وHTTP 200\nالأدلة: نتيجة Playwright أو vitest وفحص المتصفح\n${"نطاق واضح للعمل المطلوب. ".repeat(9)}`).join("\n") + "\n## الاستئناف\nABDO-HANDOFF.md\nNEXT_ACTION"
@@ -232,4 +232,23 @@ test("09-30: the first open sprint's own text is the resume focus; none without 
   expect(focus).not.toContain("سبرنت 3")
   writeFileSync(join(dir, "ABDO-SPRINTS.md"), "## سبرنت 1: أ\nالحالة: مكتمل\n")
   expect(openSprintSection(dir)).toBe("")
+})
+
+test("09-30: sprint done closes exactly that sprint with its evidence (the status line repeats across sprints), refuses without evidence, and names the next", () => {
+  const dir = mkdtempSync(join(tmpdir(), "abdo-sprint-done-"))
+  const plan = "## سبرنت 1: أ\r\nالحالة: مكتمل\r\n\r\n## سبرنت 2: إصلاح الصفحة\r\nالحالة: غير مكتمل\r\nبوابة القبول: shot للرئيسية\r\nالأدلة: —\r\n\r\n## سبرنت 3: المزوّدون\r\nالحالة: غير مكتمل\r\nبوابة القبول: probe /api/providers\r\n"
+  writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan)
+  expect(sprintShow(dir)).toContain("○ سبرنت 2: إصلاح الصفحة — بوّابتُه: shot للرئيسية")
+  expect(sprintDone(dir, 2, "").ok).toBe(false)
+  expect(sprintDone(dir, 9, "build ✓ shot ✓").text).toContain("لا سبرنتَ برقم 9")
+  const r = sprintDone(dir, 2, "build ✓ · shot: العين رأت الكتالوج (12 نموذجاً)")
+  expect(r.ok).toBe(true)
+  expect(r.text).toContain("التالي: سبرنت 3: المزوّدون — بوّابتُه: probe /api/providers")
+  const after = readFileSync(join(dir, "ABDO-SPRINTS.md"), "utf8")
+  expect(after).toContain("## سبرنت 2: إصلاح الصفحة\r\nالحالة: مكتمل\r\nبوابة القبول: shot للرئيسية\r\nالأدلة: build ✓ · shot: العين رأت الكتالوج (12 نموذجاً)")
+  expect(after).toContain("## سبرنت 3: المزوّدون\r\nالحالة: غير مكتمل") // التوأم: السبرنتُ الآخر لم يُمسّ
+  expect(after.includes("\n") && !/[^\r]\n/u.test(after)).toBe(true) // نهاياتُ الأسطر محفوظة
+  // والحافّة ترى الإغلاق: من 2 مفتوحَين إلى 1
+  expect(sprintAdvance(dir, 2)?.line).toContain("يبدأ التالي تلقائياً: سبرنت 3: المزوّدون")
+  expect(sprintDone(dir, 2, "again evidence").text).toContain("مكتملٌ من قبل")
 })

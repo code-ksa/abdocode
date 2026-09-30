@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { detectStack, detectStackForProject, stackById } from "./project-stacks"
 
@@ -171,7 +171,7 @@ export const sprintBrief = (projectDir: string): string => {
   const head = `\nخطّةُ السبرنتات (ABDO-SPRINTS.md): ${sections.length - open.length}/${sections.length} مكتملة`
   if (first === undefined) return `${head} — كلُّها مغلقة.${next ? ` NEXT_ACTION: ${next}` : ""}\n`
   const gate = fieldOf(first, SPRINT_GATE_LINE)
-  return `${head} — السبرنتُ المفتوح الأوّل: ${firstLine(first)}${gate ? ` · بوّابتُه: ${gate}` : ""}${next ? ` · NEXT_ACTION: ${next}` : ""}. أنجزه بأدلّته، حدّث حالتَه في الملفّ، ثمّ ابدأ الذي يليه بلا انتظار.\n`
+  return `${head} — السبرنتُ المفتوح الأوّل: ${firstLine(first)}${gate ? ` · بوّابتُه: ${gate}` : ""}${next ? ` · NEXT_ACTION: ${next}` : ""}. أنجزه بأدلّته، ثمّ أغلقه بـ«sprint done <رقم> :: <الدليل>» وابدأ الذي يليه بلا انتظار.\n`
 }
 
 /**
@@ -203,4 +203,44 @@ export const sprintAdvance = (projectDir: string, openAtStart: number | undefine
     line: `أُغلق سبرنتٌ في هذا الدور (${sections.length - open.length}/${sections.length}) — يبدأ التالي تلقائياً: ${title}`,
     hint: `أُغلق السبرنتُ السابق بأدلّته. ابدأ الآن السبرنتَ التالي من ABDO-SPRINTS.md: «${title}»${gate ? ` — بوّابتُه: ${gate}` : ""}. نفّذه بأدواتٍ وأدلّة، حدّث حالتَه في الملفّ حين يجتاز بوّابتَه، ولا تعلن الاكتمالَ الكلّيَّ ما دام سبرنتٌ مفتوحاً.`,
   })
+}
+
+/**
+ * 09-30 (مقيس بلا شاشة: النموذجُ أراد تحويلَ «الحالة: غير مكتمل» إلى «مكتمل» والسطرُ نفسُه في سبرنتين فرُفض التحريرُ ملتبساً، ثمّ دار
+ * على صيغة medit): إغلاقُ سبرنتٍ فعلٌ حتميّ لا تحريرُ نصّ — `sprint done <رقم> :: <الدليل>` يغيّر حالةَ ذلك السبرنت وحده ويكتب
+ * دليلَه. الدليلُ إلزاميّ (الادّعاءُ بلا دليلٍ لا يُكتب)، والمراجعةُ المستقلّة ما زالت تحكم على الادّعاء.
+ */
+export const SPRINT_USAGE = "الصيغة: sprint show | sprint done <رقم> :: <الدليل المقيس (إيصال build/probe/shot)>"
+const sprintHeading = (n: number): RegExp => new RegExp(`^(?:#{1,6}\\s+)?(?:ال)?(?:سبرنت|sprint)\\s*${n}(?!\\d)`, "imu")
+export function sprintShow(projectDir: string): string {
+  let text: string
+  try { text = readFileSync(join(projectDir, "ABDO-SPRINTS.md"), "utf-8") } catch { return "لا ABDO-SPRINTS.md في المشروع — لا خطّةَ سبرنتات." }
+  const sections = sprintSectionsOf(text)
+  if (sections.length === 0) return "ABDO-SPRINTS.md بلا عناوين سبرنت مرقّمة (## سبرنت 1: …)."
+  return sections.map((s) => `${sprintIsOpen(s) ? "○" : "✓"} ${firstLine(s)}${sprintIsOpen(s) ? (fieldOf(s, SPRINT_GATE_LINE) ? ` — بوّابتُه: ${fieldOf(s, SPRINT_GATE_LINE)}` : "") : ""}`).join("\n")
+}
+export function sprintDone(projectDir: string, n: number, evidence: string): { readonly ok: boolean; readonly text: string } {
+  const path = join(projectDir, "ABDO-SPRINTS.md")
+  let text: string
+  try { text = readFileSync(path, "utf-8") } catch { return { ok: false, text: "لا ABDO-SPRINTS.md في المشروع." } }
+  if (!Number.isInteger(n) || n < 1) return { ok: false, text: SPRINT_USAGE }
+  const proof = evidence.replace(/\s+/gu, " ").trim()
+  if (proof.length < 8) return { ok: false, text: `اذكر الدليلَ المقيس بعد «::» — ${SPRINT_USAGE}` }
+  const eol = text.includes("\r\n") ? "\r\n" : "\n"
+  const lines = text.split(/\r?\n/u)
+  const start = lines.findIndex((l) => sprintHeading(n).test(l))
+  if (start < 0) return { ok: false, text: `لا سبرنتَ برقم ${n} في ABDO-SPRINTS.md — sprint show للقائمة.` }
+  let end = lines.findIndex((l, i) => i > start && /^(?:#{1,6}\s+)?(?:ال)?(?:سبرنت|sprint)\s*\d+/iu.test(l))
+  if (end < 0) end = lines.length
+  const statusAt = lines.findIndex((l, i) => i > start && i < end && /^\s*\*{0,2}(?:الحالة|status)\*{0,2}\s*[:：-]/iu.test(l))
+  if (statusAt < 0) return { ok: false, text: `سبرنت ${n} بلا سطر «الحالة:» — أضفه أوّلاً.` }
+  if (!sprintIsOpen(lines.slice(start, end).join("\n"))) return { ok: true, text: `سبرنت ${n} مكتملٌ من قبل — لا تغيير.\n${sprintShow(projectDir)}` }
+  lines[statusAt] = lines[statusAt]!.replace(/([:：-]\s*\*{0,2}).*$/u, "$1مكتمل")
+  const evidenceAt = lines.findIndex((l, i) => i > start && i < end && /^\s*\*{0,2}(?:الأدلة|الدليل|evidence)\*{0,2}\s*[:：-]/iu.test(l))
+  if (evidenceAt >= 0) lines[evidenceAt] = lines[evidenceAt]!.replace(/([:：-]\s*\*{0,2}).*$/u, `$1${proof.slice(0, 400)}`)
+  else lines.splice(statusAt + 1, 0, `الأدلة: ${proof.slice(0, 400)}`)
+  writeFileSync(path, lines.join(eol))
+  const after = sprintSectionsOf(lines.join("\n"))
+  const next = after.find(sprintIsOpen)
+  return { ok: true, text: `✓ سبرنت ${n} مكتمل — الدليل: ${proof.slice(0, 200)}\n${next === undefined ? "كلُّ السبرنتات مغلقة." : `التالي: ${firstLine(next)}${fieldOf(next, SPRINT_GATE_LINE) ? ` — بوّابتُه: ${fieldOf(next, SPRINT_GATE_LINE)}` : ""}`}` }
 }

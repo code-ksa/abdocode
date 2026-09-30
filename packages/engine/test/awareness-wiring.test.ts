@@ -185,7 +185,7 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     expect(source).toContain('const answer=await ask(secretNotice+turn.body,hooks,turnConversation,turnSelection)')
     expect(source).toContain('return {answer,completed:true}')
     expect(source).toContain("const text = await ask(prompt, { ...hooks, toolAllowlist: allowlist }, history, childModel,")
-    expect(source).toContain("ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), {")
+    expect(source).toContain("ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {")
     // 4.0.46 (2026-09-17): الثاني عن قصدٍ معلَن — `ask` يلفّ `askOnce` ويعيد نداءَ نفسِه مرّةً بعد تصعيد الازدحام
     // (provider_unavailable ⇦ الدرجة التالية من السلّم)؛ الكلفةُ في الدفتر نفسه، ولا مسارَ تسعيرٍ ثانٍ. كان المسمارُ أحمر منذها بلا قياس.
     expect(source.match(/\breturn ask\(/gu)).toHaveLength(2)

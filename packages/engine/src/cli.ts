@@ -139,7 +139,7 @@ import { projectBuildViolation } from "./project-build-acceptance"
 import { nextAppPageShellViolation } from "./next-app-structure-guard"
 import { unsupportedPublicContactClaim } from "./public-content-evidence-guard"
 import { tsxSourceViolation } from "./tsx-source-guard"
-import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection } from "./project-sprint-plan-guard"
+import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection, sprintDone, sprintShow, SPRINT_USAGE } from "./project-sprint-plan-guard"
 import { projectAuthAudit, projectAuthViolation } from "./project-auth-guard"
 import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFrom, mergeProjectAwareness, projectAwarenessBrief } from "./project-awareness"
 import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation } from "./project-dependency-guard"
@@ -6644,6 +6644,11 @@ const runServeShell = async (): Promise<void> => {
     turnReadPaths.clear(); turnCreatedPaths.clear(); turnScopeStartedAt = Date.now()
     currentGoalText = turn.body
     sprintFocusText = openSprintSection(PROJECT_DIR)
+    // 09-30 (مقيس): المراجِعُ المستقلّ حكم على «اكمل» وحدَها فقرأ نصَّ السبرنت مقلوباً («الصفحةُ لا تزال تعرض الكتالوج ولا تُظهر الخطأ
+    // المطلوب»). حين يكون الدورُ استئنافاً على خطّة سبرنتات، هدفُ الحكّام (المراجعة، المحكّم، التفنيد) هو متابعةُ الخطّة بحالها الآن.
+    const judgeGoal = (): string => sprintFocusText.length > 0 || (isResumeIntent(turn.body) && existsSync(join(PROJECT_DIR, "ABDO-SPRINTS.md")))
+      ? `${effectiveGoal}\n\nالمطلوبُ في هذا الدور: متابعةُ خطّة ABDO-SPRINTS.md — إنجازُ السبرنتات المفتوحة بترتيبها وإغلاقُ كلٍّ ببوّابته ودليله. حالُها الآن (✓ مكتمل، ○ مفتوح):\n${sprintShow(PROJECT_DIR)}`
+      : effectiveGoal
     turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\n${sprintFocusText}` : effectiveGoal, turnFamilies)
     // د2 — المحرّك الدلاليّ (plugins.semanticFrame): إطارٌ حتميّ للطلب قبل أوّل نداء —
     // لغةٌ ولهجةٌ وفعلٌ وهدف — وسطرُ إيصالٍ 🧭، وعثورٌ حتميّ على المجلّد المطلوب بالاسم
@@ -8118,6 +8123,21 @@ const runServeShell = async (): Promise<void> => {
         }
         acceptanceStalls = 0
         if (loop.stopReason === "complete") {
+          // 09-29 (أمر المالك — الانتقالُ التلقائيّ بين السبرنتات): سبرنتٌ أُغلق في هذا الدور وبقيت سبرنتاتٌ مفتوحة في
+          // ABDO-SPRINTS.md ⇦ لا يُختم الدور «مكتملاً» على سبرنتٍ واحد؛ يُقال التالي ويبدأ (حتى ثلاث مرّاتٍ في الدور، والسقفُ يحكم).
+          // 09-30 (مقيس): كانت الحافّةُ بعد المراجعة المستقلّة، فالمراجعةُ الحاجبةُ أوقفت الدورَ قبل أن تُرى — والسبرنتُ الثالث لم يبدأ.
+          // الحافّةُ أوّلاً: ما دامت سبرنتاتٌ مفتوحة يُمضى إليها، والمراجعةُ تحكم عند آخرها أو عند السقف.
+          const advance = sprintAdvance(PROJECT_DIR, sprintOpenAtStart)
+          if (advance !== undefined && sprintAdvances < 3) {
+            sprintAdvances += 1
+            sprintOpenAtStart = advance.open
+            sprintFocusText = openSprintSection(PROJECT_DIR)
+            for (const family of familiesFor(sprintFocusText)) turnFamilies.add(family)
+            lastStop = "acceptance-pending"
+            continuationHint = advance.hint
+            await emitEvent(turn.id, `▶ ${advance.line}`)
+            continue
+          }
           if (superActive) {
             const superEvidence: readonly SuperAbdoEvidence[] = allReceipts.map((receipt) => ({
               command: receipt.command, mutated: receipt.mutated,
@@ -8129,7 +8149,7 @@ const runServeShell = async (): Promise<void> => {
               const reviewJudge = resolveDecisionModel(selectedModel)
               await emitEvent(turn.id, `Super Abdo: reviewing execution evidence in a separate context, with no tools.${reviewJudge.ref === selectedModel.ref ? "" : ` 🧠 نموذجُ القرار: ${reviewJudge.ref}`}`)
               try {
-                const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), {
+                const reply = await ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {
                   ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: SUPER_ABDO_REVIEW_SYSTEM,
                 }, [], reviewJudge)
                 review = parseSuperAbdoReview(reply)
@@ -8151,7 +8171,7 @@ const runServeShell = async (): Promise<void> => {
               await emitEvent(turn.id, `⚔ التفنيد العدائيّ (وضع «${workAtTurn.label}»): ثلاثُ عدساتٍ تحاول دحضَ الاكتمال — ثلاثةُ نداءاتٍ بلا أدوات.`)
               try {
                 const verdicts = await Promise.all(REFUTE_LENSES.map(async (lens) => {
-                  const reply = await ask(buildRefutePrompt(effectiveGoal, loop.answer, allReceipts, lens), {
+                  const reply = await ask(buildRefutePrompt(judgeGoal(), loop.answer, allReceipts, lens), {
                     ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REFUTE_SYSTEM,
                   }, [], resolveDecisionModel(selectedModel))
                   return parseRefutation(lens.key, typeof reply === "string" ? reply : String(reply))
@@ -8189,7 +8209,7 @@ const runServeShell = async (): Promise<void> => {
             try {
               const judge = resolveDecisionModel(selectedModel)
               if (judge.ref !== selectedModel.ref) await emitEvent(turn.id, `🧠 المحكّمُ الدلاليّ بنموذج القرار ${judge.ref}`)
-              const reply = await ask(buildVerifierPrompt(effectiveGoal, loop.answer, allReceipts, diskNow()), hooks, [], judge)
+              const reply = await ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], judge)
               verdict = parseVerdict(reply)
             } catch { verdict = undefined }
             // مقاطعة المشغّل أثناء التحكيم ليست «غير محكّم» — الدور يُحفظ
@@ -8232,21 +8252,6 @@ const runServeShell = async (): Promise<void> => {
             }
           } else if (verifierOn && verifierRejections >= 2 && semanticStamp === "") {
             semanticStamp = "⚠ قُبل ميكانيكياً بعد رفضين دلاليين — اعتراض المحكّم الأخير في الأحداث"
-          }
-          // 09-29 (أمر المالك — الانتقالُ التلقائيّ بين السبرنتات): سبرنتٌ أُغلق في هذا الدور وبقيت سبرنتاتٌ مفتوحة في
-          // ABDO-SPRINTS.md ⇦ لا يُختم الدور «مكتملاً» على سبرنتٍ واحد؛ يُقال التالي ويبدأ (حتى ثلاث مرّاتٍ في الدور، والسقفُ يحكم).
-          const advance = sprintAdvance(PROJECT_DIR, sprintOpenAtStart)
-          if (advance !== undefined && sprintAdvances < 3) {
-            sprintAdvances += 1
-            sprintOpenAtStart = advance.open
-            sprintFocusText = openSprintSection(PROJECT_DIR)
-            for (const family of familiesFor(sprintFocusText)) turnFamilies.add(family)
-            superAccepted = !superActive
-            semanticStamp = ""
-            lastStop = "acceptance-pending"
-            continuationHint = advance.hint
-            await emitEvent(turn.id, `▶ ${advance.line}`)
-            continue
           }
           break
         }
@@ -8971,6 +8976,16 @@ const executeBody = async (body: string, hooks: AskHooks = {}): Promise<string> 
     case "skill": return skillCommand(tail)
     case "lsp": return lspCommand(tail, hooks)
     case "plan": return planCommand(tail, body)
+    case "sprint": {
+      // 09-30 — sprint show | sprint done <n> :: <دليل>: كتابةٌ حتميّة في ABDO-SPRINTS.md (project-sprint-plan-guard).
+      const [verb, num] = tail
+      if (verb === undefined || verb === "show") return sprintShow(PROJECT_DIR)
+      if (verb === "done") {
+        const cut = body.indexOf("::")
+        return sprintDone(PROJECT_DIR, Number.parseInt(num ?? "", 10), cut < 0 ? "" : body.slice(cut + 2)).text
+      }
+      return SPRINT_USAGE
+    }
     // المستخدمُ يكتبها مباشرةً فهو المعتمِد؛ والنموذجُ يصل إليها عبر بوّابة الموافقة في المُوزِّع.
     case "plan-approve": return approvePlan(PROJECT_DIR, "plan-approve").text
     case "demo": return demo()
