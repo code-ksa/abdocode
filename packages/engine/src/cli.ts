@@ -3975,9 +3975,15 @@ const runServeShell = async (): Promise<void> => {
       }
       case "adapter": {
         if (spec.name === "git") {
-          const action = rest || "status"
-          if (!/^(status|diff|log|branch|show)$/.test(action)) return invalid("git: اختر status أو diff أو log أو branch أو show بلا وسائط إضافية")
-          return runAdapterV("git-read", "git_read", { action }, `git_${turnId}_${nextToolSeq()}`, hooks.signal)
+          // 09-30 (مقيس على المحرّك المثبَّت 4.0.93): «git log --oneline -10» و«git diff ABDO-SPRINTS.md» رُفضا بـ«بلا وسائط إضافية» فدار
+          // النموذجُ على الرفض حتى أوقفه كاشفُ التكرار — والدورُ «نقطة حفظ» بعد عملٍ مكتمل. القراءةُ تُجرى بفعلها الأساسيّ (المحوِّلُ لا
+          // يقبل وسائط) ويُقال إنّ الوسائطَ أُهملت؛ وأفعالُ الكتابة تُسمّى أدواتُها (git-stage/git-commit) بدل الرفض العامّ.
+          const [verb = "status", ...gitArgs] = (rest || "status").trim().split(/\s+/u)
+          const writeTool: Record<string, string> = { add: "git-stage <ملف>", stage: "git-stage <ملف>", commit: "git-commit <رسالة>", restore: "git-unstage <ملف>", reset: "git-unstage <ملف>" }
+          if (writeTool[verb] !== undefined) return invalid(`git للقراءة وحدها — لـ«${verb}» استعمل الأداة: ${writeTool[verb]} (ملفٌّ واحد أو رسالةٌ في كلّ نداء، بلا &&).`)
+          if (!/^(status|diff|log|branch|show)$/.test(verb)) return invalid("git للقراءة: status أو diff أو log أو branch أو show — وللكتابة git-stage / git-unstage / git-commit")
+          const read = await runAdapterV("git-read", "git_read", { action: verb }, `git_${turnId}_${nextToolSeq()}`, hooks.signal)
+          return gitArgs.length === 0 ? read : { ...read, output: `${read.output}\n(الوسائطُ «${gitArgs.join(" ").slice(0, 80)}» لا تُمرَّر — هذه قراءةُ ${verb} الافتراضيّة كاملةً؛ لا تُعِد الطلبَ بوسائط.)` }
         }
         const ok = await gate(turnId, spec.effect, `${spec.name}: ${rest.slice(0, 180)}`, spec.name)
         if (!ok) return denied(`رُفض ${spec.name} — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
