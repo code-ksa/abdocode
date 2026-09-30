@@ -395,7 +395,9 @@ const fencedJsonWrite = (text: string): string | undefined => {
  * إيصالُ كتابةٍ منسوخ يحمل سطرَه الأوّل وحده، فلا يُشفى — وإلا مسح الملفَّ بسطرٍ واحد. وبقيّةُ أسطر ⚙ (run…) تبقى مرفوضة.
  */
 export const healNarratedWrite = (text: string): string => {
-  const m = /^\s*⚙\s+(write\s+\S+\s+<<<[^\n]*)\r?\n([\s\S]+)$/u.exec(text)
+  // مقيس على المثبَّت 4.0.98 (المهمّةُ نفسُها): الردُّ بدأ بـ«�⚙ write …» ومرّةً «��⚙» — محرفُ الاستبدال (بايتا رمزٍ انكسرا) قبل ⚙
+  // فلم يطابق شيءٌ، فعُدّ الردُّ جواباً نهائيّاً وضاعت ثلاثُ حقبٍ بمكوّناتٍ كاملة. المحارفُ الخفيّة والمكسورة في الصدر لا تحمل معنى.
+  const m = /^[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]*⚙[\uFE0E\uFE0F]?\s+(write\s+\S+\s+<<<[^\n]*)\r?\n([\s\S]+)$/u.exec(text)
   if (m === null) return text
   if (m[2]!.split(/\r?\n/u).filter((line) => line.trim().length > 0).length < 3) return text
   return `نفّذ: ${m[1]}\n${m[2]}`
