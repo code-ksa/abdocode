@@ -1,6 +1,6 @@
 [package]
 name = "abdocode-desktop"
-version = "4.0.100"
+version = "4.0.101"
 edition = "2021"
 description = "عبدو كود — واجهة سطح المكتب فوق نواة Rust"
 
