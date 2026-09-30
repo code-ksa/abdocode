@@ -4332,6 +4332,10 @@ const runServeShell = async (): Promise<void> => {
   let surfaceRefs: readonly import("./mind/surface").PageNode[] = []
   // ب2 — آخرُ رابطٍ فُتح (لتعليق اللقطة)، ولقطةٌ معلَّقةٌ تُلحق بنداء النموذج التالي وحده ثم تُستهلك.
   let surfaceUrl = ""
+  // 09-30 (مقيس بلا شاشة): shot بعد إصلاحٍ وبناءٍ وإعادة تشغيل الخادم التقط الوثيقةَ القديمة نفسَها (22797 بايت مرّتين) فرأت العينُ
+  // الخطأَ الذي أُصلح وعاد النموذجُ يحرّر ملفّاً سليماً. متى حُمّلت الصفحةُ آخرَ مرّة، ومتى قام خادمٌ مُدار آخرَ مرّة.
+  let surfaceLoadedAt = 0
+  let managedServerStartedAt = 0
   let pendingShot: { readonly data: string; readonly url: string; readonly mime: "image/png" | "image/jpeg" } | undefined
   /** بلاطاتُ «shot full» ولقطاتُ الخطأ: تصل النموذجَ أربعاً في كلّ نداء (سقفُ البوّابة للصور في الرسالة)، والبقيّةُ في النداء التالي. */
   let pendingShots: { readonly data: string; readonly url: string; readonly mime: "image/png" | "image/jpeg" }[] = []
@@ -4900,6 +4904,15 @@ const runServeShell = async (): Promise<void> => {
 
     // قيس (سجلّ المالك): «open https://www.google.com» فشل بلا سطحٍ ثمّ نجح «ui» بالرابط نفسه — فليُطلق open السطحَ كما يفعل ui.
     if (name === "open" && surface === undefined) return runSurfaceTool("ui", rest, turnId)
+    // 09-30 (مقيس): shot بلا سطحٍ قال «لا سطحَ موصول» والخادمُ المُدار حيّ — يُفتح عنوانُه أوّلاً كما يفعل open ثمّ تُلتقط.
+    if (name === "shot" && surface === undefined) {
+      const port = turnServers.snapshot().find((s) => s.alive)?.port ?? devServers.snapshot().find((s) => s.alive)?.port
+      if (port !== undefined) {
+        const opened = await runSurfaceTool("ui", `http://127.0.0.1:${port}/`, turnId)
+        if (surface === undefined) return opened
+        surfaceLoadedAt = Date.now()
+      }
+    }
     if (surface === undefined) return "لا سطحَ موصول — استعمل: ui <مشروع> يُطلقه ويفتح واجهته، أو surface <منفذ CDP> لوصل متصفّحٍ قائم"
 
     if (name === "find") {
@@ -5040,6 +5053,7 @@ const runServeShell = async (): Promise<void> => {
       surfaceGeneration += 1 // كلّ تنقّلٍ يُبطل مراجع ما قبله
       surfaceRefs = []
       surfaceUrl = rest
+      surfaceLoadedAt = Date.now()
       await paneShot()
       const note = await landed(rest)
       // بلاغُ المالك 2026-09-28: بعد الفتح يُقرأ ما يراه المتصفّحُ نفسُه (بلا رؤية): أخطاءُ طرفيّة الصفحة تُلحق بالإيصال
@@ -5111,6 +5125,14 @@ const runServeShell = async (): Promise<void> => {
     }
 
     if (name === "shot") {
+      // 09-30: صفحةٌ محلّيّةٌ حُمّلت قبل أن يقوم الخادمُ المُدار (إعادةُ تشغيلٍ بعد إصلاح) تُعاد قبل اللقطة — لا تُصوَّر وثيقةٌ ميّتة.
+      let reloadNote = ""
+      if (managedServerStartedAt > surfaceLoadedAt && /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/|$)/iu.test(surfaceUrl)) {
+        await surface.navigate(surfaceUrl)
+        surfaceGeneration += 1; surfaceRefs = []; surfaceLoadedAt = Date.now()
+        await new Promise((resolve) => setTimeout(resolve, 600))
+        reloadNote = "↻ أُعيد تحميلُ الصفحة قبل اللقطة لأنّ الخادمَ أُعيد تشغيله بعد آخر فتح. "
+      }
       // ب2 — لقطةُ الصفحة: إلى اللوحة الآن، وإلى نموذج الرؤية (settings.visionModel) في نداء النموذج التالي وحده.
       // بلا نموذجِ رؤيةٍ مضبوط تبقى اللقطةُ عرضاً — يُقال ذلك ولا يُدَّعى أن النموذج رأى.
       // مقيسٌ 2026-09-13: بلا visionModel كانت اللقطةُ تضيع رغم أنّ نموذجَ الحارة يرى — `shotRoute` مالكُ الجواب.
@@ -5136,7 +5158,7 @@ const runServeShell = async (): Promise<void> => {
         const total = Math.round(captured.reduce((sum, c) => sum + c.data.length * 3 / 4, 0))
         // 09-29 (عينُ الوكيل): نموذجُ رؤيةٍ منفصل يصف البلاطاتِ الآن، والوكيلُ يقرأ الوصفَ ويقرّر — لا يذهب النداءُ التالي كلُّه إلى نموذج الرؤية.
         const described = route.reaches && route.via === "vision" ? await describeShots(captured.slice(0, 4).map((c) => ({ mime: c.mime, data: c.data })), route.ref, surfaceUrl, total, captured.length, turnId) : undefined
-        if (described !== undefined) { pendingShot = undefined; pendingShots = []; return described }
+        if (described !== undefined) { pendingShot = undefined; pendingShots = []; return reloadNote + described }
         if (route.reaches) { pendingShot = undefined; pendingShots = captured.map((c) => ({ data: c.data, url: surfaceUrl, mime: c.mime })) }
         return route.reaches
           ? "التُقطت الصفحةُ كاملةً: " + captured.length + " بلاطات (ارتفاعُها " + metrics.scrollHeight + "px، " + total + " بايت) — تصل " + (route.via === "vision" ? "نموذجَ الرؤية" : "نموذجَ الحارة (يرى)") + " أربعاً في النداء التالي" + (captured.length > 4 ? " والبقيّةُ في الذي يليه" : "") + ". اقرأها بالترتيب من الأعلى إلى الأسفل."
@@ -5153,12 +5175,12 @@ const runServeShell = async (): Promise<void> => {
       // 09-29 (عينُ الوكيل): نموذجُ الرؤية المنفصل يصف اللقطةَ الآن نصّاً يعود إيصالاً — والوكيلُ (الذي قد لا يرى) يقرّر.
       if (pendingShot !== undefined && route.reaches && route.via === "vision") {
         const described = await describeShots([{ mime, data }], route.ref, surfaceUrl, bytes, 1, turnId)
-        if (described !== undefined) { pendingShot = undefined; return described + where }
+        if (described !== undefined) { pendingShot = undefined; return reloadNote + described + where }
       }
       if (route.reaches && pendingShot === undefined) return `التُقطت لقطةُ الشاشة (${bytes} بايت) — وصلت اللوحةَ لكنّها فوق سقف الصورة (${MAX_IMAGE_BASE64} حرفاً) حتى بعد القصّ، فلا تصل النموذج.${where}`
-      return route.reaches
+      return reloadNote + (route.reaches
         ? `التُقطت لقطةُ الشاشة (${bytes} بايت، ${mime === "image/jpeg" ? "JPEG" : "PNG"}) — وصلت اللوحةَ، وتصل ${route.via === "vision" ? "نموذجَ الرؤية" : "نموذجَ الحارة (يرى)"} في النداء التالي.${where}`
-        : `التُقطت لقطةُ الشاشة (${bytes} بايت) — وصلت اللوحةَ؛ ${route.why} فلا تصل النموذج.${where}`
+        : `التُقطت لقطةُ الشاشة (${bytes} بايت) — وصلت اللوحةَ؛ ${route.why} فلا تصل النموذج.${where}`)
     }
 
     const [ref, ...tail] = rest.split(/\s+/)
@@ -5425,7 +5447,9 @@ const runServeShell = async (): Promise<void> => {
       if (depProblem !== undefined) return refused(`رُفض تشغيل المشروع قبل إصلاح التبعيات: ${depProblem}`)
       // مستنتَج عمداً: نصّ الخادم المُدار نصٌّ أوّل الطرف والمسند القديم صحيح عليه
       // («فشل تشغيل الخادم»/«تعذّر التشغيل»)؛ الإرجاع المنظَّم من ManagedServers شريحة لاحقة.
-      return plain(await turnServers.start(serverCommand, PROJECT_DIR))
+      const startedSay = await turnServers.start(serverCommand, PROJECT_DIR)
+      if (startedSay.startsWith("⚙ الخادم يعمل تحت إدارة النواة")) managedServerStartedAt = Date.now()
+      return plain(startedSay)
     }
     if (/\bcreate-next-app(?:@[^\s]+)?\b/iu.test(cmd)) {
       return refused("رُفض create-next-app: مجلد المشروع هو الجذر النهائي. أنشئ package.json وملفات Next.js مباشرة بأداة write، ثم شغّل npm install.")

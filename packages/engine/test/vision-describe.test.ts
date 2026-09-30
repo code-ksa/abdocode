@@ -45,8 +45,8 @@ describe("عينُ الوكيل — vision-describe", () => {
     // لقطةُ الخطأ التلقائيّة تُوصف هي الأخرى بدل أن تُعلَّق لدورٍ لاحق
     expect(cli).toContain('const described = errorRoute.reaches && errorRoute.via === "vision" ? await describeShots([{ mime: "image/jpeg", data }], errorRoute.ref, surfaceUrl, Math.round(data.length * 3 / 4), 1, turnId) : undefined')
     expect(cli).toContain('if (pendingShot !== undefined && route.reaches && route.via === "vision") {')
-    expect(cli).toContain("if (described !== undefined) { pendingShot = undefined; return described + where }")
-    expect(cli).toContain("if (described !== undefined) { pendingShot = undefined; pendingShots = []; return described }")
+    expect(cli).toContain("if (described !== undefined) { pendingShot = undefined; return reloadNote + described + where }")
+    expect(cli).toContain("if (described !== undefined) { pendingShot = undefined; pendingShots = []; return reloadNote + described }")
     // التوأم: بلا وصفٍ صالح يبقى المسارُ القديم (اللقطةُ إلى النداء التالي)
     expect(cli).toContain("if (!visionReportUsable(text)) { await emitEvent(turnId, `👁 نموذجُ الرؤية لم يُعطِ وصفاً صالحاً")
     expect(cli).toContain("if (route.reaches) { pendingShot = undefined; pendingShots = captured.map((c) => ({ data: c.data, url: surfaceUrl, mime: c.mime })) }")
