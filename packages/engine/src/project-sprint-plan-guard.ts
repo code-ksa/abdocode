@@ -14,7 +14,12 @@ const PLAN = "abdo-sprints.md"
 const SPRINT_SECTION_SPLIT = /^(?:#{1,6}\s+)?(?=(?:ال)?سبرنت\s+\d+|sprint\s+\d+)/gimu
 const SPRINT_STATUS_LINE = /^\s*\*{0,2}(?:الحالة|status)\*{0,2}\s*[:：-]\s*\*{0,2}([^\r\n]*)/imu
 const SPRINT_DONE = /^(?:\[[xX]\](?:\s.*)?|(?:✅\s*)?(?:مكتمل|completed|done)[.!\s*]*)$/iu
-const sprintSectionsOf = (text: string): string[] => text.split(SPRINT_SECTION_SPLIT).slice(1)
+/**
+ * 09-30 — مقيس على خطّةٍ كتبها النموذجُ لمهمّة OpenRouter (14 سبرنتاً): ملخّصُ التبعيات داخل كتلة ``` يبدأ أسطرَه بـ«Sprint 3 (Model Detail) ←»
+ * فعُدّت 28 سبرنتاً (0/28). ما داخل الكتل المسيّجة ليس عنواناً: يُطمس بمسافاتٍ تحفظ عددَ الأسطر ومواضعها (sprintDone يحرّر الأصل بالرقم نفسه).
+ */
+const maskFences = (text: string): string => text.replace(/^[ \t]*```[\s\S]*?^[ \t]*```[^\r\n]*$/gmu, (block) => block.replace(/[^\r\n]/gu, " "))
+const sprintSectionsOf = (text: string): string[] => maskFences(text).split(SPRINT_SECTION_SPLIT).slice(1)
 const sprintIsOpen = (section: string): boolean => {
   const status = section.match(SPRINT_STATUS_LINE)?.[1]?.trim() ?? ""
   return !SPRINT_DONE.test(status)
@@ -223,18 +228,26 @@ export function sprintDone(projectDir: string, n: number, evidence: string): { r
   const path = join(projectDir, "ABDO-SPRINTS.md")
   let text: string
   try { text = readFileSync(path, "utf-8") } catch { return { ok: false, text: "لا ABDO-SPRINTS.md في المشروع." } }
-  if (!Number.isInteger(n) || n < 1) return { ok: false, text: SPRINT_USAGE }
+  // خطّةٌ تبدأ بـ«Sprint 0» (الأساسيات) مقيسة 09-30 — الصفرُ رقمٌ صالح.
+  if (!Number.isInteger(n) || n < 0) return { ok: false, text: SPRINT_USAGE }
   const proof = evidence.replace(/\s+/gu, " ").trim()
   if (proof.length < 8) return { ok: false, text: `اذكر الدليلَ المقيس بعد «::» — ${SPRINT_USAGE}` }
   const eol = text.includes("\r\n") ? "\r\n" : "\n"
   const lines = text.split(/\r?\n/u)
-  const start = lines.findIndex((l) => sprintHeading(n).test(l))
+  // البحثُ في نسخةٍ مطموسةِ الكتل المسيّجة (الأسطرُ نفسُها بأرقامها)، والتحريرُ في الأصل.
+  const scan = maskFences(text).split(/\r?\n/u)
+  const start = scan.findIndex((l) => sprintHeading(n).test(l))
   if (start < 0) return { ok: false, text: `لا سبرنتَ برقم ${n} في ABDO-SPRINTS.md — sprint show للقائمة.` }
-  let end = lines.findIndex((l, i) => i > start && /^(?:#{1,6}\s+)?(?:ال)?(?:سبرنت|sprint)\s*\d+/iu.test(l))
+  let end = scan.findIndex((l, i) => i > start && /^(?:#{1,6}\s+)?(?:ال)?(?:سبرنت|sprint)\s*\d+/iu.test(l))
   if (end < 0) end = lines.length
-  const statusAt = lines.findIndex((l, i) => i > start && i < end && /^\s*\*{0,2}(?:الحالة|status)\*{0,2}\s*[:：-]/iu.test(l))
-  if (statusAt < 0) return { ok: false, text: `سبرنت ${n} بلا سطر «الحالة:» — أضفه أوّلاً.` }
+  let statusAt = scan.findIndex((l, i) => i > start && i < end && /^\s*\*{0,2}(?:الحالة|status)\*{0,2}\s*[:：-]/iu.test(l))
   if (!sprintIsOpen(lines.slice(start, end).join("\n"))) return { ok: true, text: `سبرنت ${n} مكتملٌ من قبل — لا تغيير.\n${sprintShow(projectDir)}` }
+  // 09-30: خطّةٌ بجداول مهامّ بلا سطر «الحالة:» كان الإغلاقُ يُرفض فيها ويُطلب تحريرٌ يدويّ — الأداةُ تكتب الملفّ على كلّ حال، فتضيف السطرَ بعد العنوان.
+  if (statusAt < 0) {
+    lines.splice(start + 1, 0, "الحالة: مفتوح")
+    statusAt = start + 1
+    end += 1
+  }
   lines[statusAt] = lines[statusAt]!.replace(/([:：-]\s*\*{0,2}).*$/u, "$1مكتمل")
   const evidenceAt = lines.findIndex((l, i) => i > start && i < end && /^\s*\*{0,2}(?:الأدلة|الدليل|evidence)\*{0,2}\s*[:：-]/iu.test(l))
   if (evidenceAt >= 0) lines[evidenceAt] = lines[evidenceAt]!.replace(/([:：-]\s*\*{0,2}).*$/u, `$1${proof.slice(0, 400)}`)

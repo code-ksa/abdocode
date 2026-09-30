@@ -252,3 +252,58 @@ test("09-30: sprint done closes exactly that sprint with its evidence (the statu
   expect(sprintAdvance(dir, 2)?.line).toContain("يبدأ التالي تلقائياً: سبرنت 3: المزوّدون")
   expect(sprintDone(dir, 2, "again evidence").text).toContain("مكتملٌ من قبل")
 })
+
+
+// 09-30 — خطّةٌ كتبها النموذجُ لمهمّة OpenRouter: عناوينُ «## Sprint 0:»… بجداول بلا «الحالة:»، وملخّصُ تبعياتٍ في كتلة ``` يبدأ أسطرَه بـ«Sprint N».
+describe("a model-written plan: zero-based, table sprints, a fenced dependency summary", () => {
+  const plan = [
+    "# خطة السبرنتات — OpenRouter Clone",
+    "",
+    "## Sprint 0: الأساسيات والبنية المشتركة",
+    "| # | المهمة | معيار القبول |",
+    "| 0.1 | الشريط العلويّ | يظهر في page |",
+    "",
+    "## Sprint 1: الصفحة الرئيسية (Home) — `/`",
+    "| 1.1 | البطل | الصفحة 200 |",
+    "",
+    "## Sprint 2: كتالوج النماذج",
+    "| 2.1 | الفلاتر | npm run build ✓ |",
+    "",
+    "## ملخص التسلسل والتبعيات",
+    "",
+    "```",
+    "Sprint 0 (أساسيات)",
+    "    ↓",
+    "Sprint 1 (Home) ← يمكن البدء به موازياً مع 2",
+    "Sprint 2 (Models Catalog) ← يحتاج Sprint 0.5 (API)",
+    "```",
+    "",
+  ].join("\r\n")
+
+  test("the fenced summary is not counted as sprints (was 28 for 14)", () => {
+    const dir = project()
+    writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan)
+    expect(openSprintCount(dir)).toBe(3)
+    expect(sprintBrief(dir)).toContain("0/3")
+  })
+
+  test("sprint done 0 closes the zero sprint, adding the status line the table plan lacked", () => {
+    const dir = project()
+    writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan)
+    const done = sprintDone(dir, 0, "npm run build ✓ و probe / 200")
+    expect(done.ok).toBe(true)
+    const after = readFileSync(join(dir, "ABDO-SPRINTS.md"), "utf8")
+    expect(after).toContain("## Sprint 0: الأساسيات والبنية المشتركة\r\nالحالة: مكتمل\r\nالأدلة: npm run build")
+    expect(after).toContain("Sprint 1 (Home) ← يمكن البدء به موازياً مع 2") // الكتلةُ المسيّجة لم تُمسّ
+    expect(openSprintCount(dir)).toBe(2)
+    expect(sprintBrief(dir)).toContain("Sprint 1: الصفحة الرئيسية")
+  })
+
+  test("the twins: an unknown number and a negative one are refused; a real heading after a fence still counts", () => {
+    const dir = project()
+    writeFileSync(join(dir, "ABDO-SPRINTS.md"), plan + "\r\n## Sprint 3: الترتيب\r\n| 3.1 | الجدول | 200 |\r\n")
+    expect(openSprintCount(dir)).toBe(4)
+    expect(sprintDone(dir, 7, "npm run build ✓ 200").ok).toBe(false)
+    expect(sprintDone(dir, -1, "npm run build ✓ 200").ok).toBe(false)
+  })
+})
