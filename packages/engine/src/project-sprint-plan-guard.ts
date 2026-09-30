@@ -167,7 +167,7 @@ export const sprintBrief = (projectDir: string): string => {
   const open = sections.filter(sprintIsOpen)
   const first = open[0]
   let next = ""
-  try { next = fieldOf(readFileSync(join(projectDir, "ABDO-HANDOFF.md"), "utf-8"), NEXT_ACTION_LINE) } catch { /* لا تسليمَ بعد */ }
+  try { next = fieldOf(readFileSync(join(projectDir, "ABDO-HANDOFF.md"), "utf-8"), NEXT_ACTION_LINE).replace(/[.。؛;,،\s]+$/u, "") } catch { /* لا تسليمَ بعد */ }
   const head = `\nخطّةُ السبرنتات (ABDO-SPRINTS.md): ${sections.length - open.length}/${sections.length} مكتملة`
   if (first === undefined) return `${head} — كلُّها مغلقة.${next ? ` NEXT_ACTION: ${next}` : ""}\n`
   const gate = fieldOf(first, SPRINT_GATE_LINE)
