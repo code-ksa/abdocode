@@ -244,3 +244,13 @@ export function sprintDone(projectDir: string, n: number, evidence: string): { r
   const next = after.find(sprintIsOpen)
   return { ok: true, text: `✓ سبرنت ${n} مكتمل — الدليل: ${proof.slice(0, 200)}\n${next === undefined ? "كلُّ السبرنتات مغلقة." : `التالي: ${firstLine(next)}${fieldOf(next, SPRINT_GATE_LINE) ? ` — بوّابتُه: ${fieldOf(next, SPRINT_GATE_LINE)}` : ""}`}` }
 }
+
+/**
+ * 09-30 (مقيس بعاملين): المراجِعُ طالب بدليل سبرنت 1 المُغلَق في جلسةٍ سابقة، وبوّابةُ سبرنت 4 تطلب shot فاكتفى النموذجُ بـprobe لأنّ
+ * شرطَ المتصفّح يقرأ «اكمل» وحدَها. ما كان مفتوحاً عند بدء الدور (بعناوينه وبوّاباته) هو المطلوبُ فيه — للحكّام ولشرط المتصفّح.
+ */
+export const openSprintsSummary = (projectDir: string): string => {
+  let text: string
+  try { text = readFileSync(join(projectDir, "ABDO-SPRINTS.md"), "utf-8") } catch { return "" }
+  return sprintSectionsOf(text).filter(sprintIsOpen).map((s) => `- ${firstLine(s)}${fieldOf(s, SPRINT_GATE_LINE) ? ` — بوّابتُه: ${fieldOf(s, SPRINT_GATE_LINE)}` : ""}`).join("\n")
+}

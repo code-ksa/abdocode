@@ -139,7 +139,7 @@ import { projectBuildViolation } from "./project-build-acceptance"
 import { nextAppPageShellViolation } from "./next-app-structure-guard"
 import { unsupportedPublicContactClaim } from "./public-content-evidence-guard"
 import { tsxSourceViolation } from "./tsx-source-guard"
-import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection, sprintDone, sprintShow, SPRINT_USAGE } from "./project-sprint-plan-guard"
+import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection, sprintDone, sprintShow, SPRINT_USAGE, openSprintsSummary } from "./project-sprint-plan-guard"
 import { projectAuthAudit, projectAuthViolation } from "./project-auth-guard"
 import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFrom, mergeProjectAwareness, projectAwarenessBrief } from "./project-awareness"
 import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation } from "./project-dependency-guard"
@@ -6655,6 +6655,9 @@ const runServeShell = async (): Promise<void> => {
     // 09-30: عاملُ parallel لا يرى خطّةَ السبرنتات ولا ينتقل فيها — مهمّتُه وحدها (WORKER_SCOPE_NOTE).
     const parallelWorker = process.env.ABDO_PARALLEL_WORKER === "1"
     let sprintOpenAtStart = parallelWorker ? undefined : openSprintCount(PROJECT_DIR)
+    // 09-30: ما كان مفتوحاً عند بدء الدور بعناوينه وبوّاباته — مطلوبُ هذا الدور للحكّام ولشرط المتصفّح (بوّابةُ shot تُلزِم العين).
+    const sprintsDue = parallelWorker ? "" : openSprintsSummary(PROJECT_DIR)
+    const proofGoal = sprintsDue.length > 0 ? `${effectiveGoal}\n${sprintsDue}` : effectiveGoal
     let sprintAdvances = 0
     desktopTaskText = `${turn.body}\n${priorGoal?.goal ?? ""}`
     turnReadPaths.clear(); turnCreatedPaths.clear(); turnScopeStartedAt = Date.now()
@@ -6663,7 +6666,7 @@ const runServeShell = async (): Promise<void> => {
     // 09-30 (مقيس): المراجِعُ المستقلّ حكم على «اكمل» وحدَها فقرأ نصَّ السبرنت مقلوباً («الصفحةُ لا تزال تعرض الكتالوج ولا تُظهر الخطأ
     // المطلوب»). حين يكون الدورُ استئنافاً على خطّة سبرنتات، هدفُ الحكّام (المراجعة، المحكّم، التفنيد) هو متابعةُ الخطّة بحالها الآن.
     const judgeGoal = (): string => sprintFocusText.length > 0 || (isResumeIntent(turn.body) && existsSync(join(PROJECT_DIR, "ABDO-SPRINTS.md")))
-      ? `${effectiveGoal}\n\nالمطلوبُ في هذا الدور: متابعةُ خطّة ABDO-SPRINTS.md — إنجازُ السبرنتات المفتوحة بترتيبها وإغلاقُ كلٍّ ببوّابته ودليله. حالُها الآن (✓ مكتمل، ○ مفتوح):\n${sprintShow(PROJECT_DIR)}`
+      ? `${effectiveGoal}\n\nالمطلوبُ في هذا الدور: متابعةُ خطّة ABDO-SPRINTS.md — السبرنتاتُ التي كانت مفتوحةً عند بدئه، كلٌّ ببوّابته ودليله:\n${sprintsDue || "—"}\nما أُغلق قبل هذا الدور أُثبت في جلساتٍ سابقة (دليلُه في سطر «الأدلة») فلا يُطالَب بدليله هنا. حالُ الخطّة الآن (✓ مكتمل، ○ مفتوح):\n${sprintShow(PROJECT_DIR)}`
       : effectiveGoal
     // 09-30: ومعه خلاصةُ الخطّة (فيها NEXT_ACTION من ABDO-HANDOFF.md) — «نفّذهما بالتوازي بوكيلين» في التسليم تفتح عائلةَ التفويض.
     turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\n${sprintFocusText}\n${sprintBrief(PROJECT_DIR)}` : effectiveGoal, turnFamilies)
@@ -8120,7 +8123,7 @@ const runServeShell = async (): Promise<void> => {
           continue
         }
         // دليلُ المتصفّح (09-13): هدفٌ يطلب الفتحَ/اللقطة/النقر لا يُقفل ببناءٍ أخضر — الجولةُ المقيسة انتهت بلا open ولا shot.
-        const browserProblem = loop.stopReason === "complete" ? browserProofVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor), browserAvailable) : undefined
+        const browserProblem = loop.stopReason === "complete" ? browserProofVerdict(proofGoal, allReceipts.slice(outputEvidenceFloor), browserAvailable) : undefined
         if (loop.stopReason === "complete" && browserProblem !== undefined) {
           lastStop = "acceptance-pending"
           continuationHint = browserProblem
@@ -8281,7 +8284,7 @@ const runServeShell = async (): Promise<void> => {
       // ذ4 — البوّاباتُ الأربع بقاعدةٍ واحدة: passed وحده يُرضي؛ الفاشلُ لا، وغيرُ المفحوص لا.
       // 09-29 (LangGraph): خطّةٌ لمسها الدور وفيها خطواتٌ مفتوحة لا تُسلَّم مكتملة — الرسمُ حكمٌ كالبوّابات.
       const planSatisfied = planOpenSteps().length === 0 || !(allCommands.some((c) => /^plan\s+(?!show)/u.test(c)) || planOpenSteps().some((s) => s.state === "running"))
-      const completed = planSatisfied && superAccepted && lastStop === "complete" && !waitingVerdict && acceptanceSatisfied(currentGateReceipts()) && outputEvidenceVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor)) === undefined && browserProofVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor), browserAvailable) === undefined && sprintProgressViolation(PROJECT_DIR, !planningOnly && process.env.ABDO_REQUIRE_SPRINT_PLAN === "1") === undefined
+      const completed = planSatisfied && superAccepted && lastStop === "complete" && !waitingVerdict && acceptanceSatisfied(currentGateReceipts()) && outputEvidenceVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor)) === undefined && browserProofVerdict(proofGoal, allReceipts.slice(outputEvidenceFloor), browserAvailable) === undefined && sprintProgressViolation(PROJECT_DIR, !planningOnly && process.env.ABDO_REQUIRE_SPRINT_PLAN === "1") === undefined
       let answer = completed
         ? `${lastAnswer}\n— حقب التنفيذ: ${epochs} · الأدوات: ${allCommands.length} · التوقف: ${lastStop}`
         : `— المهمة غير مكتملة بعد. حقب التنفيذ: ${epochs} · الأدوات المنفذة فعلياً: ${allCommands.length} · التوقف: ${lastStop}`

@@ -25,3 +25,10 @@ test("judges (review, verifier, refutation) get the sprint plan state when the t
   expect(cli).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], judge)")
   expect(cli).not.toContain("buildVerifierPrompt(effectiveGoal,")
 })
+
+test("09-30: the turn's due sprints (open at its start, with gates) feed the judges and the browser gate", () => {
+  expect(cli).toContain('const sprintsDue = parallelWorker ? "" : openSprintsSummary(PROJECT_DIR)')
+  expect(cli).toContain("فلا يُطالَب بدليله هنا")
+  expect(cli.split("browserProofVerdict(proofGoal, allReceipts.slice(outputEvidenceFloor), browserAvailable)").length - 1).toBe(2)
+  expect(cli).not.toContain("browserProofVerdict(effectiveGoal,")
+})

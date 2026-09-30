@@ -164,3 +164,11 @@ test("09-30: extension receipts (chrome.open / chrome.shot / chrome.tap) prove t
   const failedShot = { command: "chrome.shot", output: "✕ chrome.shot\nFailed to capture tab", verdict: { ok: false, reason: "tool_failed" } as never }
   expect(browserProofVerdict(goal, [ok("chrome.open http://localhost:3000"), failedShot, ok("chrome.page"), ok("chrome.tap r4")])).toContain("shot full")
 })
+
+test("09-30: a sprint gate that says «shot لـ/about» requires a shot even with no browser word; desk shot does not", () => {
+  const ok = (command: string) => ({ command, output: "⚙ done", verdict: { ok: true } as never })
+  const goal = "اكمل\n- سبرنت 4: صفحة «عن المشروع» — بوّابتُه: npm run build يخرج 0، ثمّ shot لـ/about بعد تشغيل الخادم يُظهر العنوان"
+  expect(browserProofVerdict(goal, [ok("run npm run build"), ok("probe /about")])).toContain("shot full")
+  expect(browserProofVerdict(goal, [ok("run npm run build"), ok("open http://127.0.0.1:3010/about"), ok("shot")])).toBeUndefined()
+  expect(browserProofVerdict("desk shot للنافذة ثمّ احفظ الملفّ", [ok("desk shot")])).toBeUndefined()
+})

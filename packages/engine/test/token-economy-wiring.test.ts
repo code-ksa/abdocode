@@ -335,7 +335,7 @@ describe("kill-by-pid ownership and the probe tool (09-29)", () => {
   })
   test("probe is an exec tool that plans loopback-only targets and renders one receipt", () => {
     expect(source).toContain('if (spec.name === "probe") {')
-    expect(source).toContain("return okText(renderProbe(await probeUrls(plan.urls), plan.refused))")
+    expect(source).toContain("const report = renderProbe(await probeUrls(plan.urls), plan.refused)")
   })
 })
 
@@ -351,7 +351,7 @@ describe("ideas on our system (09-29): decision model, parallel worktree workers
   test("parallel runs each task through runExecInWorktree with the parent's settings, and merge is --no-ff with abort on conflict", () => {
     expect(source).toContain('if (spec.name === "parallel") {')
     expect(source).toContain("const tasks = parseParallelTasks(body)")
-    expect(source).toContain('{ task, project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true }')
+    expect(source).toContain('{ task: workerTask(task), project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true }')
     expect(source).toContain("{ ...process.env, ABDO_CODE_SETTINGS: SETTINGS_FILE }")
     expect(source).toContain('if (spec.name === "merge") {')
     expect(source).toContain('"merge", "--no-ff", "--no-edit", branch]')

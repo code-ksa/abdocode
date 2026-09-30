@@ -186,7 +186,8 @@ export function browserProofVerdict(
   // مقيس 09-16 على المثبَّت 4.0.40: مهمّةُ سطح مكتبٍ تقول «desk shot» و«لا تفتح المتصفّح» أشعلت شرطَ المتصفّح (طالب بـshot full)
   // فدفع النموذجَ نحو المتصفّح وأعاد التسلسلَ كلَّه — أدواتُ سطح المكتب والذكرُ المنفيّ لا يطلبان تحقّقاً في المتصفّح.
   const text = browserGoalText(goal)
-  if (!/متصفّح|متصفح|browser|localhost|127\.0\.0\.1|https?:\/\//iu.test(text)) return undefined
+  // 09-30: بوّابةُ سبرنتٍ تقول «shot لـ/about» طلبُ متصفّحٍ صريح وإن خلت من «متصفّح» (desk shot نُزع أعلاه في browserGoalText).
+  if (!/متصفّح|متصفح|browser|localhost|127\.0\.0\.1|https?:\/\/|(?<!desk\s{1,3})\bshot\b/iu.test(text)) return undefined
   const wantsOpen = /(?:افتح|يفتح|افتحه|افتحها|شغّله|open)[^\n]{0,60}(?:متصفّح|متصفح|browser)|(?:في|in)\s+(?:متصفّحك|متصفحك|the browser|your browser)/iu.test(text)
   const wantsShot = /shot\b|لقطة|التقط|screenshot/iu.test(text)
   const wantsClick = /بالنقر|انقر|اضغط على الروابط|click/iu.test(text)

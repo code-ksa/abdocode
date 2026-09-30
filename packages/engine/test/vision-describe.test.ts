@@ -54,8 +54,8 @@ describe("عينُ الوكيل — vision-describe", () => {
 
   test("cli.ts: خلاصةُ السبرنتات في نظام الوكيل، وحافّةُ الانتقال قبل ختم الاكتمال (حتى ثلاث مرّات)", () => {
     const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
-    expect(cli).toContain("planBrief() + sprintBrief(PROJECT_DIR)")
-    expect(cli).toContain("let sprintOpenAtStart = openSprintCount(PROJECT_DIR)")
+    expect(cli).toContain("planBrief() + (process.env.ABDO_PARALLEL_WORKER === \"1\" ? \"\" : sprintBrief(PROJECT_DIR))")
+    expect(cli).toContain("let sprintOpenAtStart = parallelWorker ? undefined : openSprintCount(PROJECT_DIR)")
     expect(cli).toContain("const advance = sprintAdvance(PROJECT_DIR, sprintOpenAtStart)")
     expect(cli).toContain("if (advance !== undefined && sprintAdvances < 3) {")
     expect(cli).toContain("await emitEvent(turn.id, `▶ ${advance.line}`)")
