@@ -83,4 +83,11 @@ test("the guard stands at the single dispatcher, and the audit gate waits for an
   expect(guard - dispatch).toBeLessThan(600)
   // التدقيقُ شرطٌ لجولةٍ عدّلت شيفرةً أو اعتماديات — لا لمهمّة قراءة ذُكرت فيها كلمةُ npm.
   expect(cli.match(/requiresNpmAudit && \(codeEditedThisTurn \|\| depsTouchedThisTurn\)/gu)?.length).toBe(3)
+  // والإبطالُ يسبق التنفيذ: أمرٌ يرفضه الحارس لا يُحسب تعديلاً (قيس حيّاً على 4.0.95 — رفضُ npm update أطلق بوّابةَ التدقيق).
+  const invalidate = cli.indexOf("const invalidateAcceptanceFor = (command: string) => {")
+  const skip = cli.indexOf("noEditGoalRefusal(currentGoalText, Tools.tool(invalidatingWord)?.name ?? invalidatingWord, command.trim()) !== undefined) return", invalidate)
+  const firstMark = cli.indexOf("if (editsCode(command)) { codeEditedThisTurn = true", invalidate)
+  expect(invalidate).toBeGreaterThan(0)
+  expect(skip).toBeGreaterThan(invalidate)
+  expect(skip).toBeLessThan(firstMark)
 })

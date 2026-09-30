@@ -7403,6 +7403,10 @@ const runServeShell = async (): Promise<void> => {
       )
       const gateReceiptOf = (gate: "build" | "typecheck" | "tests" | "audit") => currentGateReceipts().find((r) => r.gate === gate) ?? { gate, state: "unverified" as const }
       const invalidateAcceptanceFor = (command: string) => {
+        // 09-30 (قيس حيّاً على المثبَّت 4.0.95): الإبطالُ يسبق التنفيذ، فأمرٌ يرفضه حارسُ «لا تعدّل» حتميّاً كان يُحسب
+        // «مسّ الاعتماديات» — فطالبت بوّابةُ التدقيق جولةً لم تعدّل شيئاً. ما يُرفض بالحارس نفسِه لا يعدّل.
+        const invalidatingWord = command.trim().split(/\s+/u, 1)[0] ?? ""
+        if (noEditGoalRefusal(currentGoalText, Tools.tool(invalidatingWord)?.name ?? invalidatingWord, command.trim()) !== undefined) return
         if (editsCode(command)) { codeEditedThisTurn = true; beforeDoneClean = false }
         if (/^(?:write|edit|patch)\b/iu.test(command) || /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update)\b/iu.test(command)) {
           successfulTypecheck = false
