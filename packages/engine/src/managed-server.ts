@@ -12,7 +12,7 @@
  * بأدوات HTTP العادية.
  */
 
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, realpathSync } from "node:fs"
 import { isAbsolute, join } from "node:path"
 import { systemTool } from "./system-tools"
 import { stripChildEnv } from "@abdo/tools/env-strip"
@@ -246,11 +246,22 @@ export interface MeasuredServer {
   readonly pid?: number
 }
 
+/**
+ * 09-30 — مجلّدٌ بصيغته القصيرة 8.3 (`C:\Users\ABDELR~1\…`، وهي صيغةُ `%TEMP%` على ويندوز) يُسقط مراقبَ ملفّات libuv
+ * (`Assertion failed: !_wcsnicmp`) فيخرج `next dev` برمز 0 قبل الإنصات. 4.0.91 أصلح جذرَ شجرات العمل وحده؛ ومشروعٌ فُتح من المسار
+ * القصير كان يسقط كما هو. الخادمُ المُدار يُقلع من المسار الطويل دائماً؛ وبتعذّر الحلّ يبقى كما أُعطي.
+ */
+export function longPathOf(dir: string): string {
+  if (!/~\d/u.test(dir)) return dir
+  try { return realpathSync.native(dir) } catch { return dir }
+}
+
 export class ManagedServers {
   #running: ManagedProcess[] = []
 
   /** يشغّل خادماً مملوكاً للنواة ويعيد إيصالاً بعد قياس الإنصات. */
   async start(command: ServerCommand, cwd: string): Promise<string> {
+    cwd = longPathOf(cwd)
     // 09-30: عاملُ parallel يحمل إزاحةَ منفذه (ABDO_WORKER_PORT_OFFSET) — عاملان يقلعان معاً على 3000 تسابقا فأجاب أحدُهما عن الآخر.
     const workerOffset = Math.min(200, Math.max(0, Number.parseInt(process.env.ABDO_WORKER_PORT_OFFSET ?? "0", 10) || 0))
     if (workerOffset > 0) command = { ...command, port: command.port + workerOffset }

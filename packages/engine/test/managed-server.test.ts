@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { ManagedServers, parseServerCommand, resolveLauncher, wrappedServerViolation } from "../src/managed-server"
+import { ManagedServers, longPathOf, parseServerCommand, resolveLauncher, wrappedServerViolation } from "../src/managed-server"
 
 describe("server command detection — managed lifecycle", () => {
   test("recognises the server shapes that orphaned live", () => {
@@ -219,4 +219,30 @@ describe("stop/logs by the pid the receipt named", () => {
     expect(servers.active).toBe(0)
     expect(servers.stopByPid(pid)).toBeUndefined()
   }, 30_000)
+})
+
+
+describe("8.3 short path — the managed server starts from the long path (09-30)", () => {
+  // `%TEMP%` on Windows is the short 8.3 form here (C:\Users\ABDELR~1\…); libuv's file watcher asserts on it and `next dev`
+  // exits 0 before listening. 4.0.91 fixed only the worktree root; a project opened from the short path still fell.
+  const short = tmpdir()
+  test.skipIf(!/~\d/u.test(short))("a short 8.3 directory resolves to its long form", () => {
+    const long = longPathOf(short)
+    expect(/~\d/u.test(long)).toBe(false)
+    expect(long).toBe(realpathSync.native(short))
+  })
+  test("the positive twin: long paths and unresolvable ones come back as given", () => {
+    const long = realpathSync.native(tmpdir())
+    expect(longPathOf(long)).toBe(long)
+    expect(longPathOf("C:\\NOPE~1\\missing-dir-093000")).toBe("C:\\NOPE~1\\missing-dir-093000")
+  })
+  test("start() resolves the cwd before it spawns", () => {
+    const source = readFileSync(join(import.meta.dir, "..", "src", "managed-server.ts"), "utf8")
+    const start = source.indexOf("async start(command: ServerCommand, cwd: string): Promise<string> {")
+    const resolveAt = source.indexOf("cwd = longPathOf(cwd)", start)
+    const spawnAt = source.indexOf("Bun.spawn([...spawnArgv]", start)
+    expect(start).toBeGreaterThan(0)
+    expect(resolveAt).toBeGreaterThan(start)
+    expect(resolveAt).toBeLessThan(spawnAt)
+  })
 })

@@ -98,7 +98,7 @@ import { bracketDeleteNote } from "./powershell-bracket-guard"
 import { killByPidTargets, killRefusal, pidCommandLine, pidOwnedByProject } from "./process-ownership"
 import { probeTargets, probeUrls, renderProbe } from "./probe-targets"
 import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport, workerTask, workerPortOffset } from "./parallel-workers"
-import { buildNextStepPrompt, candidatesFrom, commandFor as nextStepCommand, parseNextStep, renderNextStep } from "./browser-next-step"
+import { buildNextStepPrompt, candidatesFrom, commandFor as nextStepCommand, deterministicNextStep, parseNextStep, renderNextStep } from "./browser-next-step"
 import { powershellCallOperatorRepair } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
 import { terminalDialectLine, toolVocabulary, browserBridgeHint, policyLine } from "./tool-vocabulary"
@@ -5126,12 +5126,27 @@ const runServeShell = async (): Promise<void> => {
       if (goal.length === 0) return "الصيغة: next <الهدف> [--go]"
       if (surfaceRefs.length === 0) { surfaceRefs = await surface.readPage(); await paneBook(surfaceRefs) }
       const candidates = candidatesFrom(surfaceRefs)
-      let pageText = ""
-      try { pageText = await surface.readText(undefined) } catch { pageText = "" }
-      const judge = resolveDecisionModel(selectTurnModel(goal, "code"))
-      const reply = await ask(buildNextStepPrompt(goal, { url: surfaceUrl, text: pageText }, candidates), {}, [], judge)
-      const step = parseNextStep(reply, candidates)
-      const receipt = renderNextStep(step, candidates, judge.ref, reply)
+      // 09-30 — السلّمُ قبل النموذج: هدفُ تنقّلٍ يسمّي مرشّحاً واحداً ظاهراً يُحسم حتميّاً (nano اختار «لوحة التحكم» لـ«افتح صفحة Playground»).
+      const headings: string[] = []
+      const collectHeadings = (list: readonly { role: string; name: string; children?: readonly unknown[] }[]) => {
+        for (const node of list) {
+          if (node.role.toLowerCase() === "heading" && node.name.trim().length > 0) headings.push(node.name)
+          if (Array.isArray(node.children)) collectHeadings(node.children as { role: string; name: string; children?: readonly unknown[] }[])
+        }
+      }
+      collectHeadings(surfaceRefs as unknown as { role: string; name: string; children?: readonly unknown[] }[])
+      const quick = deterministicNextStep(goal, candidates, headings)
+      let step = quick
+      let receipt: string
+      if (quick !== undefined) receipt = renderNextStep(quick, candidates, "", "", "حتميّ: اسمُ الهدف يطابق مرشّحاً واحداً — بلا نموذج")
+      else {
+        let pageText = ""
+        try { pageText = await surface.readText(undefined) } catch { pageText = "" }
+        const judge = resolveDecisionModel(selectTurnModel(goal, "code"))
+        const reply = await ask(buildNextStepPrompt(goal, { url: surfaceUrl, text: pageText }, candidates), {}, [], judge)
+        step = parseNextStep(reply, candidates)
+        receipt = renderNextStep(step, candidates, judge.ref, reply)
+      }
       const command = step === undefined ? undefined : nextStepCommand(step)
       if (!go || command === undefined) return receipt
       const executed = await dispatchToolV(command.split(/\s+/u, 1)[0]!, command, turnId, {})
