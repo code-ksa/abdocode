@@ -8195,10 +8195,15 @@ const runServeShell = async (): Promise<void> => {
               const named = missingReceiptsLine(superAbdoMissingReceipts(superEvidence, problem, projectScriptNames(PROJECT_DIR)))
               superStamp = "Super Abdo: completion withheld — " + problem + (named.length > 0 ? "\n" + named : "")
               await emitEvent(turn.id, superStamp)
-              const repairRounds = Math.min(superAbdo.maxRepairPasses, SUPER_ABDO_REPAIR_ROUNDS)
+              // 09-30 (مقيس: «اكمل» على خطّة ثلاث سبرنتات وقف بعد جولة إصلاحٍ واحدة والمراجعةُ تسمّي سبرنت 3 — عملٌ باقٍ مشروع لا ادّعاءٌ
+              // يُقطع؛ ولم يُغلق النموذجُ سبرنت 2 الذي أنجزه لأنّ التلميح لا يسمّي الإغلاق): مع سبرنتاتٍ مفتوحة تتّسع الجولاتُ إلى سقف
+              // الإعدادات (maxRepairPasses)، ويسمّي التلميحُ السبرنتَ المفتوح الأوّل وخطوةَ الإغلاق.
+              const repairFocus = openSprintSection(PROJECT_DIR)
+              const repairRounds = repairFocus.length > 0 ? superAbdo.maxRepairPasses : Math.min(superAbdo.maxRepairPasses, SUPER_ABDO_REPAIR_ROUNDS)
               if (superRepairPasses >= repairRounds) break
               superRepairPasses += 1
-              continuationHint = "Super Abdo repair " + superRepairPasses + "/" + repairRounds + ": " + problem + "." + (named.length > 0 ? " " + named : "") + " Address the measured gap, then supply fresh evidence. No additional permissions have been granted."
+              const sprintStep = repairFocus.length > 0 ? ` خطّة ABDO-SPRINTS.md: السبرنتُ المفتوح الأوّل «${repairFocus.split(/\r?\n/u, 1)[0]!.replace(/^#+\s*/u, "").slice(0, 120)}» — إن اجتاز بوّابتَه بإيصالاتك فأغلقه الآن بـ«sprint done <رقمه> :: <الدليل>» ثمّ نفّذ السبرنتَ التالي؛ وإلا فأكمل عملَه حتى بوّابته.` : ""
+              continuationHint = "Super Abdo repair " + superRepairPasses + "/" + repairRounds + ": " + problem + "." + (named.length > 0 ? " " + named : "") + sprintStep + " Address the measured gap, then supply fresh evidence. No additional permissions have been granted."
               continue
             }
             superAccepted = true
