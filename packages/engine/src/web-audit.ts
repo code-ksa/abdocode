@@ -178,13 +178,25 @@ export function routesFromManifest(manifest: unknown): string[] {
 }
 
 /** الحكمُ والتقرير: PASS حين لا خطأ؛ التحذيراتُ تُسمّى ولا تحجب. */
+/**
+ * 10-01 — مقيس: audit بعد `next build` والخادمُ أُقلع قبله أعاد 31 خطأً كلُّها 404/400 على `/_next/static/*` وChunkLoadError —
+ * الخادمُ يقدّم بيانَ بناءٍ قديماً لملفّاتٍ حُذفت. ليست عيوبَ واجهة؛ والسببُ واحد يُسمّى فوق القائمة كي لا تُطارَد صفحةً صفحة.
+ */
+export function staleBuildCause(findings: readonly AuditFinding[]): string | undefined {
+  const hit = findings.filter((f) => f.check === "failed-requests" && /(?:^|\| )(?:400|404) \/_next\/static\//u.test(f.detail))
+  if (hit.length === 0) return undefined
+  const pages = new Set(hit.map((f) => f.path)).size
+  return `⚠ السببُ المرجَّح: الخادمُ أُقلع قبل آخر \`next build\` — ملفّاتُ /_next/static التي يطلبها لم تعد موجودة (400/404 وChunkLoadError على ${pages} صفحة). هذه ليست عيوبَ واجهة: أوقف الخادم (\`stop <pid>\` من إيصاله) ثمّ \`run --bg npm run start\` ثمّ أعد audit — ولا تبنِ والخادمُ يعمل.`
+}
+
 export function renderAudit(findings: readonly AuditFinding[], pages: number, widths: readonly number[]): { readonly passed: boolean; readonly text: string } {
   const errors = findings.filter((f) => f.severity === "error")
   const warns = findings.filter((f) => f.severity === "warn")
   const passed = errors.length === 0
   const rows = [...errors, ...warns].slice(0, 40).map((f) => `${f.severity === "error" ? "✕" : "△"} ${f.path}${f.width > 0 ? ` @${f.width}` : ""} · ${f.check}: ${f.measured} (المتوقَّع ${f.expected})${f.detail ? ` — ${f.detail}` : ""}`)
   const head = `audit: ${passed ? "PASS" : "FAIL"} — ${pages} صفحة × ${widths.length} عرض (${widths.join("/")}) · ${errors.length} خطأ · ${warns.length} تحذير`
-  return { passed, text: [head, ...rows, ...(errors.length + warns.length > 40 ? [`… و${errors.length + warns.length - 40} أخرى`] : [])].join("\n") }
+  const cause = staleBuildCause(findings)
+  return { passed, text: [head, ...(cause === undefined ? [] : [cause]), ...rows, ...(errors.length + warns.length > 40 ? [`… و${errors.length + warns.length - 40} أخرى`] : [])].join("\n") }
 }
 
 /**

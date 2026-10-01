@@ -3,7 +3,7 @@
  * القياساتُ من موقعٍ بناه عبدو كود (Next.js، عربيّ) كما قاستها العدّة.
  */
 import { describe, expect, test } from "bun:test"
-import { MEASURE_SCRIPT, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, tailwindV4DirectiveFindings, tailwindV4VarFindings, type PageMeasurement } from "../src/web-audit"
+import { MEASURE_SCRIPT, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, staleBuildCause, tailwindV4DirectiveFindings, tailwindV4VarFindings, type PageMeasurement } from "../src/web-audit"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -166,5 +166,23 @@ describe("tailwind 4 with v3 directives", () => {
     expect(cli).toContain("findings.push(...tailwindV4DirectiveFindings(sourceFiles(PROJECT_DIR, 200, /\\.css$/u)")
     expect(WEB_STANDARDS_BRIEF).toContain('@import "tailwindcss";')
     expect(WEB_STANDARDS_BRIEF).toContain("ولا تُنزل الإصدار")
+  })
+})
+
+// 10-01 — مقيس حيّاً: audit بعد بناءٍ والخادمُ أُقلع قبله = 31 خطأً كلُّها 404/400 على /_next/static وChunkLoadError.
+describe("a server started before the last build", () => {
+  const measured = analyzePage({ ...clean, consoleErrors: ["ChunkLoadError: Loading chunk 211 failed."], failedRequests: ["404 /_next/static/css/45892a67d2ed7f77.css", "404 /_next/static/chunks/211-6d33e5220baa2aa9.js"] }, { path: "/models", width: 360 })
+  const home = analyzePage({ ...clean, failedRequests: ["400 /_next/static/css/ce57a12b5ee05285.css"] }, { path: "/", width: 390 })
+  test("the audit names the one cause above the list, and the verdict stays FAIL", () => {
+    const report = renderAudit([...measured, ...home], 2, [360, 390])
+    expect(report.passed).toBe(false)
+    const lines = report.text.split("\n")
+    expect(lines[1]).toStartWith("⚠ السببُ المرجَّح: الخادمُ أُقلع قبل آخر `next build`")
+    expect(lines[1]).toContain("على 2 صفحة")
+    expect(lines[1]).toContain("run --bg npm run start")
+  })
+  test("a failed request that is not a build asset gets no such cause", () => {
+    expect(staleBuildCause(analyzePage({ ...clean, failedRequests: ["404 /favicon-32.png", "500 /api/models"] }, { path: "/", width: 390 }))).toBeUndefined()
+    expect(renderAudit(analyzePage({ ...clean, failedRequests: ["404 /favicon-32.png"] }, { path: "/", width: 390 }), 1, [390]).text).not.toContain("السببُ المرجَّح")
   })
 })
