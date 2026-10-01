@@ -919,6 +919,8 @@ const WRITE_COMPACTION = { keepRecent: 1, overChars: 20_000 } as const
 const DUPLICATE_REPLAY_CAP = 3
 /** 10-01 — سبرنتٌ مفتوح يُقرأ ولا يُكتب (text-agent-loop `writeNudge`): العتبةُ والتكرارُ وإشاراتُ المكرَّر في الدور. */
 const WRITE_NUDGE = { after: 15, every: 10, pointers: 4 } as const
+/** خوادمُ MCP في الإعدادات: الموصّلاتُ كلُّها مربوطةً مع الخوادم الجاهزة واليدويّة. كان 12 فملأته الموصّلاتُ الأحد عشر مع إضافة المتصفّح. */
+const MAX_MCP_SERVERS = 24
 
 const readThroughKernelV = async (file: string, range?: Readonly<{ from: number; to?: number }>): Promise<DispatchResultV> => {
   const target = resolveProjectPath(file)
@@ -1518,7 +1520,7 @@ const validateSettingsPatch = (value: Record<string, unknown>): Settings | strin
     }
   }
   if (value.mcpServers !== undefined) {
-    if (!Array.isArray(value.mcpServers) || value.mcpServers.length > 12) return "mcpServers: قائمة حتى 12 خادماً"
+    if (!Array.isArray(value.mcpServers) || value.mcpServers.length > MAX_MCP_SERVERS) return `mcpServers: قائمة حتى ${MAX_MCP_SERVERS} خادماً`
     const seen = new Set<string>()
     for (const raw of value.mcpServers as unknown[]) {
       if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return "mcpServers: كلُّ عنصرٍ كائن {id, command}"
