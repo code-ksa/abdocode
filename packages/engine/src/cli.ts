@@ -145,6 +145,7 @@ import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFr
 import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation } from "./project-dependency-guard"
 import { moduleResolutionHints } from "./module-resolution-hint"
 import { errorPlaybookHints } from "./error-playbooks"
+import { cssSourceViolation } from "./css-source-guard"
 import { ManagedServers, devPortHint, devServerUnderBuildNote, listenerPidOf, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
 import { brokenAliasViolation, dangerousShellViolation, fileWriteViaShellViolation, killByNameViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
@@ -3287,6 +3288,11 @@ const runServeShell = async (): Promise<void> => {
     const invalidTsx = tsxSourceViolation(identityWrite)
     if (invalidTsx !== undefined) {
       return refused(`رُفض مصدر الشيفرة: ${invalidTsx}. أرسل بايتات المصدر فقط دون شرح لاحق أو pseudo-code؛ ملفات JSX تحتاج مكوّناً مصدّراً.`)
+    }
+    // 10-01 — صياغةُ CSS كصياغة tsx: ملفٌّ بلا «{» أسقط كلَّ صفحةٍ 500 ولم يُعرف إلا بعد خادمٍ وaudit.
+    const invalidCss = await cssSourceViolation(identityWrite)
+    if (invalidCss !== undefined) {
+      return refused(`رُفض CSS: ${invalidCss}. صحّح الملفَّ كاملاً ثمّ أعد الكتابة — لم يُكتب شيء.`)
     }
     const unsupportedContact = unsupportedPublicContactClaim(identityWrite)
     if (unsupportedContact !== undefined) {
