@@ -258,6 +258,32 @@ export function longPathOf(dir: string): string {
   try { return realpathSync.native(dir) } catch { return dir }
 }
 
+/** وضعُ الخادم من سطر تشغيله: تطويرٌ (dev) أو إنتاجٌ (start/preview/serve) أو غيرُهما. */
+export function serverMode(display: string): "dev" | "prod" | "other" {
+  if (/(?:^|[\s:])dev\b/u.test(display)) return "dev"
+  if (/\b(?:start|preview|serve)\b/u.test(display)) return "prod"
+  return "other"
+}
+
+/**
+ * 10-01 — مقيس حيّاً: طُلب «run --bg npm run start» بعد بناءٍ وخادمُ «npm run dev» المُدار حيٌّ على :3000، فقيل «خادمك يعمل فعلاً — لا حاجة
+ * لإعادة تشغيله»؛ فقاس audit خادمَ التطوير الذي أفسد البناءُ أصولَه (404 على /_next/static). وضعٌ غيرُ المطلوب يُسمّى ويُعطى أمرُ إيقافه.
+ */
+export function modeMismatch(running: { readonly display: string; readonly port: number; readonly pid: number | undefined }, requested: string): string | undefined {
+  const have = serverMode(running.display), want = serverMode(requested)
+  if (have === "other" || want === "other" || have === want) return undefined
+  const kind = have === "dev" ? "خادمُ تطوير لا خادمُ الإنتاج الذي طلبتَه" : "خادمُ إنتاج لا خادمُ التطوير الذي طلبتَه"
+  return `⚠ على :${running.port} يعمل «${running.display}» (pid ${running.pid ?? "?"}) — ${kind} («${requested}»). أوقفه أوّلاً: stop ${running.pid ?? "<pid>"} ثمّ run --bg ${requested}. (وبناءٌ وخادمُ dev حيٌّ على المجلّد نفسِه يُفسدان .next.)`
+}
+
+/** 10-01 — بناءٌ والخادمُ dev المُدار حيّ: الاثنان يكتبان .next فتفسد الأصول. حقيقةٌ عن عمليّات النواة نفسِها تُلحق بإيصال البناء. */
+export function devServerUnderBuildNote(servers: readonly { readonly display: string; readonly port: number; readonly pid: number | undefined; readonly alive: boolean }[], command: string): string {
+  if (!/^(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?build|npx\s+next\s+build|next\s+build)\b/iu.test(command.trim())) return ""
+  const dev = servers.find((s) => s.alive && serverMode(s.display) === "dev")
+  if (dev === undefined) return ""
+  return `\n⚠ بُني والخادمُ «${dev.display}» (pid ${dev.pid ?? "?"}) حيٌّ على :${dev.port} للمشروع نفسِه — يكتبان .next معاً فتفسد أصولُه (404 على /_next/static). أوقفه (stop ${dev.pid ?? "<pid>"})، وللإنتاج: run --bg npm run start بعد البناء.`
+}
+
 export class ManagedServers {
   #running: ManagedProcess[] = []
 
@@ -272,6 +298,8 @@ export class ManagedServers {
     // فأضاع النموذج حقباً في التفاوض مع رسالة خاطئة.)
     const ours = this.#running.find((p) => p.port === command.port)
     if (ours !== undefined) {
+      const mismatch = modeMismatch({ display: ours.display, port: ours.port, pid: ours.listenerPid ?? ours.proc.pid }, command.launch.join(" "))
+      if (mismatch !== undefined && ours.proc.exitCode === null) return mismatch
       if (await listening(command.port)) {
         return `⚙ خادمك يعمل فعلاً تحت إدارة النواة: «${ours.display}» على http://127.0.0.1:${ours.port} (pid ${ours.listenerPid ?? ours.proc.pid}). افحصه مباشرة — لا حاجة لإعادة تشغيله. لإعادة تشغيله بعد بناءٍ أو تغيير إعداد: stop ${ours.listenerPid ?? ours.proc.pid} ثمّ run --bg ${ours.display}.`
       }

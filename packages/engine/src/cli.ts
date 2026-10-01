@@ -145,7 +145,7 @@ import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFr
 import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation } from "./project-dependency-guard"
 import { moduleResolutionHints } from "./module-resolution-hint"
 import { errorPlaybookHints } from "./error-playbooks"
-import { ManagedServers, devPortHint, listenerPidOf, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
+import { ManagedServers, devPortHint, devServerUnderBuildNote, listenerPidOf, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
 import { brokenAliasViolation, dangerousShellViolation, fileWriteViaShellViolation, killByNameViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
 import { redactSecretValues, secretInCommandViolation, secretInSourceViolation, sweepResidualSecrets } from "./secret-command-guard"
@@ -6060,6 +6060,8 @@ const runServeShell = async (): Promise<void> => {
     }
     // 09-29 — فخُّ الأقواس المربّعة: حذفٌ خرج 0 والمسارُ ذو القوس ما زال على القرص — يُقال مع العلاج (-LiteralPath).
     diagnosis += bracketDeleteNote(cmd, PROJECT_DIR, existsSync)
+    // 10-01 — بناءٌ وخادمُ dev المُدار حيّ يكتبان .next معاً: حقيقةٌ عن عمليّاتنا تُقال في الإيصال (لا كتيّبٌ مشروط بالقضبان).
+    diagnosis += devServerUnderBuildNote([...turnServers.snapshot(), ...devServers.snapshot()], cmd)
     // الحكم من حقول المنفّذ نفسها (run-command: ok ⇔ exitCode===0 && !timedOut && !aborted)؛
     // «غير معروف» و«قوطع» يصيران ok:false — فتحتان مقيستان أُغلقتا. النصّ أعلاه لم يُمسّ.
     const toolVerdict: ToolVerdict = result.ok
