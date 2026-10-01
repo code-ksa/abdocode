@@ -152,6 +152,13 @@ export const PLAYBOOKS: readonly Playbook[] = [
     hint: "انحراف ساعة النظام يكسر التواقيع وJWT وTLS. زامن الساعة (w32tm) قبل إعادة المحاولة؛ خطأٌ «not active/used before issued» غالباً ساعة لا منطق.",
   },
   // ── Next/React (لمشاريع العملاء) ─────────────────────────────────────
+  // 10-01 (مقيس على سبرنتِ إعادة تصميمٍ في موقع Next.js): أُعيدت كتابةُ button.tsx فضاقت أنواعُ variant، و`next build` يقف عند أوّل خطأ نوع —
+  // فاكتُشف outline ثمّ default ثمّ destructive ثمّ link في أربعة بناءاتٍ متتالية (~60 ث لكلٍّ) وكتابةٍ لكلٍّ منها.
+  {
+    id: "next-build-first-type-error",
+    when: /Type error:[\s\S]{0,4000}(?:Next\.js build worker exited|Failed to compile)|Failed to compile[\s\S]{0,4000}Type error:/u,
+    hint: "next build يقف عند أوّل خطأ نوعٍ وحده — لا تبنِ لكلّ خطأ. اجمعها كلَّها دفعةً واحدة: run npx tsc --noEmit --incremental false -p . ثمّ أصلحها كلَّها ثمّ ابنِ مرّةً. وإن غيّرتَ خصائصَ مكوّنٍ مشترك (variant، size، أسماءُ التصدير) فابحث عن استعمالاته أوّلاً: grep -rn \"variant=\\|<Button\" src — وأبقِ القيمَ القديمة أو حدّث كلَّ استعمال.",
+  },
   {
     id: "hydration-mismatch",
     when: /hydration failed|text content does not match|did not match.*server|Hydration/iu,

@@ -159,7 +159,8 @@ describe("turn budget wiring in the live cli path", () => {
   })
 
   test("the global cloud cap is consulted first; the turn meter second, with the same estimate, and never raises it", () => {
-    expect(source).toMatch(/cloudBudgetVerdict\(estimated \+ requestOutputCap\)[\s\S]{0,400}?hooks\.turnMeter\?\.verdict\(estimated \+ requestOutputCap\)/u)
+    // 10-01: سطرُ الرفض صار يعدّ رفضَ السقف (cloudCapRefusals) فطال — المسافةُ لا الترتيبُ تغيّرت.
+    expect(source).toMatch(/cloudBudgetVerdict\(estimated \+ requestOutputCap\)[\s\S]{0,700}?hooks\.turnMeter\?\.verdict\(estimated \+ requestOutputCap\)/u)
     // Six cloud call sites (ask + gateAsk + memoryRankAsk + inferAsk + visionPointAsk + imagine, gap #11 2026-09-27), each with exactly one global-cap check followed by one turn-meter check.
     expect(source.match(/cloudBudgetVerdict\(/gu)).toHaveLength(6)
     expect(source.match(/hooks\.turnMeter\?\.verdict\(/gu)).toHaveLength(6)
@@ -240,7 +241,8 @@ describe("turn budget wiring in the live cli path", () => {
 
   test("the stop vocabulary is turn_budget (reused from contracts RUN_STOP_REASONS), set at all five hand-back sites (boundary, mid-epoch, Super Abdo review, adversarial refute, verifier), with an honest final branch and a fact", async () => {
     // هـ٣ (2026-09-07): موضعٌ خامس — التفنيدُ العدائيّ ينفق ثلاثةَ نداءاتٍ فيُسلِّم الدورَ عند موضعه إن ترِبت الميزانية، وإلّا أنفق بعد القطع.
-    expect(source.match(/lastStop = "turn_budget"/gu)).toHaveLength(5)
+    // 10-01: موضعٌ سادس — رفضُ سقف السحابة العامّ يقف عنده الدورُ قبل أيّ بوّابة (cloud-cap-stop.test.ts).
+    expect(source.match(/lastStop = "turn_budget"/gu)).toHaveLength(6)
     expect(source).toMatch(/let lastStop: "complete" \| [^\n]*\| "stuck" \| "turn_budget" = "complete"/u)
     expect(source).toContain('lastStop === "turn_budget" && turnMeter !== undefined')
     expect(source.match(/key: `turn-budget:\$\{turn\.id\}`/gu)).toHaveLength(3)

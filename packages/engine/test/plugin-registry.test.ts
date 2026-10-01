@@ -52,6 +52,8 @@ const SANDBOX_ROW = "osSandbox: true"
 const IMAGE_ROW = "imageGen: true"
 // البند 12 (2026-09-27): إخفاءُ ما ينقصه شرطه يوفّر ولا يُنفق — مفعَّل.
 const AVAILABILITY_ROW = "toolAvailability: true"
+// 10-01 — أدواتُ التدقيق: مفعّلةٌ افتراضاً (قياسٌ بلا أثرٍ في المشروع).
+const QUALITY_ROWS = "webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, auditGate: true"
 // البندان 9 و10 (2026-09-27): السلّمُ يحفظ أكثر ممّا كان يُحفظ، والتفكيكُ سطرٌ بلا توكن — مفعَّلان.
 const WINDOW_ROWS = "overflowLadder: true, contextBreakdown: true"
 // S13.1/S13.2 — صفّا الوعي: يُضافان ولا يُبدّلان ما قبلهما.
@@ -94,19 +96,20 @@ describe("plugin registry — the table", () => {
     // + صفّا نافذة السياق (البندان 9 و10).
     // + التحقّقُ بعد التعديل (2026-09-27).
     // + البحثُ بلا مفتاح والبحثُ المعمّق وخطّافاتُ المشروع وتحليلُ البيانات والعزل وتوليدُ الصور (2026-09-27).
-    expect(names.filter((n) => descriptorFor(n)!.meta !== true)).toHaveLength(45)
+    // + أدواتُ تدقيق المشرف (audit وrelease-check وcompare) وتدقيقُ SEO/GEO/AEO/SXO — 2026-10-01.
+    expect(names.filter((n) => descriptorFor(n)!.meta !== true)).toHaveLength(51)
     expect(names.filter((n) => descriptorFor(n)!.meta === true)).toEqual(["settingsSeam", "inventory", "rules"])
   })
 
   test("the generated reset map carries exactly the legacy defaults (order unified on the panel order, values untouched)", () => {
     const generated = PLUGINS.filter((d) => d.meta !== true).map((d) => `${d.name}: ${d.defaultOn}`)
-    expect([...generated].sort()).toEqual([...LEGACY_RESET_MAP.split(", "), ...PANEL_ROWS.split(", "), ...SHELL_SPRINT_ROWS.split(", "), SECRET_INTAKE_ROW, PROBE_ROW, EMPTY_GUARD_ROW, VERIFY_ROW, KEYLESS_ROW, RESEARCH_ROW, HOOKS_ROW, TABLE_ROW, SANDBOX_ROW, IMAGE_ROW, AVAILABILITY_ROW, ...WINDOW_ROWS.split(", "), ...AWARENESS_ROWS.split(", "), ...SEMANTIC_ROWS.split(", "), ...LESSON_ROWS.split(", "), ...METER_ROWS.split(", ")].sort())
+    expect([...generated].sort()).toEqual([...LEGACY_RESET_MAP.split(", "), ...PANEL_ROWS.split(", "), ...SHELL_SPRINT_ROWS.split(", "), SECRET_INTAKE_ROW, PROBE_ROW, EMPTY_GUARD_ROW, VERIFY_ROW, KEYLESS_ROW, RESEARCH_ROW, HOOKS_ROW, TABLE_ROW, SANDBOX_ROW, IMAGE_ROW, AVAILABILITY_ROW, ...WINDOW_ROWS.split(", "), ...AWARENESS_ROWS.split(", "), ...SEMANTIC_ROWS.split(", "), ...LESSON_ROWS.split(", "), ...METER_ROWS.split(", "), ...QUALITY_ROWS.split(", ")].sort())
     // ولا صفَّ قديمٍ سقط ولا انزلق افتراضُه: الحرف القديم يبقى محتوىً فرعياً.
     for (const row of LEGACY_RESET_MAP.split(", ")) expect(generated).toContain(row)
     // ترتيب اللوحة (المرئيّ) هو الترتيب الوحيد الآن — كان يختلف عن ترتيب
     // خريطة الاستعادة في موضع trailCompaction وحده.
     expect(generated.join(", ")).toBe(
-      "providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true, denialBreaker: false, unattendedDeny: true, standingGrants: false, inboundGuard: true, mcpClient: false, delegation: false, reviewer: false, activity: false, terminalPanel: true, serversPanel: false, tasksPanel: true, walls: true, verifier: false, toolVerdict: true, miner: true, readCompaction: true, trailCompaction: true, cacheAccounting: true, resumeIntent: true, turnBudget: true, receiptFixtures: true, intentField: false, approvalTakeover: true, trajectory: true, deliverables: false, secretIntake: true, sessionAwareness: true, projectAwareness: true, generalAwareness: true, semanticFrame: true, semanticInfer: false, lessons: true, usageMeter: true",
+      "providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true, denialBreaker: false, unattendedDeny: true, standingGrants: false, inboundGuard: true, mcpClient: false, delegation: false, reviewer: false, activity: false, terminalPanel: true, serversPanel: false, tasksPanel: true, walls: true, verifier: false, toolVerdict: true, miner: true, readCompaction: true, trailCompaction: true, cacheAccounting: true, resumeIntent: true, turnBudget: true, receiptFixtures: true, intentField: false, approvalTakeover: true, trajectory: true, deliverables: false, secretIntake: true, sessionAwareness: true, projectAwareness: true, generalAwareness: true, semanticFrame: true, semanticInfer: false, lessons: true, usageMeter: true, webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, auditGate: true",
     )
     // المفاتيح الحاكمة تُلحق بالخريطة بافتراضاتها.
     expect(PLUGINS.filter((d) => d.meta === true).map((d) => `${d.name}: ${d.defaultOn}`).join(", "))
@@ -476,7 +479,7 @@ describe("plugin registry — the per-turn inventory", () => {
     expect(inventory.note("rules", "turn")).toBe(metaOn({ rules: false }, "rules"))
     // «مُعلَن ولم يُقرأ» يبقى للثلاثة التي لا قارئ لها فعلاً — وحدها.
     const unread = snapshot.filter((r) => r.reads === 0).map((r) => r.name)
-    expect(unread).toEqual(["providerProbe", "toolAvailability", "overflowLadder", "contextBreakdown", "emptyGuard", "verifyAfterEdit", "keylessSearch", "research", "projectHooks", "dataTable", "osSandbox", "imageGen", "denialBreaker", "unattendedDeny", "standingGrants", "inboundGuard", "mcpClient", "delegation", "reviewer", "activity", "terminalPanel", "serversPanel", "tasksPanel", "verifier", "toolVerdict", "miner", "readCompaction", "trailCompaction", "cacheAccounting", "resumeIntent", "turnBudget", "receiptFixtures", "intentField", "approvalTakeover", "trajectory", "deliverables", "secretIntake", "sessionAwareness", "projectAwareness", "generalAwareness", "semanticFrame", "semanticInfer", "lessons", "usageMeter"])
+    expect(unread).toEqual(["providerProbe", "toolAvailability", "overflowLadder", "contextBreakdown", "emptyGuard", "verifyAfterEdit", "keylessSearch", "research", "projectHooks", "dataTable", "osSandbox", "imageGen", "denialBreaker", "unattendedDeny", "standingGrants", "inboundGuard", "mcpClient", "delegation", "reviewer", "activity", "terminalPanel", "serversPanel", "tasksPanel", "verifier", "toolVerdict", "miner", "readCompaction", "trailCompaction", "cacheAccounting", "resumeIntent", "turnBudget", "receiptFixtures", "intentField", "approvalTakeover", "trajectory", "deliverables", "secretIntake", "sessionAwareness", "projectAwareness", "generalAwareness", "semanticFrame", "semanticInfer", "lessons", "usageMeter", "webAudit", "releaseCheck", "visualCompare", "seoAudit", "slides", "auditGate"])
     expect(unread.filter((n) => descriptorFor(n)!.meta === true)).toEqual([])
     // والجرد المطفأ لا يسجّل ولا يكذب: يُعيد القيمة ولا يبني صفّاً.
     const off = build({}, { inventoryOn: false })

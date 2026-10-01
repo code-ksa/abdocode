@@ -70,13 +70,29 @@ export const splitReadTail = (tail: string): string[] => {
  * مختلط الفواصل، ولا يُعدّ الفاصل الختاميّ سطراً فارغاً زائداً. «إلى» فوق
  * الطول تُقصّ إلى الطول؛ «من» فوق الطول خطأ.
  */
+/**
+ * 10-01 (مقيس على سبرنتِ إعادة تصميمٍ في موقع Next.js): القراءةُ تُقصّ عند سقف أحرف وتقول «عُرض 14000 من 24232 حرفاً» — فطلب النموذجُ المقاطعَ
+ * بالأحرف («read ABDO-SPRINTS.md 6000 10000» ثمّ 10000 15000…) والمقاطعُ أسطر: 13 قراءةً للملفّ في دورٍ واحد، و«0 6000» (الملفُّ كلُّه)
+ * قُصّ عند الموضع نفسِه فلم يبلغ السبرنتَ الأخير قطّ. القصُّ الآن عند حدّ سطر، والإعلانُ بالسطر وبالأمر التالي حرفياً.
+ */
+export const clipReadBody = (body: string, budget: number, firstLine: number, lastLine: number, file: string): string => {
+  if (body.length <= budget) return body
+  const cut = body.lastIndexOf("\n", budget)
+  if (cut <= 0) return `${body.slice(0, budget)}\n\n…[قُصّ: السطر ${firstLine} وحده أطولُ من ${budget} حرفاً (ملفٌّ مصغَّر؟) — ابحث فيه بـgrep بدل القراءة]`
+  const kept = body.slice(0, cut).replace(/\r$/u, "")
+  const lastShown = firstLine + kept.split("\n").length - 1
+  return `${kept}\n\n…[قُصّ عند السطر ${lastShown} من ${lastLine} (سقفُ العرض ${budget} حرفاً) — البقيّة: read ${file} ${lastShown + 1} ${lastLine}]`
+}
+
 export const sliceReadRange = (text: string, from: number, to?: number): ReadRangeSlice | ReadRangeError => {
   if (!Number.isSafeInteger(from) || from < 1 || (to !== undefined && (!Number.isSafeInteger(to) || to < from))) {
     return { error: READ_RANGE_USAGE }
   }
   const lines = text.match(/[^\r\n]*(?:\r\n|\n|\r)|[^\r\n]+$/gu) ?? []
   const total = lines.length
-  if (from > total) return { error: `المقطع يبدأ بعد نهاية الملف: السطر ${from} من ${total} سطراً` }
+  // 10-01 (مقيس في Sprint 14): النموذجُ طلب «read globals.css 6000 16179» و«read ABDO-SPRINTS.md 3000 31325» — مواضعُ أحرفٍ ظنّها أسطراً،
+  // وكلُّ رفضٍ نداءٌ كامل. الرفضُ يبقى (لا مقطعَ فارغاً)، ويقول ما يُطلب بدله.
+  if (from > total) return { error: `المقطع يبدأ بعد نهاية الملف: السطر ${from} من ${total} سطراً — الأرقامُ أرقامُ أسطرٍ لا أحرف؛ الملفُّ كلُّه: المقطعُ 1 ${total}` }
   const end = to === undefined ? total : Math.min(to, total)
   return { slice: lines.slice(from - 1, end).join("").replace(/(?:\r\n|\n|\r)$/u, ""), total, from, to: end }
 }

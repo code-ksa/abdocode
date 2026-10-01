@@ -171,12 +171,15 @@ export function syncCustomProviders(list: readonly CustomProviderSettings[], opt
     const endpoint = new URL(input.baseUrl).toString().replace(/\/$/u, "")
     // 09-29 (مقيس على تطبيق المالك): مدخلٌ قديم فارغ «ddd» بعنوان NIM نفسِه أسقط القائمةَ كلَّها بصمت — ولم يعرف المالك إلا من «Vault key
     // missing — nvidia2: unresolvable reference». الرفضُ يبقى للقائمة كلِّها (لا تسجيلَ جزئيّاً)، لكنّه يسمّي المدخلَ وما يكرّره.
-    if (next.has(input.id) || endpoints.has(endpoint)) {
-      const clash = next.has(input.id) ? `المعرّف` : `عنوان ${[...next.values()].find((p) => new URL(p.baseUrl).toString().replace(/\/$/u, "") === endpoint)?.id ?? "مزوّدٍ سابق"}`
+    // 10-01 (مقيس في دور compare): مفتاحٌ ثانٍ وثالث للمزوّد نفسِه — حسابان على
+    // العنوان نفسِه بمقبضين مختلفين ليسا تكراراً؛ رُفضت القائمةُ كلُّها فسقط نموذجُ الرؤية. المكرّرُ الحقّ: المعرّفُ، أو العنوانُ مع المقبض نفسِه.
+    const binding = `${endpoint}|${input.vaultKey}`
+    if (next.has(input.id) || endpoints.has(binding)) {
+      const clash = next.has(input.id) ? `المعرّف` : `عنوانَ ${[...next.values()].find((p) => `${new URL(p.baseUrl).toString().replace(/\/$/u, "")}|${p.vaultKey}` === binding)?.id ?? "مزوّدٍ سابق"} بالمقبض نفسِه`
       return [`معرف أو عنوان مزوّد مكرر: «${input.id}» يكرّر ${clash} — احذف أحدهما من الإعدادات؛ القائمةُ كلُّها مرفوضة حتى يُحذف`]
     }
     next.set(input.id, definition)
-    endpoints.add(endpoint)
+    endpoints.add(binding)
   }
   if (opts?.dryRun !== true) ownerProviders = next
   return []

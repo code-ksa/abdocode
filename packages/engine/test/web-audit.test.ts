@@ -1,0 +1,148 @@
+/**
+ * 10-01 — «سقفُ الجودة» Q1: قواعدُ scripts/ui-audit/lib.mjs منقولةً + الجديدة. لكلّ قاعدةٍ توأمان: قياسٌ يفشل وقياسٌ ينجح.
+ * القياساتُ من موقعٍ بناه عبدو كود (Next.js، عربيّ) كما قاستها العدّة.
+ */
+import { describe, expect, test } from "bun:test"
+import { MEASURE_SCRIPT, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, tailwindV4VarFindings, type PageMeasurement } from "../src/web-audit"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
+const clean: PageMeasurement = {
+  status: 200, consoleErrors: [], failedRequests: [], runawayRequests: 0, lang: "ar", dir: "rtl",
+  overflow: { default: { scrollWidth: 390, clientWidth: 390, culprit: null }, scaled: { scrollWidth: 390, clientWidth: 390, culprit: null } },
+  inlineDvh: false, textLength: 900, h1Count: 1, imgNoAlt: 0, unnamedControls: [], unlabeledFields: [], overlaps: [],
+}
+const checks = (m: Partial<PageMeasurement>) => analyzePage({ ...clean, ...m }, { path: "/", width: 390 }).filter((f) => f.severity !== "info").map((f) => `${f.severity}:${f.check}`)
+
+describe("web audit — one page at one width", () => {
+  test("the clean twin produces no finding", () => {
+    expect(checks({})).toEqual([])
+  })
+
+  test("measured on a built site: horizontal overflow names its culprit (RTL overflows to the left)", () => {
+    const f = analyzePage({ ...clean, overflow: { default: { scrollWidth: 449, clientWidth: 360, culprit: "path width=5 x=-147" }, scaled: { scrollWidth: 1217, clientWidth: 360, culprit: "path width=8 x=-390" } } }, { path: "/", width: 360 })
+    expect(f.map((x) => `${x.severity}:${x.check}`)).toEqual(["error:overflow", "warn:overflow@44px"])
+    expect(f[0]!.detail).toContain("x=-147")
+  })
+
+  test("console errors, failed requests and runaway requests are errors", () => {
+    expect(checks({ consoleErrors: ["Failed to load resource: 404"] })).toEqual(["error:console-errors"])
+    expect(checks({ failedRequests: ["404 /favicon-32.png"] })).toEqual(["error:failed-requests"])
+    expect(checks({ runawayRequests: 7 })).toEqual(["error:runaway-requests"])
+    expect(checks({ runawayRequests: 6 })).toEqual([])
+  })
+
+  test("lang=ar without rtl, and a missing lang", () => {
+    expect(checks({ dir: "ltr" })).toEqual(["error:dir"])
+    expect(checks({ lang: null })).toEqual(["warn:lang"])
+    expect(checks({ lang: "en", dir: "ltr" })).toEqual([])
+  })
+
+  test("text overlap, h1, alt, unnamed controls and unlabeled fields", () => {
+    expect(checks({ overlaps: ["span «Store» ⟂ a «Models»"] })).toEqual(["error:text-overlap"])
+    expect(checks({ h1Count: 0 })).toEqual(["warn:h1"])
+    expect(checks({ h1Count: 2 })).toEqual(["warn:h1"])
+    expect(checks({ imgNoAlt: 3 })).toEqual(["error:img-alt"])
+    expect(checks({ unnamedControls: ["button.icon"] })).toEqual(["error:unnamed-control"])
+    expect(checks({ unlabeledFields: ["input#search"] })).toEqual(["error:unlabeled-field"])
+  })
+
+  test("status, no response and an almost empty render", () => {
+    expect(checks({ status: 500 })).toEqual(["error:status"])
+    expect(checks({ status: 404 })).toEqual(["warn:status"])
+    expect(analyzePage({ ...clean, status: 0, error: "net::ERR_CONNECTION_REFUSED" }, { path: "/", width: 390 }).map((f) => f.check)).toEqual(["status"])
+    expect(checks({ textLength: 12, h1Count: 0 })).toEqual(["warn:rendered-text"])
+  })
+})
+
+describe("web audit — site level", () => {
+  test("measured on a built site: twenty links to /blog answer 404", () => {
+    const f = analyzeLinks([{ url: "/blog", status: 404 }, { url: "/blog/gpt-4o-launch", status: 404 }, { url: "/models", status: 200 }])
+    expect(f.map((x) => x.check)).toEqual(["broken-links"])
+    expect(f[0]!.measured).toBe("2")
+    expect(analyzeLinks([{ url: "/models", status: 200 }])).toEqual([])
+  })
+
+  test("routes come from the Next.js build, without dynamic, api or internal paths", () => {
+    expect(routesFromManifest({ "/page": "/", "/models/page": "/models", "/models/[provider]/[model]/page": "/models/[provider]/[model]", "/api/health/route": "/api/health", "/favicon.ico/route": "/favicon.ico", "/_not-found/page": "/_not-found" })).toEqual(["/", "/models"])
+    expect(routesFromManifest(undefined)).toEqual(["/"])
+  })
+
+  test("the verdict passes only without errors; warnings are named and do not block", () => {
+    const warnOnly = analyzePage({ ...clean, lang: null }, { path: "/", width: 390 })
+    expect(renderAudit(warnOnly, 1, [390]).passed).toBe(true)
+    const failing = renderAudit([...warnOnly, ...analyzeLinks([{ url: "/blog", status: 404 }])], 1, [390])
+    expect(failing.passed).toBe(false)
+    expect(failing.text.startsWith("audit: FAIL")).toBe(true)
+    expect(failing.text).toContain("broken-links")
+  })
+
+  test("the in-page script is plain JavaScript that returns JSON with every measured field", () => {
+    expect(() => new Function(`return ${MEASURE_SCRIPT}`)).not.toThrow()
+    for (const field of ["overflow", "lang", "dir", "inlineDvh", "links", "textLength", "h1Count", "imgNoAlt", "unnamedControls", "unlabeledFields", "overlaps"]) expect(MEASURE_SCRIPT).toContain(field)
+  })
+})
+
+// 10-01 (Q4) — معاييرُ الواجهات في طبقة المشروع: كلُّ بندٍ يقابل عيباً قيس على موقعٍ بناه عبدو كود.
+describe("web standards brief", () => {
+  test("names the measured defects and the gate that enforces them", () => {
+    for (const must of ["audit: PASS", "درجُ الجوّال بخلفيّةٍ معتمة", "min-w-0", "dir=\"rtl\"", "WCAG 2.2", "frame-ancestors", "zod", "llms.txt", "لا رابطَ داخليّاً إلى صفحةٍ غير موجودة", "release-check"]) expect(WEB_STANDARDS_BRIEF).toContain(must)
+    // يدخل طبقةَ المشروع (16k) بهامشٍ واسع.
+    expect(new TextEncoder().encode(WEB_STANDARDS_BRIEF).length).toBeLessThan(4_096)
+  })
+  test("injected into the project layer only for a selected web project with the gate on, and never into a reviewer call", () => {
+    const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
+    expect(cli).toContain('projectInstructionBlock + (projectSelected && hooks.reviewSystem === undefined && webQualityOn() ? `\\n${WEB_STANDARDS_BRIEF}\\n` : "")')
+    expect(cli).toContain('const webQualityOn = (): boolean => pluginOnNow("auditGate") && ["next", "vite-react", "static-html"].includes(detectStackForProject(PROJECT_DIR, "").stack.id)')
+    expect(cli.split('pluginOnNow("auditGate")').length - 1).toBe(1)
+    expect(cli).toContain("const web = webQualityOn()")
+  })
+})
+
+// 10-01 — مقيس على الموقع أثناء Sprint 14: 73 صنفاً `-[--x]` في ثلاثة ملفّات كتبها عبدو كود؛ Tailwind 4 يترجمها قيمةً باطلة (الخلفيةُ شفّافة).
+describe("tailwind 4 arbitrary var classes", () => {
+  const header = "<header className=\"sticky bg-[--bg]/80 border-b border-[--border-soft]\">\n<div className=\"fixed bg-[--surface] md:hover:bg-[--surface-raised]\" />"
+  test("in a Tailwind 4 project each file with the old syntax is one error, with its first line, count and the v4 spelling", () => {
+    const f = tailwindV4VarFindings([{ path: "src/components/layout/header.tsx", text: header }], 4)
+    expect(f).toHaveLength(1)
+    expect(f[0]).toMatchObject({ path: "src/components/layout/header.tsx:1", check: "tailwind-v4-var", severity: "error", expected: "bg-(--bg)/80" })
+    expect(f[0]!.measured).toStartWith("4×")
+    expect(renderAudit(f, 1, [390]).passed).toBe(false)
+  })
+  test("the v4 spellings, Tailwind 3, plain CSS files and non-var arbitrary values pass", () => {
+    expect(tailwindV4VarFindings([{ path: "a.tsx", text: "<div className=\"bg-(--surface) bg-[var(--surface)] w-[320px] bg-[#0a0d14]\" />" }], 4)).toEqual([])
+    expect(tailwindV4VarFindings([{ path: "a.tsx", text: header }], 3)).toEqual([])
+    expect(tailwindV4VarFindings([{ path: "a.tsx", text: header }], undefined)).toEqual([])
+    expect(tailwindV4VarFindings([{ path: "globals.css", text: ".x{background:var(--bg)} [--bg]" }], 4)).toEqual([])
+    // متغيّراتُ cva في ‎.ts‎ أصنافٌ حقيقيّة تُفحص؛ والاختباراتُ لا.
+    expect(tailwindV4VarFindings([{ path: "src/components/ui/variants.ts", text: "export const v = { primary: \"bg-[--primary]\" }" }], 4)).toHaveLength(1)
+    expect(tailwindV4VarFindings([{ path: "src/components/ui/button.test.tsx", text: "expect(cls).toBe(\"bg-[--primary]\")" }, { path: "test/ui.spec.ts", text: "\"bg-[--x]\"" }], 4)).toEqual([])
+  })
+  test("the major version is read from dependencies or devDependencies", () => {
+    expect(tailwindMajor(JSON.stringify({ devDependencies: { tailwindcss: "^4.3.3" } }))).toBe(4)
+    expect(tailwindMajor(JSON.stringify({ dependencies: { tailwindcss: "3.4.1" } }))).toBe(3)
+    expect(tailwindMajor(JSON.stringify({ dependencies: { next: "14" } }))).toBeUndefined()
+    expect(tailwindMajor("not json")).toBeUndefined()
+  })
+  test("audit runs it over the project sources, and the brief names the v4 spelling", () => {
+    const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
+    expect(cli).toContain("findings.push(...tailwindV4VarFindings(sourceFiles(PROJECT_DIR)")
+    expect(cli.indexOf("tailwindV4VarFindings(sourceFiles(PROJECT_DIR)")).toBeLessThan(cli.indexOf("return renderAudit(findings, routes.length, widths).text"))
+    expect(WEB_STANDARDS_BRIEF).toContain("bg-(--surface)")
+  })
+})
+
+// 10-01 — جذرُ الفيضان لا ورقتُه. مقيس في متصفّحٍ حقيقيّ (RTL، 360px، عنصرٌ بعرض 1000 ودرجٌ تحت position:fixed):
+// «root section.hero > div.stats > strong.badge width=1000 x=-656 «أكثر من 300 نموذج»» — والدرجُ مستبعَد.
+describe("overflow culprit", () => {
+  test("names the root overflowing element with its parents and text, and skips what sits under position:fixed", () => {
+    expect(MEASURE_SCRIPT).toContain('if (el.parentElement && outs.has(el.parentElement)) continue;')
+    expect(MEASURE_SCRIPT).toContain('getComputedStyle(p).position === "fixed"')
+    expect(MEASURE_SCRIPT).toContain('return "root " + [...chain, elLabel(root.el)].join(" > ")')
+  })
+  test("a multi-line console error is one line in the report (a pretty-printed ZodError filled 41 lines)", () => {
+    const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
+    expect(cli).toContain(".map((c) => c.text.replace(/\\s+/gu, \" \").trim().slice(0, 160))")
+  })
+})
+

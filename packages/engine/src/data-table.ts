@@ -149,11 +149,26 @@ export function queryTable(name: string, table: Table, query: TableQuery): strin
 const tokens = (text: string): string[] => [...text.matchAll(/"([^"]*)"|(\S+)/gu)].map((m) => m[1] ?? m[2]!)
 
 /** `table <مصدر> [--group ع] [--sum|--avg|--min|--max|--median ع | --count] [--where ع=ق]… [--sort asc|desc] [--limit ن] [--format csv|tsv|json]` */
-export function parseTableCommand(rest: string): { readonly source: string; readonly query?: TableQuery; readonly format?: Table["format"] } {
+/**
+ * 10-01 — جدولُ بياناتٍ مرفق (xlsx/xls/xlsb/ods) يصل نصّاً حوّله سطحُ المكتب (attachment_documents.rs): «Sheet: اسم» ثمّ صفوفٌ بفواصل جدولة.
+ * مقيس: `table @data.xlsx` قرأ السطرَ «Sheet: …» رأساً فصار الجدولُ عموداً واحداً. الأوراقُ تُفصل هنا، وكلٌّ يُقرأ TSV.
+ */
+export function spreadsheetSheets(text: string): { readonly name: string; readonly body: string }[] {
+  const body = text.replace(/\r\n?/gu, "\n")
+  if (!/^\s*Sheet: /u.test(body)) return []
+  const marks = [...body.matchAll(/^Sheet: (.*)$/gmu)]
+  return marks.map((m, i) => {
+    const start = m.index! + m[0].length + 1
+    const end = i + 1 < marks.length ? marks[i + 1]!.index! : body.length
+    return { name: m[1]!.trim(), body: body.slice(start, end).replace(/\n+$/u, "") }
+  })
+}
+
+export function parseTableCommand(rest: string): { readonly source: string; readonly query?: TableQuery; readonly format?: Table["format"]; readonly sheet?: string } {
   const parts = tokens(rest)
   const source = parts.shift()
   if (source === undefined) throw new Error("الصيغة: table <ملفّ|@مرفق> [--group عمود] [--sum|--avg|--min|--max|--median عمود | --count] [--where عمود=قيمة] [--sort asc|desc] [--limit ن]")
-  let group: string | undefined, op: AggregateOp | undefined, column: string | undefined, sort: "asc" | "desc" = "desc", limit = 20, format: Table["format"] | undefined
+  let group: string | undefined, op: AggregateOp | undefined, column: string | undefined, sort: "asc" | "desc" = "desc", limit = 20, format: Table["format"] | undefined, sheet: string | undefined
   const where: Condition[] = []
   let aggregate = false
   while (parts.length > 0) {
@@ -168,10 +183,11 @@ export function parseTableCommand(rest: string): { readonly source: string; read
       where.push({ column: m[1]!.trim(), op: m[2] as Condition["op"], value: m[3]!.trim() }); aggregate = true
     } else if (flag === "--sort") { const v = need(); if (v !== "asc" && v !== "desc") throw new Error("--sort: asc أو desc"); sort = v }
     else if (flag === "--limit") { const v = Number(need()); if (!Number.isInteger(v) || v < 1 || v > 500) throw new Error("--limit بين 1 و500"); limit = v }
+    else if (flag === "--sheet") sheet = need()
     else if (flag === "--format") { const v = need(); if (v !== "csv" && v !== "tsv" && v !== "json") throw new Error("--format: csv أو tsv أو json"); format = v }
     else throw new Error(`خيارٌ غيرُ معروف «${flag.slice(0, 30)}»`)
   }
-  return { source, ...(aggregate ? { query: { ...(group === undefined ? {} : { group }), ...(op === undefined ? {} : { op }), ...(column === undefined ? {} : { column }), where, sort, limit } } : {}), ...(format === undefined ? {} : { format }) }
+  return { source, ...(aggregate ? { query: { ...(group === undefined ? {} : { group }), ...(op === undefined ? {} : { op }), ...(column === undefined ? {} : { column }), where, sort, limit } } : {}), ...(format === undefined ? {} : { format }), ...(sheet === undefined ? {} : { sheet }) }
 }
 
 /** مرفقٌ باسمه من نصّ المرفقات الذي يصل الدور (`<attached-document name="…">`). */

@@ -183,11 +183,27 @@ export const sprintBrief = (projectDir: string): string => {
  * 09-30 (مقيس: «اكمل» وحدَها فتحت الأدواتِ الأساسيّة فقط — 38/75 بلا متصفّح — وبوّابةُ السبرنت تطلب shot): نصُّ أوّل سبرنتٍ مفتوح
  * (العنوان والمطلوب والبوّابة) هو **نيّةُ الدور** حين يكون الطلبُ استئنافاً؛ يُمسح لعائلات الأدوات ويُعطى للعين معياراً. "" بلا ملفّ.
  */
+/** سقفُ نصّ السبرنت المفتوح في نيّة الدور — سبرنتٌ عاديّ 1–3 آلاف حرف يصل كاملاً. */
+export const SPRINT_FOCUS_CAP = 6000
+
 export const openSprintSection = (projectDir: string): string => {
   let text: string
   try { text = readFileSync(join(projectDir, "ABDO-SPRINTS.md"), "utf-8") } catch { return "" }
   const first = sprintSectionsOf(text).find(sprintIsOpen)
-  return first === undefined ? "" : first.replace(/\r/gu, "").trim().slice(0, 1200)
+  if (first === undefined) return ""
+  const section = first.replace(/\r/gu, "").trim()
+  // 10-01 (مقيس على Sprint 14 — الستايل): القصُّ عند 1200 حرف أوصل المهامَّ 14.1–14.4 وقطع الرابعةَ في منتصفها وأسقط البوّابة،
+  // فقرأ النموذجُ الملفَّ بحثاً عن الباقي — بمواضعَ حرفيّةٍ ظنّها أسطراً («read ABDO-SPRINTS.md 3000 31325») — دورين بلا كتابة.
+  // النصُّ يصل كاملاً حتى السقف؛ وما زاد يُقصّ عند حدّ سطرٍ ويُسمّى مكانُ بقيّته بأرقام أسطرٍ حقيقيّة.
+  if (section.length <= SPRINT_FOCUS_CAP) return section
+  const cut = section.lastIndexOf("\n", SPRINT_FOCUS_CAP)
+  const kept = section.slice(0, cut > 0 ? cut : SPRINT_FOCUS_CAP)
+  const plain = text.replace(/\r/gu, "")
+  const at = plain.indexOf(section.slice(0, 80))
+  const startLine = at < 0 ? 1 : plain.slice(0, at).split("\n").length
+  const restFrom = startLine + kept.split("\n").length
+  const restTo = startLine + section.split("\n").length - 1
+  return `${kept}\n… [بقيّةُ هذا السبرنت في الملفّ: read ABDO-SPRINTS.md ${restFrom} ${restTo} — المقطعُ بأرقام أسطر]`
 }
 
 /**

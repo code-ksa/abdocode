@@ -434,6 +434,51 @@ export class CdpBrowser {
     return this.#eval(expression)
   }
 
+  /** 10-01 — «سقفُ الجودة»: قياسٌ داخل الصفحة يعيد نصّاً (JSON عادةً) — لأداة audit. */
+  evaluate(expression: string): Promise<string> {
+    return this.#eval(expression)
+  }
+
+  /**
+   * 10-01 — أداةُ seo: قياسٌ ينتظر وعداً داخل الصفحة (fetch لـHTML الخام كما يراه الزاحف، وrobots.txt وsitemap.xml وllms.txt من الأصل نفسِه).
+   * الطلباتُ من الصفحة نفسِها فتمرّ بسياسة المواقع التي مرّ بها التنقّل — لا وجهةَ جديدة.
+   */
+  /**
+   * 10-01 — أداةُ slides: صفحةُ HTML مستقلّة ⇦ PDF بطباعة المتصفّح. تُحمَّل في about:blank (مسموحٌ دائماً) بـPage.setDocumentContent —
+   * فلا ملفّ file:// ولا وجهةَ شبكة؛ والصورُ مضمَّنةٌ data: في الصفحة نفسِها. يعيد PDF بـbase64.
+   */
+  async printHtmlToPdf(html: string): Promise<string> {
+    await this.navigate("about:blank")
+    const tree = (await this.#send("Page.getFrameTree", {})) as { frameTree?: { frame?: { id?: string } } }
+    const frameId = tree?.frameTree?.frame?.id
+    if (typeof frameId !== "string") throw new Error("printHtmlToPdf: no main frame")
+    await this.#send("Page.setDocumentContent", { frameId, html })
+    await this.#eval("document.fonts && document.fonts.ready ? 1 : 0")
+    await Bun.sleep(400)
+    const pdf = (await this.#send("Page.printToPDF", { printBackground: true, preferCSSPageSize: true, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 })) as { data?: string }
+    if (typeof pdf?.data !== "string" || pdf.data.length === 0) throw new Error("printHtmlToPdf: the browser returned no PDF")
+    return pdf.data
+  }
+
+  async evaluateAsync(expression: string, timeoutMs = 20_000): Promise<string> {
+    const result = (await this.#send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true, timeout: timeoutMs })) as {
+      result?: { value?: unknown }
+    }
+    return String(result?.result?.value ?? "")
+  }
+
+  /**
+   * 10-01 — محاكاةُ عرض الشاشة (360/390/412/768/1366) لأداة audit: `mobile` يجعل الصفحةَ ترى جهازاً لمسيّاً بنسبة 1.
+   * تُرفع بـclearViewport حين ينتهي الفحص — كي لا يبقى متصفّحُ المستخدم بعرض هاتف.
+   */
+  async setViewport(width: number, height: number, mobile: boolean): Promise<void> {
+    await this.#send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile })
+  }
+
+  async clearViewport(): Promise<void> {
+    await this.#send("Emulation.clearDeviceMetricsOverride", {}).catch(() => undefined)
+  }
+
   /**
    * T17 — الإدخال الحقيقيّ: أحداث CDP لا JS مزروع.
    *

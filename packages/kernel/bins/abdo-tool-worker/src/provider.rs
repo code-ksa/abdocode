@@ -200,7 +200,14 @@ fn parse_custom_bindings(raw: &str) -> Result<Vec<OwnerBinding>, String> {
         if PROVIDERS.iter().any(|item| item.vault_key == vault_key) {
             return Err("custom provider vault key collides with a compiled provider".into());
         }
-        if out.iter().any(|prior| prior.id == id || prior.url == url) {
+        // Two owner accounts on one endpoint (a second and third key for the
+        // same service, owner order 2026-10-01) are distinct bindings: every
+        // lookup is by id, and each names its own `custom-*` handle. The true
+        // duplicate is the same id, or the same endpoint with the same handle.
+        if out
+            .iter()
+            .any(|prior| prior.id == id || (prior.url == url && prior.vault_key == vault_key))
+        {
             return Err("custom provider duplicate refused".into());
         }
         out.push(OwnerBinding {
@@ -1113,11 +1120,23 @@ mod tests {
             parse_custom_bindings("p|https://api.example.com/v1/chat/completions|my-key-name")
                 .is_err()
         );
-        // duplicate id or endpoint is refused.
+        // duplicate id is refused.
         assert!(parse_custom_bindings(
-            "p|https://api.example.com/v1/chat/completions|k-one;p|https://api.other.com/v1/chat/completions|k-two"
+            "p|https://api.example.com/v1/chat/completions|custom-k-one;p|https://api.other.com/v1/chat/completions|custom-k-two"
         )
         .is_err());
+        // the same endpoint with the same handle is a duplicate…
+        assert!(parse_custom_bindings(
+            "p|https://api.example.com/v1/chat/completions|custom-k-one;q|https://api.example.com/v1/chat/completions|custom-k-one"
+        )
+        .is_err());
+        // …while two accounts on one endpoint, each with its own handle, are not.
+        let two = parse_custom_bindings(
+            "p|https://api.example.com/v1/chat/completions|custom-k-one;q|https://api.example.com/v1/chat/completions|custom-k-two",
+        )
+        .expect("two keys for one endpoint");
+        assert_eq!(two.len(), 2);
+        assert_eq!(two[1].vault_key, "custom-k-two");
     }
 
     #[test]

@@ -110,7 +110,8 @@ describe("serve convergence wiring", () => {
   test("range reads, the read-economy prompt line, and the desktop toggle rows are wired", async () => {
     const desktopUi = await Bun.file(new URL("../../desktop/ui/index.html", import.meta.url)).text()
     expect(source).toContain("read <ملف> [من] [إلى]  قراءة عبر النواة")
-    expect(source).toContain('import { READ_NEEDS_FILE, READ_RANGE_USAGE, planRead, sliceReadRange, splitReadTail } from "./read-range"')
+    // 10-01: clipReadBody — القصُّ بالأسطر والأمرُ التالي (read-clip.test.ts).
+    expect(source).toContain('import { READ_NEEDS_FILE, READ_RANGE_USAGE, clipReadBody, planRead, sliceReadRange, splitReadTail } from "./read-range"')
     // مسار المقطع يعضّ: خطّةٌ نقيّة تُمرَّر كما هي إلى الأثر الواحد، ولا غلافٌ
     // وسيط يمكن أن يُترك ميتاً (noUnusedLocals مطفأ) وتبقى البوّابة خضراء.
     expect(source).toContain("const plan = planRead(args)")
@@ -175,6 +176,10 @@ describe("serve convergence wiring", () => {
       "lessons",
       // ذ5 — العدّادُ المحلي يُلحق في الذيل كذلك.
       "usageMeter",
+      // 10-01 — أدواتُ التدقيق تُلحق في الذيل كذلك.
+      "webAudit", "releaseCheck", "visualCompare", "seoAudit",
+      // 10-01 — العروضُ التقديميّة، وبوّابةُ جودة الواجهات.
+      "slides", "auditGate",
     ])
     expect(declared.map((d) => `${d.name}: ${d.defaultOn}`).sort()).toEqual(
       ("denialBreaker: false, unattendedDeny: true, standingGrants: false, inboundGuard: true, mcpClient: false, delegation: false, reviewer: false, activity: false, walls: true, verifier: false, toolVerdict: true, trailCompaction: true, miner: true, readCompaction: true, cacheAccounting: true, resumeIntent: true, turnBudget: true, receiptFixtures: true, intentField: false"
@@ -184,7 +189,8 @@ describe("serve convergence wiring", () => {
         // والخوادمُ تغيّر **عمرَ العمليات**، وما يغيّر سلوكاً يبدأ مطفأً.
         + ", terminalPanel: true, serversPanel: false, tasksPanel: true"
         // البند 13 (2026-09-27): المسبارُ التلقائيّ يُنفق توكنات فيبدأ مطفأً.
-        + ", providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true").split(", ").sort(),
+        + ", providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true"
+        + ", webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, auditGate: true").split(", ").sort(),
     )
     // ولا صفَّ ثابتاً بقي في القشرة: الصفوف عُقدٌ تُبنى من الإطار، والاستعادة تُحسب من الأوصاف.
     expect(desktopUi).toContain('<div id="pluginrows"></div>')
@@ -585,6 +591,12 @@ describe("serve convergence wiring", () => {
         // الفجوة #4 — يُسأل عند run --sandbox وحده، بالمحلِّل نفسِه (`pluginOnNow`).
         expect(d.site).toBe("call")
         expect(source.split('pluginOnNow("osSandbox")').length - 1).toBe(1)
+        continue
+      }
+      if (d.name === "webAudit" || d.name === "releaseCheck" || d.name === "visualCompare" || d.name === "seoAudit" || d.name === "slides" || d.name === "auditGate") {
+        // 10-01 — كلُّ أداة تدقيقٍ تُسأل عند استدعائها وحده، بالمحلِّل نفسِه (`pluginOnNow`)، قارئاً واحداً لكلٍّ.
+        expect(d.site).toBe("call")
+        expect(source.split(`pluginOnNow("${d.name}")`).length - 1).toBe(1)
         continue
       }
       if (d.name === "dataTable") {

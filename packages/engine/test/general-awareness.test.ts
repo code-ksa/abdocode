@@ -299,9 +299,11 @@ describe("S13.3 — برهان العبور: مشروعان لا يتسرّب أ
     // يفرّقه فحص. خسارةُ درسٍ عامّ أرخص من تسريب اسم عميل.
     // 2026-09-06: +1 كتيّب «cli-flag-not-registered» (علمٌ لا تعرفه الأداة الحيّة — سجلُّ المالك).
     // 2026-09-28: +1 كتيّب «next-stale-build-under-dev» (بناءٌ كُتب فوق .next خادم dev حيّ).
-    expect(PLAYBOOKS).toHaveLength(58)
+    // 2026-10-01: +1 كتيّب «next-build-first-type-error» (next build يقف عند أوّل خطأ نوع — مقيس في Sprint 14).
+    expect(PLAYBOOKS).toHaveLength(59)
     // 2026-09-28: next-stale-build-under-dev رُقّي — نصُّه عامٌّ بلا اسم عميلٍ ولا مسار.
-    expect(run.promoted).toHaveLength(24)
+    // 2026-10-01: next-build-first-type-error رُقّي كذلك — نصُّه عامٌّ (أمرُ tsc وقاعدةُ البحث قبل تغيير الخصائص) بلا مسارٍ ولا مضيف.
+    expect(run.promoted).toHaveLength(25)
     // 2026-09-06: الكتيّبُ الجديد (cli-flag-not-registered) رُدّ عن الترقية — نصُّه يحمل أسماءَ أدواتٍ ومساراتٍ، والرفضُ الزائد هو الاتّجاه الآمن.
     expect(run.refusals).toHaveLength(34)
     for (const refusal of run.refusals) expect(refusal).toContain("رُفضت الترقية:")

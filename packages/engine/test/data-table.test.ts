@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
-import { attachmentText, numberOf, parseTable, parseTableCommand, profileTable, queryTable } from "../src/data-table"
+import { attachmentText, numberOf, parseTable, parseTableCommand, profileTable, queryTable, spreadsheetSheets } from "../src/data-table"
 import { stripChildEnv } from "../../tools/src/env-strip"
 
 const SALES = [
@@ -112,3 +112,29 @@ test("on the real engine: the model asks table and receives computed sums, not i
     rmSync(home, { recursive: true, force: true })
   }
 }, 120_000)
+
+// 10-01 — Excel مرفقاً: سطحُ المكتب (attachment_documents.rs) يكتب «Sheet: اسم» ثمّ صفوفاً بفواصل جدولة. مقيس: الرأسُ كان «Sheet: …» فصار الجدولُ عموداً واحداً.
+const WORKBOOK = "\nSheet: Sales\nRegion\tAmount\nالرياض\t1200\nجدة\t800\nالرياض\t300\n\nSheet: Costs\nItem\tCost\nrent\t500\n"
+test("spreadsheet attachments split into sheets, each read as TSV with its own header", () => {
+  const sheets = spreadsheetSheets(WORKBOOK)
+  expect(sheets.map((s) => s.name)).toEqual(["Sales", "Costs"])
+  const sales = parseTable(sheets[0]!.body, "tsv")
+  expect(sales.columns).toEqual(["Region", "Amount"])
+  expect(sales.rows.length).toBe(3)
+  expect(queryTable("data.xlsx ▸ Sales", sales, { group: "Region", op: "sum", column: "Amount", where: [], sort: "desc", limit: 20 })).toContain("| الرياض | 1,500 |")
+  expect(parseTable(sheets[1]!.body, "tsv").rows).toEqual([["rent", "500"]])
+  // التوأم: الطريقُ القديم (النصُّ كلُّه جدولاً) يعطي عموداً واحداً — هذا ما أُصلح.
+  expect(parseTable(WORKBOOK).columns).toEqual(["Sheet: Sales"])
+})
+test("text that does not start with a sheet line is not a workbook; --sheet is parsed", () => {
+  expect(spreadsheetSheets("Region,Amount\nSheet: x,1\n")).toEqual([])
+  expect(parseTableCommand("@data.xlsx --sheet Costs --sum Cost")).toMatchObject({ source: "@data.xlsx", sheet: "Costs", query: { op: "sum", column: "Cost" } })
+})
+test("the table runner splits spreadsheet attachments before parsing — wired in the source", () => {
+  const source = require("node:fs").readFileSync(resolve(import.meta.dir, "../src/cli.ts"), "utf8") as string
+  const at = source.indexOf("const sheets = spreadsheetSheets(found)")
+  expect(at).toBeGreaterThan(0)
+  expect(at).toBeLessThan(source.indexOf("const table = parseTable(text, hint)"))
+  expect(source).toContain('hint = command.format ?? "tsv"')
+})
+

@@ -95,7 +95,8 @@ test("wiring: both backends know the three verbs, the catalogue describes them, 
   const catalogue = readFileSync(join(import.meta.dir, "..", "..", "tools", "src", "catalogue.ts"), "utf8")
   for (const verb of ["select", "upload", "drag"]) expect(catalogue).toContain(`{ name: "${verb}", effect: "outside-workspace"`)
   const exposure = readFileSync(join(import.meta.dir, "..", "src", "tool-exposure.ts"), "utf8")
-  expect(exposure).toContain('"select", "upload", "drag", "tabs", "back", "forward", "design"]') // S9: design في عائلة المتصفّح
+  // S9: design في عائلة المتصفّح؛ 10-01: وأدواتُ الجودة بعدها (audit، compare، seo، release-check).
+  expect(exposure).toContain('"select", "upload", "drag", "tabs", "back", "forward", "design", "audit", "compare", "seo", "release-check"]')
   for (const verb of ["select", "upload", "drag"]) expect(BRIDGE_TOOLS.some((t) => t.name === verb)).toBe(true)
   const background = readFileSync(join(import.meta.dir, "..", "..", "browser-bridge", "extension", "background.js"), "utf8")
   expect(background).toContain('case "select": {')

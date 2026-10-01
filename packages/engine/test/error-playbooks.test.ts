@@ -71,3 +71,20 @@ test("diagnoses a stale .next under a live dev server and names stop <pid>", () 
   expect(hint).toContain("stop <pid>")
   expect(errorPlaybookHints("Cannot find module 'lodash'")).not.toContain("next-stale-build-under-dev")
 })
+
+// 10-01 — مقيس في Sprint 14: أربعةُ بناءاتٍ متتالية لاكتشاف outline ثمّ default ثمّ destructive ثمّ link.
+describe("next build stops at the first type error", () => {
+  const measured = "> next build\n▲ Next.js 14.2.26\n✓ Compiled successfully\nLinting and checking validity of types ...\nFailed to compile.\n\n./src/app/account/activity/page.tsx:97:27\nType error: Type '\"outline\"' is not assignable to type '\"primary\" | \"secondary\" | \"ghost\" | \"danger\" | undefined'.\nNext.js build worker exited with code: 1 and signal: null\nانتهى الأمر برمز 1"
+  test("the measured failure gets the all-errors-at-once command and the look-before-changing-props rule", () => {
+    const hint = errorPlaybookHints(measured)
+    expect(hint).toContain("«next-build-first-type-error»")
+    expect(hint).toContain("run npx tsc --noEmit --incremental false -p .")
+    expect(hint).toContain("grep -rn")
+  })
+  test("a successful build, or a failure that is not a type error, gets no such hint", () => {
+    expect(errorPlaybookHints("> next build\n✓ Compiled successfully\nRoute (app)")).not.toContain("next-build-first-type-error")
+    expect(errorPlaybookHints("Failed to compile.\nModule not found: Can't resolve '@/lib/x'")).not.toContain("next-build-first-type-error")
+    expect(errorPlaybookHints("src/a.ts(3,1): error TS2322: Type 'x' is not assignable")).not.toContain("next-build-first-type-error")
+  })
+})
+

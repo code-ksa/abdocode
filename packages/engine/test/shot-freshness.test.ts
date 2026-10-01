@@ -24,7 +24,8 @@ test("shot reloads a local page loaded before the managed server (re)started, an
 })
 
 test("shot with no surface opens the live managed server first, like open falls back to ui", () => {
-  const at = cli.indexOf('if (name === "shot" && surface === undefined) {')
+  // 10-01: audit وcompare وseo تفتح الخادمَ المُدار بالشرط نفسِه.
+  const at = cli.indexOf('if ((name === "shot" || name === "audit" || name === "compare" || name === "seo") && surface === undefined) {')
   expect(at).toBeGreaterThan(0)
   expect(at).toBeLessThan(cli.indexOf('if (surface === undefined) return "لا سطحَ موصول'))
   expect(cli).toContain('const opened = await runSurfaceTool("ui", `http://127.0.0.1:${port}/`, turnId)')

@@ -29,7 +29,7 @@ export interface ToolSpec {
   readonly agentCallable: boolean
   /** المنفّذ الذي يخدمها — يقرؤه المُوزِّع من هنا فلا يخمّن بالاسم، ولا
    *  تعود قائمةُ أسماءٍ ثانيةٌ إلى الحياة. */
-  readonly runner: "templates" | "project-template" | "project-inspect" | "project-locate" | "project-open" | "project-orient" | "project-create" | "exec" | "write" | "image" | "project-read" | "framed" | "surface" | "net" | "patch" | "adapter" | "delegate" | "desktop" | "design" | "data"
+  readonly runner: "templates" | "project-template" | "project-inspect" | "project-locate" | "project-open" | "project-orient" | "project-create" | "exec" | "write" | "image" | "project-read" | "framed" | "surface" | "net" | "patch" | "adapter" | "delegate" | "desktop" | "design" | "data" | "document"
   /** قدرةٌ لا تُمنح إلا لنموذجٍ سحابيّ كبير — صيغتها تقتل النماذج الصغيرة
    *  الحكم من المزوّد الفاعل وقتَ النداء، لا من نيّة النموذج. */
   readonly cloudOnly?: boolean
@@ -49,6 +49,7 @@ export const TOOLS: readonly ToolSpec[] = [
     summary: "Create and select an empty project. A name creates it in the current user's Documents folder, avoiding collisions. An absolute path uses the user's chosen location. Only without a selected project. Outside-workspace approval applies; full-access proceeds automatically. Never overwrites an existing folder.",
   },
   { name: "status", effect: "read", usage: "status", summary: "حالة النواة ودفتر الآثار", agentCallable: true, runner: "framed" },
+  { name: "posture", aliases: ["الوضعية", "أمان الإعدادات"], effect: "read", usage: "posture", summary: "جردُ الوضعيّة وتماسكُ الصلاحيات (هيرمس 22 و11): النمطُ والتحكّمُ عن بُعد وسطحُ المكتب والمزوّدون وخوادمُ MCP والمفاتيحُ المطفأة، ثمّ ما يناقض بعضُه بعضاً مسمّى بسببه (وصولٌ كامل بلا رفضٍ حين لا أحد، مزوّدٌ على http…) — من الإعدادات النافذة بلا أسرار", agentCallable: true, runner: "framed" },
   { name: "docs", effect: "read", usage: "docs [موضوع]", summary: "فهارس L0: تعريف الأنظمة وكيفية استخدامها", agentCallable: true, runner: "framed" },
   { name: "read", effect: "read", usage: "read <ملف>", summary: "قراءة ملفٍّ عبر النواة بأطوارها السبعة", agentCallable: true, runner: "framed" },
   { name: "list", aliases: ["ls"], effect: "read", usage: "list [مجلد]", summary: "سرد محتوى مجلدٍ داخل المشروع", agentCallable: true, runner: "project-read" },
@@ -105,6 +106,8 @@ export const TOOLS: readonly ToolSpec[] = [
   // 09-29 (فكرةُ Verdent): عمّالٌ متوازون في worktrees عبر exec --worktree، والدمجُ قرارٌ صريح.
   { name: "parallel", aliases: ["بالتوازي"], effect: "command", usage: "parallel <<<\nمهمّة ١\nمهمّة ٢ (حتى ٤، سطرٌ لكلّ مهمّة مستقلّة)", summary: "عمّالٌ متوازون: كلُّ مهمّةٍ تُنفَّذ بمحرّكٍ كامل في git worktree وفرعٍ خاصّ بلا تزاحم، ويعود تقريرٌ بفروعها وملفّاتها — ثمّ merge لكلّ فرع", agentCallable: true, runner: "exec" },
   { name: "merge", aliases: ["ادمج"], effect: "command", usage: "merge <فرع abdocode/task-XXXXXXXX>", summary: "دمجُ فرع عاملٍ متوازٍ في الفرع الحاليّ (--no-ff)؛ يُلغى تلقائياً عند التعارض — ابنِ واختبر بعد كلّ دمج", agentCallable: true, runner: "exec" },
+  // 10-01 — «سقفُ الجودة»: ما يفعله المشرفُ قبل أن يقول «سُلِّم» — بناءٌ إنتاجيّ، أسرارُ حزمة العميل، next start، كلُّ المسارات، رؤوسُ الأمان، الاختباراتُ على خادم الإنتاج، npm audit.
+  { name: "release-check", aliases: ["افحص الإصدار"], effect: "command", usage: "release-check", summary: "فحصُ الإصدار كاملاً كما يُرفع للإنتاج: npm run build ⇦ أسرارٌ في /_next/static ⇦ next start على منفذٍ حرّ ⇦ كلُّ مسارات البناء ⇦ /api/health ⇦ رؤوسُ الأمان (CSP، frame-ancestors، nosniff، Referrer-Policy، X-Powered-By) ⇦ npm test وtest:unit على الخادم الحيّ ⇦ npm audit — بحكم PASS/FAIL ويوقف خادمَه", agentCallable: true, runner: "exec" },
   { name: "probe", aliases: ["افحص"], effect: "read", usage: "probe <رابط محلّي أو /مسار> [/مسار …]", summary: "فحصُ صفحات خادم التطوير المحلّيّ (localhost/127.0.0.1) كلِّها في نداءٍ واحد: رمزُ الحالة والحجم والنوع ومقتطف لكلّ رابط — بديلُ حلقات Invoke-WebRequest", agentCallable: true, runner: "exec" },
 
   { name: "patch", effect: "edit", usage: "patch <<< *** Begin Patch … *** End Patch", summary: "رقعةٌ متعدّدة الملفّات بصيغة Codex — تُترجَم إلى تحريراتنا المبوَّبة (سحابيّ فقط)", agentCallable: true, runner: "patch", cloudOnly: true },
@@ -115,7 +118,7 @@ export const TOOLS: readonly ToolSpec[] = [
   // الفجوة #11 (2026-09-27): توليدُ صورة بنموذج imageGenModel — تُحفظ في المشروع عبر النواة.
   { name: "imagine", aliases: ["image_gen", "ارسم"], effect: "network", usage: "imagine <وصف الصورة> [--out images/name.png]", summary: "توليدُ صورةٍ من وصف بنموذج الصور المضبوط وحفظُها ملفّاً جديداً في المشروع (PNG/JPEG/WebP)", agentCallable: true, runner: "net" },
   // الفجوة #12 (2026-09-27): تحليلُ بياناتٍ بالكود لا بالنموذج — ملفُّ المشروع أو المرفقُ باسمه.
-  { name: "table", aliases: ["data", "جدول"], effect: "read", usage: "table <ملفّ.csv|.tsv|.json|@مرفق> [--group عمود] [--sum|--avg|--min|--max|--median عمود | --count] [--where عمود=قيمة] [--sort asc|desc] [--limit ن]", summary: "تحليلُ جدولٍ بالكود: بلا خيارات ملفٌّ تعريفيّ (أنواع، فراغ، إحصاءات، أكثرُ القيم)، ومع --group/--sum… تجميعٌ محسوب — استعمله بدل الحساب من نصّ الجدول", agentCallable: true, runner: "data" },
+  { name: "table", aliases: ["data", "جدول"], effect: "read", usage: "table <ملفّ.csv|.tsv|.json|@مرفق (xlsx/ods: --sheet ورقة)> [--group عمود] [--sum|--avg|--min|--max|--median عمود | --count] [--where عمود=قيمة] [--sort asc|desc] [--limit ن]", summary: "تحليلُ جدولٍ بالكود: بلا خيارات ملفٌّ تعريفيّ (أنواع، فراغ، إحصاءات، أكثرُ القيم)، ومع --group/--sum… تجميعٌ محسوب — استعمله بدل الحساب من نصّ الجدول", agentCallable: true, runner: "data" },
   // الفجوة #2 (2026-09-27): بحثٌ معمّق — يقرأ الصفحاتِ التي أعادها بحثُه هو ويعيد أدلّةً مرقّمة بمصادرها.
   { name: "research", aliases: ["deep_research", "بحث_معمق"], effect: "network", usage: "research <سؤال> [--pages 4]", summary: "بحثٌ معمّق: يبحث ثمّ يقرأ أعلى الصفحات عبر النواة ويعيد المقاطعَ الأوثقَ صلةً مرقّمةً [n] بمصادرها ليُكتب جوابٌ مستشهَد", agentCallable: true, runner: "net" },
   { name: "search", aliases: ["google", "google_search", "بحث"], effect: "network", usage: "search <عبارة> [--count 5] [--site example.com] [--images]", summary: "بحث Google منظّم؛ يفتح النتائج في متصفّح عبدو ويعيد العناوين والروابط عند ضبط PSE", agentCallable: true, runner: "net" },
@@ -158,6 +161,11 @@ export const TOOLS: readonly ToolSpec[] = [
   // 09-29 (فكرةُ OpenJev): نموذجُ القرار يختار الخطوةَ التالية على الصفحة من مرشّحيها المسمّين.
   { name: "next", aliases: ["الخطوة"], effect: "read", usage: "next <الهدف> [--go]", summary: "نموذجُ القرار (decisionModel أو نموذج الدور) يختار الخطوةَ التالية على الصفحة الحاليّة من عناصرها المسمّاة: tap/fill/scroll/done/blocked بسطرٍ واحد — و--go ينفّذها فوراً عبر tap/fill ببوّاباتها", agentCallable: true, runner: "surface" },
   { name: "look", effect: "read", usage: "look [مرجع]", summary: "نصُّ الصفحة أو عنصرٍ وأنماطُه المحسوبة — لإصلاح التصميم", agentCallable: true, runner: "surface" },
+  // 10-01 — «سقفُ الجودة»: قواعدُ عدّة ui-audit على كلّ صفحات البناء بعروض الهاتف والمكتب (الفيضان، تراكبُ النصوص، أخطاءُ الطرفيّة، الطلباتُ الفاشلة والتي لا تتوقّف، lang/dir، الوصول، الروابط).
+  { name: "audit", aliases: ["دقق", "دقّق"], effect: "read", usage: "audit [/مسار …] [--widths 360,1366]", summary: "فحصُ جودة الواجهة المُصيَّرة على خادم المشروع المُدار: كلُّ صفحات البناء بعروض 360/390/412/768/1366 — فيضانٌ أفقيّ وأضيقُ فائض، تراكبُ نصوص، أخطاءُ طرفيّة، طلباتٌ فاشلة ولا تتوقّف، lang/dir، h1 وalt وأسماءُ الأزرار والحقول، روابطُ داخليّة مكسورة — بحكم PASS/FAIL", agentCallable: true, runner: "surface" },
+  { name: "slides", aliases: ["عرض", "بريزنتيشن", "presentation"], effect: "edit", usage: "slides <ملفّ.md> [--out اسم] [--theme dark|light] [--accent #2563eb] [--formats pptx,pdf,html]", summary: "عرضٌ تقديميّ من ماركداون في المشروع (شريحةٌ لكلّ قسمٍ بين --- تبدأ بعنوان #؛ نقاطٌ ومرقّمة وعريض وصورُ PNG/JPEG من المشروع؛ «ملاحظات:» للمتحدّث) ⇦ PowerPoint ‎.pptx‎ (يستورده Google Slides كما هو) وPDF وHTML، والعربيّةُ من اليمين — بلا كتابةٍ فوق ملفّ", agentCallable: true, runner: "document" },
+  { name: "seo", aliases: ["سيو", "افحص السيو"], effect: "read", usage: "seo [https://موقع/صفحة …] [/مسار …]", summary: "تدقيقُ SEO وGEO وAEO وSXO كما تراه محرّكاتُ البحث والإجابة (أكتوبر 2026): العنوان والوصف وcanonical وnoindex وOpen Graph وhreflang، المحتوى في HTML الخام قبل JavaScript، زواحفُ الذكاء في robots.txt، llms.txt وsitemap.xml، JSON-LD (Organization، FAQPage، Article)، أسئلةٌ بإجاباتٍ موجزة، viewport وlang/dir وLCP وCLS — بدرجةٍ لكلّ بعد وحكم PASS/FAIL", agentCallable: true, runner: "surface" },
+  { name: "compare", aliases: ["قارن"], effect: "read", usage: "compare <رابط الأصل https://…> [/مسارٌ عندنا] [--width 1440]", summary: "مقارنةُ صفحةٍ عندنا بأصلها: لقطتان بالعرض نفسِه (تُحفظان) ونموذجُ الرؤية يسمّي الفروق — أقسامٌ ناقصة، ترتيب، جداول وبطاقات، ألوانٌ وخطوط، وما يبدو مكسوراً", agentCallable: true, runner: "surface" },
   { name: "handoff", effect: "read", usage: "handoff <مرجع>", summary: "تسليمُ حقلِ اعتمادٍ للمستخدم: تركيزٌ في نافذة المتصفّح بلا كتابة", agentCallable: true, runner: "surface" },
 
   // عرضٌ داخليّ لا أداةَ وكيل

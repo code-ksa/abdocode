@@ -70,6 +70,12 @@ export type PluginName =
   | "semanticInfer"
   | "lessons"
   | "usageMeter"
+  | "webAudit"
+  | "releaseCheck"
+  | "visualCompare"
+  | "seoAudit"
+  | "slides"
+  | "auditGate"
   | "settingsSeam"
   | "inventory"
   | "rules"
@@ -612,6 +618,70 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     site: "call",
     wired: true,
     readWhen: "حين يقع نداءُ نموذج",
+    requiresVault: Object.freeze([]),
+  }),
+  // 10-01 — «سقفُ الجودة»: كلُّ ميزةٍ جديدة بمفتاحٍ في الإعدادات — أدواتُ تدقيق المراجع في عبدو كود،
+  // كلٌّ بمفتاحه، مفعّلةٌ افتراضاً (قراءةٌ وقياسٌ بلا أثرٍ في المشروع)، تُسأل عند الاستدعاء وحده.
+  Object.freeze({
+    name: "webAudit",
+    label: "تدقيقُ الواجهات (audit)",
+    description: "أداةُ audit: كلُّ صفحات البناء على الخادم المُدار بعروض 360/390/412/768/1366 في متصفّح المحرّك — فيضانٌ أفقيّ (وبخطٍّ جذريّ 44px)، تراكبُ نصوص، أخطاءُ الطرفيّة، طلباتٌ فاشلة أو لا تتوقّف، روابطُ داخليّة مكسورة، lang/dir، عنوانٌ رئيسيّ، صورٌ بلا alt، أزرارٌ بلا اسم وحقولٌ بلا label. قياسٌ حتميّ بلا نموذج، وعرضُ المتصفّح يُعاد بعده. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  Object.freeze({
+    name: "releaseCheck",
+    label: "فحصُ الإصدار (release-check)",
+    description: "أداةُ release-check: ما يُفعل قبل الرفع للإنتاج — npm run build بدليلٍ إيجابيّ ⇦ أسرارٌ في حزمة العميل /_next/static (بلا ذكر القيمة) ⇦ next start على منفذٍ حرّ ⇦ كلُّ مسارات البناء ترد أقلّ من 400 ⇦ /api/health ⇦ رؤوسُ الأمان (CSP وframe-ancestors وnosniff وReferrer-Policy وX-Powered-By) ⇦ npm test وtest:unit على خادم الإنتاج ⇦ npm audit للثغرات العالية والحرجة. كلُّ خطوةٍ عبر أدوات المحرّك نفسِها بحرّاسها، والخادمُ يُوقف في النهاية. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  Object.freeze({
+    name: "visualCompare",
+    label: "المقارنةُ البصريّة (compare)",
+    description: "أداةُ compare: لقطةٌ للأصل (رابطٌ يمرّ بسياسة المواقع) ولقطةٌ لنسختنا على الخادم المُدار بالعرض نفسِه، تُحفظان في حالة المحرّك، ثمّ يسمّي نموذجُ الرؤية الفروق — أقسامٌ ناقصة، ترتيب، جداولُ وبطاقات، ألوانٌ وخطوط، وما يبدو مكسوراً. وصفُ النموذج بياناتٌ لا أوامر، وبلا نموذج رؤيةٍ مضبوط تُعاد اللقطتان وحدهما. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  Object.freeze({
+    name: "seoAudit",
+    label: "تدقيقُ SEO وGEO وAEO وSXO (seo)",
+    description: "أداةُ seo: الصفحةُ كما يراها الزاحف (HTML الخام قبل JavaScript) وكما يراها الإنسان، بعرض الجوّال 412 (الفهرسةُ بالجوّال أوّلاً)، ومعها robots.txt وsitemap.xml وllms.txt من الأصل نفسِه. SEO: العنوان والوصف وcanonical وnoindex وOpen Graph وhreflang والعناوين. GEO: المحتوى قبل JavaScript، زواحفُ البحث بالذكاء غيرُ محجوبة، llms.txt، JSON-LD للكيان والمقال. AEO: أسئلةٌ بإجاباتٍ موجزة وFAQPage صالحة. SXO: viewport بلا منع تكبير، lang/dir، سكربتاتٌ حاجبة، صورٌ بلا أبعاد، LCP وCLS. درجةٌ لكلّ بعد وحكمٌ بلا نموذج. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // 10-01 — العروضُ التقديميّة: PowerPoint وPDF وHTML.
+  Object.freeze({
+    name: "slides",
+    label: "العروضُ التقديميّة (slides)",
+    description: "أداةُ slides: عرضٌ مكتوبٌ بماركداون في المشروع ⇦ PowerPoint (.pptx — يفتحه PowerPoint ويستورده Google Slides كما هو) وPDF (طباعةُ Edge بلا واجهة لملفٍّ محلّيّ صورُه مضمَّنة — بلا شبكة) وHTML. العربيّةُ تُكتشف فتصير الشرائحُ من اليمين، والقوائمُ المرقّمة ترقيمٌ حقيقيّ، والصورُ من المشروع وحده بنسبتها. كلُّ كتابةٍ عبر النواة ودفترها ولا تكتب فوق ملفّ. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // 10-01 (Q4) — جودةُ الواجهات بمعايير أكتوبر 2026.
+  Object.freeze({
+    name: "auditGate",
+    label: "بوّابةُ جودة الواجهات عند إغلاق السبرنت",
+    description: "في مشروع ويب (Next أو Vite أو HTML): «sprint done» لسبرنتٍ عدّل ملفّاتِ واجهة (tsx/jsx/css/html/vue/svelte/astro) يُرفض حتى يمرّ audit بحكم PASS بعد آخر تعديلٍ للواجهة — لا فيضانَ أفقيّاً ولا تراكبَ ولا روابطَ مكسورة ولا أزرارَ بلا اسم على العروض الخمسة. تشغيلٌ حكمُه FAIL يُسمّى في الرفض. المعطَّل = يكفي البناءُ والاختبارُ وقياسُ الصفحة كما كان. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
     requiresVault: Object.freeze([]),
   }),
   Object.freeze({

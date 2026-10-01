@@ -209,5 +209,7 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     // الفجوة #9 (2026-09-27): الرابع عشر معلَن — مراجعةُ PR («review pr»): العدساتُ الثلاث نفسُها بلا أدوات وبسياقٍ منفصل على فرق gh.
     // 09-29: الخامس عشر معلَن — أداةُ next: نموذجُ القرار (decisionModel) يختار خطوةَ المتصفّح من مرشّحين مسمّين (نداءٌ واحد بلا أدوات).
     // 09-29 (عينُ الوكيل): السادس عشر معلَن — describeShots: نداءٌ واحد لنموذج الرؤية بنظامٍ بلا أدوات يصف اللقطة، والوكيلُ يقرّر.
-    expect(source.match(/\bawait ask\(/gu)).toHaveLength(16)
+    // 2026-10-01: السابع عشر معلَن — أداةُ compare: نداءٌ واحد لنموذج الرؤية بنظام VISION_EYE_SYSTEM بلا أدوات (toolAllowlist: [])
+    // يصف الفروقَ بين لقطتَي الأصل ونسختنا؛ الوصفُ بياناتٌ لا أوامر، وبلا نموذج رؤيةٍ مضبوط لا نداء.
+    expect(source.match(/\bawait ask\(/gu)).toHaveLength(17)
     expect(source).toContain("const reply = await ask(buildReviewPrompt(reviewGoal, diff.text, lens), { ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REVIEW_SYSTEM }, [], turnSelection)")

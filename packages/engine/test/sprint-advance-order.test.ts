@@ -13,7 +13,8 @@ test("the sprint advance edge runs before the independent review in the completi
   expect(advance - branch).toBeLessThan(900) // أوّلُ ما في فرع الاكتمال
   const review = cli.indexOf("if (superActive) {", advance)
   expect(review).toBeGreaterThan(advance)
-  expect(review - advance).toBeLessThan(900) // والمراجعةُ بعدها مباشرةً
+  // 10-01 (3a712267): بينهما شرطُ «السبرنت لم يُغلق» — حافّةٌ أخرى قبل المراجعة لا بعدها؛ فالمسافةُ أطول والترتيبُ نفسُه.
+  expect(review - advance).toBeLessThan(1_900) // والمراجعةُ بعدهما
   expect(cli.split("const advance = sprintAdvance(PROJECT_DIR, sprintOpenAtStart)").length).toBe(2) // مرّةً واحدة
 })
 

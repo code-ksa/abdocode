@@ -87,6 +87,8 @@ describe("sliceReadRange — 1-based inclusive line slices", () => {
     const out = sliceReadRange(lf, 6)
     expect("error" in out).toBe(true)
     if ("error" in out) expect(out.error).toContain("السطر 6 من 5 سطراً")
+    // 10-01: الرفضُ يقول ما يُطلب بدله — أسطرٌ لا أحرف، والمقطعُ الكامل.
+    if ("error" in out) expect(out.error).toContain("الأرقامُ أرقامُ أسطرٍ لا أحرف؛ الملفُّ كلُّه: المقطعُ 1 5")
   })
 
   test("from > to and from < 1 are usage errors", () => {

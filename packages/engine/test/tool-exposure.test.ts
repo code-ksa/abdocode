@@ -37,3 +37,22 @@ describe("tool exposure by intent", () => {
     expect(exposureLine(30, 46, new Set())).toContain("(الأساسيّة)")
   })
 })
+
+// 10-01 — أدواتُ اليوم كانت بلا عائلة فتُعرض في كلّ نداء. الآن بعائلاتٍ تفتحها النيّة.
+describe("quality, document and security tools by intent", () => {
+  test("audit, compare, seo and release-check ride with the browser; slides with documents; posture with security", () => {
+    for (const name of ["audit", "compare", "seo", "release-check"]) expect(familyOf(name)).toBe("browser")
+    expect(familyOf("slides")).toBe("documents")
+    expect(familyOf("posture")).toBe("security")
+    for (const name of ["audit", "compare", "seo", "release-check", "slides", "posture"]) expect(exposedByIntent(name, new Set())).toBe(false)
+  })
+  test("the owner's own words open them; a plain coding request does not", () => {
+    expect(familiesFor("سوّ بريزنتيشن عن المشروع وصدّره باوربوينت").has("documents")).toBe(true)
+    expect(familiesFor("make slides for the quarterly review").has("documents")).toBe(true)
+    expect(familiesFor("هل إعداداتي آمنة؟ افحص الصلاحيات").has("security")).toBe(true)
+    expect(familiesFor("اعمل اوديت للسيو للموقع https://example.sa").has("browser")).toBe(true)
+    const plain = familiesFor("أصلح دالّة الجمع في utils.ts وأضف اختباراً")
+    expect(plain.has("documents") || plain.has("security")).toBe(false)
+  })
+})
+

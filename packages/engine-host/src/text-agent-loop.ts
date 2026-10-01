@@ -59,6 +59,8 @@ export interface TextAgentLoopOptions {
    * keeps the full output, so a repeated identical read still replays verbatim.
    */
   readonly readCompaction?: { readonly keepRecent: number; readonly overChars: number }
+  /** سقفُ القراءات المحمولة إلى الحقبة التالية (أحرف) — يتبع نافذةَ النموذج؛ الغيابُ = READ_CARRY_CHARS. */
+  readonly readCarryChars?: number
   /**
    * Prefix-preserving compaction of the EXECUTION class (write/edit/patch/run
    * results — the same vocabulary as `advancesWorkspace`) inside this epoch's
@@ -276,6 +278,47 @@ export interface TextAgentLoopResult {
 }
 
 /** S11 — سطرٌ صريح يرافق الإيصالَ المُعاد لاستدعاءٍ مكرَّر. */
+/**
+ * 10-01 — هيرمس 7 (كبسُ وسائط الاستدعاء)، الجزءُ العابر للحقب: ذاكرةُ الحقبة تحمل `⚙ <أمر>` لكلّ ما نُفّذ — ومنها جسمُ كلِّ write وedit
+ * كاملاً (globals.css 16 ألفَ حرف كُتب في Sprint 14 ثمّ تكرّر في كلّ حقبةٍ بعده). الملفُّ على القرص هو الحجّة: في الذاكرة يبقى
+ * رأسُ الأمر ومقاسُ الحمولة وبصمتُها؛ والأوامرُ القصيرة وغيرُ الكاتبة تبقى كما هي.
+ */
+export const MEMORY_ARG_CHARS = 400
+export const memoryCommand = (command: string): string => {
+  if (command.length <= MEMORY_ARG_CHARS) return command
+  const write = /^(write|append|create)\s+(\S+)\s+<<<[ \t]*\n?([\s\S]*)$/u.exec(command)
+  if (write !== null) return `${write[1]} ${write[2]} <<< [حمولةٌ كُتبت فعلاً: ${write[3]!.length} حرفاً، بصمة ${stableHash(write[3]!)} — الملفّ على القرص هو الحجّة]`
+  const edit = /^(edit|patch|replace)\s+(\S+)\s+(::|<<<)([\s\S]*)$/u.exec(command)
+  if (edit !== null) return `${edit[1]} ${edit[2]} ${edit[3]} [تعديلٌ نُفّذ: ${edit[4]!.length} حرفاً، بصمة ${stableHash(edit[4]!)} — اقرأ الملفّ لمحتواه الآن]`
+  return command
+}
+
+/** سقفُ ما يُحمل من إيصالات القراءة إلى الحقبة التالية (أحرف). */
+export const READ_CARRY_CHARS = 60_000
+
+/**
+ * 10-01 (مقيس على سبرنتِ إعادة تصميمٍ في موقع Next.js): الحقبةُ الأولى قرأت ~89 ألفَ حرف (الخطّة، مرجعُ الستايل، globals.css، التخطيط، الرأس…)
+ * ثمّ انتهت بفشل أداة؛ والحاملُ إلى الحقبة التالية كان `join().slice(-20_000)` — آخرُ عشرين ألفاً، مقطوعةٌ من وسط إيصال — فسقطت أوّلُ
+ * القراءات كلُّها وأعاد النموذجُ قراءتَها بالترتيب نفسِه، حتى أوقفه حارسُ التكرار بلا كتابة. الآن: إيصالاتٌ كاملةٌ لا تُقطع، المكرّرُ
+ * بالسطر نفسِه يُحمل مرّةً (الأحدث)، تُملأ من الأحدث إلى الأقدم حتى السقف ثمّ تُعاد إلى ترتيب قراءتها، وما لم يتّسع يُسمّى باسمه.
+ */
+export const carriedReads = (receipts: readonly string[], budget = READ_CARRY_CHARS): string => {
+  const head = (r: string): string => r.split("\n", 1)[0] ?? ""
+  const latest = new Map<string, number>()
+  receipts.forEach((r, i) => latest.set(head(r), i))
+  const unique = receipts.map((r, i) => ({ r, i })).filter(({ r, i }) => latest.get(head(r)) === i)
+  const kept = new Set<number>()
+  const dropped: string[] = []
+  let used = 0
+  for (let k = unique.length - 1; k >= 0; k -= 1) {
+    const { r, i } = unique[k]!
+    if (used + r.length <= budget) { kept.add(i); used += r.length + 2 }
+    else dropped.unshift(head(r).replace(/^نتيجة موثقة لـ«/u, "").replace(/»:$/u, ""))
+  }
+  const body = unique.filter(({ i }) => kept.has(i)).map(({ r }) => r).join("\n\n")
+  return dropped.length === 0 ? body : `${body}\n\n[قُرئت في الحقبة السابقة ولم تُحمل لضيق السياق — أعد قراءةَ ما تحتاجه منها وحده: ${dropped.join(" · ")}]`
+}
+
 export const DUPLICATE_REPLAY_LINE = "هذا الاستدعاءُ مكرَّر — إيصالُه السابق أعلاه؛ إمّا ابنِ عليه أو غيّر الوسائط"
 /** S11 — فعلٌ حاليٌّ على نموذج: تكرارُه بعد أداةٍ أخرى مشروع («save» بعد إرجاع حقل). */
 export const STATEFUL_ACTION = /^(?:[a-z0-9_-]+\.)?(?:tap|fill|key|select)\b/u
@@ -1082,9 +1125,14 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     }
   }
 
+  // الأوامرُ في رأس الجواب بحمولاتها الكاملة للعرض؛ وفي الذاكرة مكبوسةً (memoryCommand).
+  const commandPrefix = commands.map((used) => `⚙ ${used}`).join("\n")
+  const memoryAnswer = commands.length > 0 && answer.startsWith(commandPrefix)
+    ? `${commands.map((used) => `⚙ ${memoryCommand(used)}`).join("\n")}${answer.slice(commandPrefix.length)}`
+    : answer
   const memory: readonly [TextAgentMessage, TextAgentMessage] = Object.freeze([
     Object.freeze({ role: "user" as const, content: options.input }),
-    Object.freeze({ role: "assistant" as const, content: stripMeasure(withoutSummary(answer)) + (readReceipts.length === 0 ? "" : `\n\nإيصالات القراءة المحفوظة للحقبة التالية:\n${readReceipts.join("\n\n").slice(-20_000)}`) + (executionReceipts.length === 0 ? "" : `\n\nإيصالات التنفيذ المحفوظة للحقبة التالية:\n${executionReceipts.join("\n\n").slice(-12_000)}`) }),
+    Object.freeze({ role: "assistant" as const, content: stripMeasure(withoutSummary(memoryAnswer)) + (readReceipts.length === 0 ? "" : `\n\nإيصالات القراءة المحفوظة للحقبة التالية:\n${carriedReads(readReceipts, options.readCarryChars ?? READ_CARRY_CHARS)}`) + (executionReceipts.length === 0 ? "" : `\n\nإيصالات التنفيذ المحفوظة للحقبة التالية:\n${executionReceipts.join("\n\n").slice(-12_000)}`) }),
   ])
   return Object.freeze({
     answer: withoutSummary(answer),

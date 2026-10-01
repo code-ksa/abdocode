@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection, sprintDone, sprintShow } from "../src/project-sprint-plan-guard"
+import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection, sprintDone, sprintShow, SPRINT_FOCUS_CAP } from "../src/project-sprint-plan-guard"
 
 const project = () => mkdtempSync(join(tmpdir(), "abdo-sprints-"))
 const completePlan = "# منتج Next.js عربي RTL لشركة السعادة مع SQLite ولوحة الإدارة وتواصل العملاء\n" + Array.from({ length: 8 }, (_, index) => `## سبرنت ${index + 1}\nالحالة: [ ]\nبوابة القبول: npm run ${index === 7 ? "build" : "test"} وHTTP 200\nالأدلة: نتيجة Playwright أو vitest وفحص المتصفح\n${"نطاق واضح للعمل المطلوب. ".repeat(9)}`).join("\n") + "\n## الاستئناف\nABDO-HANDOFF.md\nNEXT_ACTION"
@@ -307,3 +307,29 @@ describe("a model-written plan: zero-based, table sprints, a fenced dependency s
     expect(sprintDone(dir, -1, "npm run build ✓ 200").ok).toBe(false)
   })
 })
+
+// 10-01 (مقيس على Sprint 14 — الستايل): القصُّ عند 1200 حرف أسقط المهامَّ 14.5–14.8 والبوّابة، فبحث النموذجُ عنها في الملفّ دورين بلا كتابة.
+test("10-01: an ordinary sprint arrives whole — its last task and its gate; an oversized one names where the rest is, by real line numbers", () => {
+  const dir = mkdtempSync(join(tmpdir(), "abdo-sprint-focus-full-"))
+  const rows = Array.from({ length: 8 }, (_, i) => `| 14.${i + 1} | **مهمّة ${i + 1}:** ${"وصفٌ مفصّلٌ للمهمّة بمعيار قبولٍ قابلٍ للقياس. ".repeat(4)} | audit PASS |`).join("\n")
+  const sprint = `## Sprint 14: إعادة التصميم\nالحالة: مفتوح\n\n| # | المهمة | معيار القبول |\n|---|---|---|\n${rows}\n\n**بوابة السبرنت النهائية:** release-check PASS ثمّ audit PASS`
+  writeFileSync(join(dir, "ABDO-SPRINTS.md"), `# خطّة\n\n## Sprint 13: سابق\nالحالة: مكتمل\n\n${sprint}\n`)
+  expect(sprint.length).toBeGreaterThan(1200)
+  const focus = openSprintSection(dir)
+  expect(focus).toContain("| 14.8 |")
+  expect(focus).toContain("بوابة السبرنت النهائية")
+  expect(focus).not.toContain("بقيّةُ هذا السبرنت")
+  // سبرنتٌ أطولُ من السقف: يُقصّ عند حدّ سطر، ويُسمّى الباقي بأرقام أسطرٍ تقع فعلاً على الباقي.
+  const huge = `## Sprint 14: ضخم\nالحالة: مفتوح\n${Array.from({ length: 200 }, (_, i) => `- بند ${i + 1}: ${"نصٌّ ".repeat(8)}`).join("\n")}\nالبوّابة الأخيرة`
+  const file = `# خطّة\n\n## Sprint 13: سابق\nالحالة: مكتمل\n\n${huge}\n`
+  writeFileSync(join(dir, "ABDO-SPRINTS.md"), file)
+  const cut = openSprintSection(dir)
+  expect(cut.length).toBeLessThan(SPRINT_FOCUS_CAP + 200)
+  const m = /read ABDO-SPRINTS\.md (\d+) (\d+)/u.exec(cut)
+  expect(m).not.toBeNull()
+  const lines = file.split("\n")
+  const keptLast = cut.split("\n").at(-2)!
+  expect(lines[Number(m![1]) - 2]).toBe(keptLast)
+  expect(lines[Number(m![2]) - 1]).toBe("البوّابة الأخيرة")
+})
+

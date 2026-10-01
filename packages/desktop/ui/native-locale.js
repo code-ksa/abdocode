@@ -3908,6 +3908,42 @@ const pluginTranslations = {
 "englishLabel": "Local usage meter",
 "englishDescription": "One line per model call — local or cloud — in a file on your disk only (~/.abdo/usage-meter.jsonl or ABDO_USAGE_METER): provider, model, time, what the provider reported verbatim and what was charged. Never sent, never aggregated, never leaves the machine. The cloud ledger and its cap are unchanged. Off = no line, no file — byte-identical to before. Applies from the next call."
   },
+"webAudit": {
+"label": "تدقيقُ الواجهات (audit)",
+"description": "أداةُ audit: كلُّ صفحات البناء على الخادم المُدار بعروض 360/390/412/768/1366 في متصفّح المحرّك — فيضانٌ أفقيّ (وبخطٍّ جذريّ 44px)، تراكبُ نصوص، أخطاءُ الطرفيّة، طلباتٌ فاشلة أو لا تتوقّف، روابطُ داخليّة مكسورة، lang/dir، عنوانٌ رئيسيّ، صورٌ بلا alt، أزرارٌ بلا اسم وحقولٌ بلا label. قياسٌ حتميّ بلا نموذج، وعرضُ المتصفّح يُعاد بعده. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "UI audit (audit)",
+"englishDescription": "The audit tool: every built page on the managed server at 360/390/412/768/1366 in the engine browser — horizontal overflow (also at a 44px root font), overlapping text, console errors, failed or runaway requests, broken internal links, lang/dir, a main heading, images without alt, unnamed buttons and unlabeled fields. Deterministic measurement with no model; the browser width is restored afterwards. Disabled means the tool refuses by name. Applies immediately."
+  },
+"releaseCheck": {
+"label": "فحصُ الإصدار (release-check)",
+"description": "أداةُ release-check: ما يُفعل قبل الرفع للإنتاج — npm run build بدليلٍ إيجابيّ ⇦ أسرارٌ في حزمة العميل /_next/static (بلا ذكر القيمة) ⇦ next start على منفذٍ حرّ ⇦ كلُّ مسارات البناء ترد أقلّ من 400 ⇦ /api/health ⇦ رؤوسُ الأمان (CSP وframe-ancestors وnosniff وReferrer-Policy وX-Powered-By) ⇦ npm test وtest:unit على خادم الإنتاج ⇦ npm audit للثغرات العالية والحرجة. كلُّ خطوةٍ عبر أدوات المحرّك نفسِها بحرّاسها، والخادمُ يُوقف في النهاية. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "Release check (release-check)",
+"englishDescription": "The release-check tool: what is done before shipping to production — npm run build with positive evidence ⇒ secrets in the client bundle /_next/static (never printing the value) ⇒ next start on a free port ⇒ every built route answers below 400 ⇒ /api/health ⇒ security headers (CSP, frame-ancestors, nosniff, Referrer-Policy, X-Powered-By) ⇒ npm test and test:unit against the production server ⇒ npm audit for high and critical vulnerabilities. Every step goes through the engine's own tools and guards, and the server is stopped at the end. Disabled means the tool refuses by name. Applies immediately."
+  },
+"visualCompare": {
+"label": "المقارنةُ البصريّة (compare)",
+"description": "أداةُ compare: لقطةٌ للأصل (رابطٌ يمرّ بسياسة المواقع) ولقطةٌ لنسختنا على الخادم المُدار بالعرض نفسِه، تُحفظان في حالة المحرّك، ثمّ يسمّي نموذجُ الرؤية الفروق — أقسامٌ ناقصة، ترتيب، جداولُ وبطاقات، ألوانٌ وخطوط، وما يبدو مكسوراً. وصفُ النموذج بياناتٌ لا أوامر، وبلا نموذج رؤيةٍ مضبوط تُعاد اللقطتان وحدهما. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "Visual compare (compare)",
+"englishDescription": "The compare tool: a screenshot of the reference (a link that passes the site policy) and one of our copy on the managed server at the same width, both saved in the engine state; then the vision model names the differences — missing sections, order, tables and cards, colours and type, and anything that looks broken. The model's description is data, not instructions; with no vision model configured the two screenshots are returned on their own. Disabled means the tool refuses by name. Applies immediately."
+  },
+"seoAudit": {
+"label": "تدقيقُ SEO وGEO وAEO وSXO (seo)",
+"description": "أداةُ seo: الصفحةُ كما يراها الزاحف (HTML الخام قبل JavaScript) وكما يراها الإنسان، بعرض الجوّال 412 (الفهرسةُ بالجوّال أوّلاً)، ومعها robots.txt وsitemap.xml وllms.txt من الأصل نفسِه. SEO: العنوان والوصف وcanonical وnoindex وOpen Graph وhreflang والعناوين. GEO: المحتوى قبل JavaScript، زواحفُ البحث بالذكاء غيرُ محجوبة، llms.txt، JSON-LD للكيان والمقال. AEO: أسئلةٌ بإجاباتٍ موجزة وFAQPage صالحة. SXO: viewport بلا منع تكبير، lang/dir، سكربتاتٌ حاجبة، صورٌ بلا أبعاد، LCP وCLS. درجةٌ لكلّ بعد وحكمٌ بلا نموذج. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "SEO, GEO, AEO and SXO audit (seo)",
+"englishDescription": "The seo tool: the page as a crawler sees it (raw HTML before JavaScript) and as a person sees it, at a 412px mobile width (mobile-first indexing), plus robots.txt, sitemap.xml and llms.txt from the same origin. SEO: title, description, canonical, noindex, Open Graph, hreflang and headings. GEO: content before JavaScript, AI search crawlers not blocked, llms.txt, JSON-LD for the entity and the article. AEO: questions with concise answers and a valid FAQPage. SXO: a viewport that allows zoom, lang/dir, render-blocking scripts, images without dimensions, LCP and CLS. A score per dimension and a verdict with no model. Disabled means the tool refuses by name. Applies immediately."
+  },
+"slides": {
+"label": "العروضُ التقديميّة (slides)",
+"description": "أداةُ slides: عرضٌ مكتوبٌ بماركداون في المشروع ⇦ PowerPoint (.pptx — يفتحه PowerPoint ويستورده Google Slides كما هو) وPDF (طباعةُ Edge بلا واجهة لملفٍّ محلّيّ صورُه مضمَّنة — بلا شبكة) وHTML. العربيّةُ تُكتشف فتصير الشرائحُ من اليمين، والقوائمُ المرقّمة ترقيمٌ حقيقيّ، والصورُ من المشروع وحده بنسبتها. كلُّ كتابةٍ عبر النواة ودفترها ولا تكتب فوق ملفّ. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "Presentations (slides)",
+"englishDescription": "The slides tool: a deck written in Markdown in the project ⇒ PowerPoint (.pptx — opens in PowerPoint and imports into Google Slides as is), PDF (headless Edge printing a local file with embedded images — no network) and HTML. Arabic is detected and slides read right to left, numbered lists are real numbering, and images come from the project only, at their aspect ratio. Every write goes through the kernel and its ledger and never overwrites a file. Disabled means the tool refuses by name. Applies immediately."
+  },
+"auditGate": {
+"label": "بوّابةُ جودة الواجهات عند إغلاق السبرنت",
+"description": "في مشروع ويب (Next أو Vite أو HTML): «sprint done» لسبرنتٍ عدّل ملفّاتِ واجهة (tsx/jsx/css/html/vue/svelte/astro) يُرفض حتى يمرّ audit بحكم PASS بعد آخر تعديلٍ للواجهة — لا فيضانَ أفقيّاً ولا تراكبَ ولا روابطَ مكسورة ولا أزرارَ بلا اسم على العروض الخمسة. تشغيلٌ حكمُه FAIL يُسمّى في الرفض. المعطَّل = يكفي البناءُ والاختبارُ وقياسُ الصفحة كما كان. يسري فوراً.",
+"englishLabel": "UI quality gate on sprint close",
+"englishDescription": "In a web project (Next, Vite or HTML): «sprint done» for a sprint that edited UI files (tsx/jsx/css/html/vue/svelte/astro) is refused until audit returns PASS after the last UI edit — no horizontal overflow, no overlap, no broken links and no unnamed buttons across the five widths. A run that returned FAIL is named in the refusal. Disabled means build, tests and a page measurement suffice, as before. Applies immediately."
+  },
 "resumeIntent": {
 "label": "آلية اكمل من حيث توقفت",
 "description": "دورٌ يقول اكمل فقط يرث هدف الدور السابق وبواباته ويقرأ التسليم أولاً. يسري من الدور القادم.",
