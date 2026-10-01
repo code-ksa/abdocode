@@ -107,6 +107,8 @@ describe("tailwind 4 arbitrary var classes", () => {
     expect(f).toHaveLength(1)
     expect(f[0]).toMatchObject({ path: "src/components/layout/header.tsx:1", check: "tailwind-v4-var", severity: "error", expected: "bg-(--bg)/80" })
     expect(f[0]!.measured).toStartWith("4×")
+    // مقيس: الصنفُ بتعديلٍ = نداءٌ لكلّ صنف (18 في ملفٍّ واحد) — الإصلاحُ دفعةً واحدة.
+    expect(f[0]!.detail).toContain("أصلح الملفَّ كلَّه دفعةً واحدة")
     expect(renderAudit(f, 1, [390]).passed).toBe(false)
   })
   test("the v4 spellings, Tailwind 3, plain CSS files and non-var arbitrary values pass", () => {

@@ -227,7 +227,7 @@ export function tailwindV4VarFindings(files: readonly { readonly path: string; r
     const first = hits[0]!
     const line = f.text.slice(0, first.index!).split("\n").length
     const fixed = `${first[1]}-(${first[2]})${first[3] ?? ""}`
-    out.push({ path: `${f.path}:${line}`, width: 0, check: "tailwind-v4-var", severity: "error", measured: `${hits.length}× مثل ${first[0]}`, expected: fixed, detail: "Tailwind 4 يترجم [--x] قيمةً باطلة (الخلفيةُ/اللونُ شفّاف) — اكتبها (--x) أو [var(--x)]" })
+    out.push({ path: `${f.path}:${line}`, width: 0, check: "tailwind-v4-var", severity: "error", measured: `${hits.length}× مثل ${first[0]}`, expected: fixed, detail: "Tailwind 4 يترجم [--x] قيمةً باطلة (الخلفيةُ/اللونُ شفّاف) — اكتبها (--x) أو [var(--x)]؛ وأصلح الملفَّ كلَّه دفعةً واحدة (write للملفّ أو patch واحد) لا صنفاً بتعديل — مقيس: 18 صنفاً في ملفٍّ = 18 نداءً" })
   }
   return out
 }
