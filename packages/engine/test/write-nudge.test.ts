@@ -79,6 +79,8 @@ describe("wiring", () => {
     expect(cliSource).toContain("prior: readsWithoutWrite, pointerBudget: Math.max(0, WRITE_NUDGE.pointers - duplicatePointersUsed)")
     expect(cliSource).toContain("readsWithoutWrite = loop.readsWithoutWrite ?? 0")
     expect(cliSource).toContain("duplicatePointersUsed += loop.duplicatePointers ?? 0")
+    // مقيس: دورٌ كامل لم يُعرف أكان الخيارُ حيّاً — إيصالُه في سطر الحقبة حين يعمل، وغيابُه غيابُ الخيار.
+    expect(cliSource).toContain("${loop.readsWithoutWrite === undefined ? \"\" : ` · قراءات بلا كتابة=${loop.readsWithoutWrite} · إشارات المكرَّر=${loop.duplicatePointers ?? 0}`}")
     expect(cliSource).toContain("const WRITE_NUDGE = { after: 15, every: 10, pointers: 4 } as const")
   })
 })

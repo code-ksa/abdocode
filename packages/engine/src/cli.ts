@@ -8298,7 +8298,7 @@ const runServeShell = async (): Promise<void> => {
           } catch { /* الذاكرة مساعِدة لا حاكمة — لا تُسقِط الدور */ }
           await emitEvent(turn.id, summaryEventLine(epoch, summaryVerdict))
         }
-        await emitEvent(turn.id, `✓ نقطة حفظ الحقبة ${epoch}: أدوات=${loop.commands.length} · السبب=${loop.stopReason} · ضغط القراءة=${loop.readCompactions} · ضغط التنفيذ=${loop.execCompactions} · أثر الحقبة=${loop.trailChars} · ضغط الكتابة=${loop.writeCompactions} · إعادة المكرَّر=${loop.duplicateReplays}`)
+        await emitEvent(turn.id, `✓ نقطة حفظ الحقبة ${epoch}: أدوات=${loop.commands.length} · السبب=${loop.stopReason} · ضغط القراءة=${loop.readCompactions} · ضغط التنفيذ=${loop.execCompactions} · أثر الحقبة=${loop.trailChars} · ضغط الكتابة=${loop.writeCompactions} · إعادة المكرَّر=${loop.duplicateReplays}${loop.readsWithoutWrite === undefined ? "" : ` · قراءات بلا كتابة=${loop.readsWithoutWrite} · إشارات المكرَّر=${loop.duplicatePointers ?? 0}`}`)
         // §8 — سطر أحكام الأدوات حدثٌ مستقلّ بعد نقطة الحفظ (لا يُبثّ وهو معطَّل).
         if (ledger !== undefined) await emitEvent(turn.id, ledger.line(epoch))
         // §IDEA 2 — سطر النيّات بجوار سطر الأحكام: للمضيف وحده، لا يدخل نصّاً يراه النموذج.
