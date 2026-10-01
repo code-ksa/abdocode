@@ -73,7 +73,9 @@ export async function discoverAuthServer(resourceUrl: string, fetchImpl: Fetch =
   const resource = new URL(resourceUrl)
   if (!secureUrl(resourceUrl)) throw new Error("موردُ الموصّل يجب أن يكون https")
   const origin = resource.origin
-  let authOrigin = origin
+  // 10-02 — المُصدِرُ قد يحمل مساراً (GitHub: `https://github.com/login/oauth`)؛ بياناتُه حينها على المسار المُدرَج (RFC 8414 §3.1):
+  // `/.well-known/oauth-authorization-server/login/oauth`. مقيس حيّاً: الأصلُ وحده ردّ 404 فلم يُربط GitHub.
+  let authIssuer = new URL(origin)
   let declaredResource: string | undefined
   try {
     const path = resource.pathname.replace(/\/$/, "")
@@ -83,12 +85,21 @@ export async function discoverAuthServer(resourceUrl: string, fetchImpl: Fetch =
       if (!r.ok) continue
       const body = await json(r)
       const servers = Array.isArray(body.authorization_servers) ? body.authorization_servers.filter((x): x is string => typeof x === "string") : []
-      if (servers.length > 0) { authOrigin = new URL(servers[0]!).origin; declaredResource = str(body.resource); break }
+      if (servers.length > 0) { authIssuer = new URL(servers[0]!); declaredResource = str(body.resource); break }
     }
   } catch { /* لا بياناتِ مورد — يُجرَّب أصلُ المورد نفسُه */ }
-  const r = await fetchImpl(`${authOrigin}/.well-known/oauth-authorization-server`, { headers: { accept: "application/json" } })
-  if (!r.ok) throw new Error(`لا بياناتِ خادمِ تفويضٍ على ${authOrigin} (${r.status})`)
-  return parseAuthServerMetadata(await json(r), declaredResource ?? resourceUrl)
+  const issuerPath = authIssuer.pathname.replace(/\/$/, "")
+  const metadataUrls = [
+    ...(issuerPath === "" ? [] : [`${authIssuer.origin}/.well-known/oauth-authorization-server${issuerPath}`]),
+    `${authIssuer.origin}/.well-known/oauth-authorization-server`,
+  ]
+  let last = 0
+  for (const url of metadataUrls) {
+    const r = await fetchImpl(url, { headers: { accept: "application/json" } })
+    if (r.ok) return parseAuthServerMetadata(await json(r), declaredResource ?? resourceUrl)
+    last = r.status
+  }
+  throw new Error(`لا بياناتِ خادمِ تفويضٍ على ${authIssuer.origin}${issuerPath} (${last})`)
 }
 
 /** زوجُ PKCE بطريقة S256 — المتحقّقُ ٦٤ حرفاً عشوائيّاً. */

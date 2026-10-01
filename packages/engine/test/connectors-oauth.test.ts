@@ -116,3 +116,30 @@ describe("OAuth للموصّلات — الرقصةُ كاملةً على خاد
     expect(authorizationUrl(meta, { clientId: "c", redirectUri: "http://127.0.0.1:9/callback", scope: "s", state: "st", challenge: "ch", extra: { access_type: "offline" } })).toContain("access_type=offline")
   })
 })
+
+// 10-02 — مقيس حيّاً: GitHub يعلن مُصدِراً بمسار (`https://github.com/login/oauth`) وبياناتُه على المسار المُدرَج (RFC 8414 §3.1)؛
+// الأصلُ وحده يردّ 404 فلم يُربط. التوأم: مُصدِرٌ بلا مسار يبقى على الأصل.
+describe("discovery of an issuer with a path", () => {
+  const routes = (map: Record<string, unknown>) => (async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input)
+    return url in map ? Response.json(map[url]) : new Response("nf", { status: 404 })
+  }) as unknown as typeof fetch
+  test("the path-inserted metadata is found when the root answers 404", async () => {
+    const meta = await discoverAuthServer("https://api.gh.test/mcp/", routes({
+      "https://api.gh.test/.well-known/oauth-protected-resource/mcp": { resource: "https://api.gh.test/mcp/", authorization_servers: ["https://gh.test/login/oauth"] },
+      "https://gh.test/.well-known/oauth-authorization-server/login/oauth": { issuer: "https://gh.test/login/oauth", authorization_endpoint: "https://gh.test/login/oauth/authorize", token_endpoint: "https://gh.test/login/oauth/access_token" },
+    }))
+    expect(meta.authorization_endpoint).toBe("https://gh.test/login/oauth/authorize")
+    expect(meta.registration_endpoint).toBeUndefined()
+  })
+  test("an issuer without a path still reads the root, and a miss names the issuer path", async () => {
+    const meta = await discoverAuthServer("https://mcp.as.test/v2/mcp", routes({
+      "https://mcp.as.test/.well-known/oauth-protected-resource/v2/mcp": { resource: "https://mcp.as.test/v2/mcp", authorization_servers: ["https://app.as.test"] },
+      "https://app.as.test/.well-known/oauth-authorization-server": { issuer: "https://app.as.test", authorization_endpoint: "https://app.as.test/-/oauth_authorize", token_endpoint: "https://app.as.test/-/oauth_token" },
+    }))
+    expect(meta.token_endpoint).toBe("https://app.as.test/-/oauth_token")
+    await expect(discoverAuthServer("https://api.gh.test/mcp/", routes({
+      "https://api.gh.test/.well-known/oauth-protected-resource/mcp": { authorization_servers: ["https://gh.test/login/oauth"] },
+    }))).rejects.toThrow("https://gh.test/login/oauth")
+  })
+})

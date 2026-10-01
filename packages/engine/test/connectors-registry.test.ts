@@ -46,3 +46,18 @@ describe("سجلُّ الموصّلات", () => {
     expect(connectorServerId("slack")).toBe("connector-slack")
   })
 })
+
+// 10-02 — مقيس حيّاً على الخوادم الحقيقيّة: Asana وGitHub لا يتيحان التسجيلَ الديناميكيّ، فكان «وصّل» يفشل بلا طريق. صارا كسلاك:
+// عميلٌ يصنعه المالك وخطواتُه، ومنفذُ loopback ثابت يُسجَّل عنواناً للرجوع — ولكلّ موصّلٍ منفذُه.
+describe("connectors that need the owner's own app", () => {
+  test("asana and github declare an owner client and a fixed callback port; ports never collide", () => {
+    for (const [id, port] of [["asana", 9373], ["github", 9372], ["slack", 9371]] as const) {
+      const c = CONNECTORS.find((x) => x.id === id)!
+      expect(c.ownerClient?.secret).toBe(true)
+      expect(c.callbackPort).toBe(port)
+      expect(c.ownerClient?.howTo).toContain(`http://127.0.0.1:${port}/callback`)
+    }
+    const ports = CONNECTORS.flatMap((c) => (c.callbackPort === undefined ? [] : [c.callbackPort]))
+    expect(new Set(ports).size).toBe(ports.length)
+  })
+})
