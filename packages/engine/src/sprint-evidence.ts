@@ -29,9 +29,16 @@ export interface EvidenceClock {
   auditAt: number
   /** آخرُ audit حكمُه FAIL — يُسمّى في الرفض. */
   auditFailAt: number
+  /** 10-01 — آخرُ قراءةٍ لملفٍّ ناتجٍ غير شيفرة (md/txt/json/csv/pdf/docx…): قياسُ سبرنتٍ ناتجُه مستند. */
+  docAt?: number
+  /** آخرُ كتابةٍ لملفٍّ ناتجٍ غير شيفرة — القراءةُ قبلها لا تقيسه. */
+  docWriteAt?: number
 }
 
-export const newEvidenceClock = (): EvidenceClock => ({ pageAt: 0, codeAt: 0, buildAt: 0, testAt: 0, uiAt: 0, auditAt: 0, auditFailAt: 0 })
+export const newEvidenceClock = (): EvidenceClock => ({ pageAt: 0, codeAt: 0, buildAt: 0, testAt: 0, uiAt: 0, auditAt: 0, auditFailAt: 0, docAt: 0, docWriteAt: 0 })
+
+/** ملفٌّ ناتجٌ غيرُ شيفرة: قراءتُه بعد آخر تعديلٍ قياسٌ له. html خارجها — صفحةٌ تُقاس بـprobe/audit. */
+const DOC_FILE = /\.(?:md|markdown|txt|json|csv|tsv|ya?ml|pdf|docx|pptx|xlsx)$/iu
 
 /** تعديلٌ يمسّ الواجهة: المسارُ في سطر الأداة ينتهي بامتداد واجهة. */
 const UI_FILE = /(?:^|\s)\S+\.(?:tsx|jsx|css|scss|sass|less|html|vue|svelte|astro|mdx)(?=\s|$|:)/iu
@@ -47,6 +54,9 @@ export function noteEvidence(clock: EvidenceClock, command: string, ok: boolean,
   if (!ok) return
   const line = command.trim()
   const word = line.split(/\s+/u, 1)[0]?.toLowerCase() ?? ""
+  const target = line.split(/\s+/u, 3)[1] ?? ""
+  if (word === "read" && DOC_FILE.test(target)) clock.docAt = now
+  else if ((word === "write" || word === "edit") && DOC_FILE.test(target)) clock.docWriteAt = now
   if (PAGE_TOOLS.has(word)) clock.pageAt = now
   else if (word === "audit") {
     // الحكمُ من رأس التقرير — «audit: PASS» وحده يحسب؛ والتشغيلُ الذي فشل يُسجَّل ليُسمّى.
@@ -90,16 +100,23 @@ export function mergeUiClock(clock: EvidenceClock, saved: Pick<EvidenceClock, "u
 const PAGE_CLAIM = /(?:\bpage\s*\/|\brenders?\b|\bshows?\b|\bdisplays?\b|\bvisible\b|\bprobe\b|\bshot\b|\bscreenshot\b|\bHTTP\s*200\b|\b200\s*OK\b|(?:^|\s)\/[a-z][\w/-]*\s+(?:→|=>|->)?\s*200\b|\breturn\s+200\b|تظهر|يظهر|تعرض|يعرض|تُعرض|ظاهر|الصفحة\s+ترد|ترد\s+200)/iu
 const BUILD_CLAIM = /(?:\bbuild\b|\bcompiled?\b|بناء|البناء|يبني)/iu
 const TEST_CLAIM = /(?:\btests?\b|\bnpm\s+test\b|اختبار|الاختبار|الاختبارات)/iu
+/** 10-01 — مقيس: سبرنتٌ ناتجُه welcome.md رُفض 25 مرّةً والدليلُ «read welcome.md ✓ — يذكر 4 شرائح» صحيح: لم يكن للمستند صنفٌ من القياس. */
+const DOC_CLAIM = /\bread\s+[^\s`'"]+\.(?:md|markdown|txt|json|csv|tsv|ya?ml|pdf|docx|pptx|xlsx)\b/iu
 
 /** سببُ رفض إغلاق السبرنت، أو `undefined` حين يُقبل الدليل. */
 export function sprintEvidenceRefusal(evidence: string, clock: EvidenceClock, options: { readonly web?: boolean } = {}): string | undefined {
-  const claims = { page: PAGE_CLAIM.test(evidence), build: BUILD_CLAIM.test(evidence), test: TEST_CLAIM.test(evidence) }
-  if (!claims.page && !claims.build && !claims.test)
-    return "رُفض إغلاقُ السبرنت: الدليلُ لا يسمّي قياساً — اذكر ما شغّلتَ ونتيجتَه بعد آخر تعديل (npm run build ✓، npm test ✓، probe <المسار> 200…) ثمّ أعد sprint done."
+  const claims = { page: PAGE_CLAIM.test(evidence), build: BUILD_CLAIM.test(evidence), test: TEST_CLAIM.test(evidence), doc: DOC_CLAIM.test(evidence) }
+  if (!claims.page && !claims.build && !claims.test && !claims.doc)
+    return "رُفض إغلاقُ السبرنت: الدليلُ لا يسمّي قياساً — اذكر ما شغّلتَ ونتيجتَه بعد آخر تعديل (npm run build ✓، npm test ✓، probe <المسار> 200، أو read <الملفّ الناتج> لمستندٍ غير شيفرة…) ثمّ أعد sprint done."
   const stale = (at: number) => at === 0 || at < clock.codeAt
   if (claims.page && stale(clock.pageAt)) {
     const why = clock.pageAt === 0 ? "لم تُقَس أيُّ صفحةٍ في هذه الجلسة" : "آخرُ قياسٍ لصفحةٍ سبق آخرَ تعديلٍ للشيفرة"
     return `رُفض إغلاقُ السبرنت: الدليلُ يدّعي عرضَ صفحة و${why}. قِسها الآن — probe <المسار> (الردّ) أو page/shot على الصفحة (العناصر) — ثمّ أعد sprint done بما قيس.`
+  }
+  if (claims.doc && !claims.page && !claims.build && !claims.test) {
+    const docAt = clock.docAt ?? 0
+    if (docAt === 0 || docAt < clock.codeAt || docAt < (clock.docWriteAt ?? 0))
+      return "رُفض إغلاقُ السبرنت: الدليلُ يقيس مستنداً ناتجاً ولا قراءةَ له بعد آخر كتابة — اقرأه الآن (read <الملفّ>) ثمّ أعد sprint done بما فيه."
   }
   if (claims.build && stale(clock.buildAt))
     return "رُفض إغلاقُ السبرنت: الدليلُ يدّعي نجاحَ البناء ولا بناءَ ناجحاً بعد آخر تعديلٍ للشيفرة — شغّل npm run build الآن (خادمُ dev لا يفحص الأنواع)، وأصلح ما يكسره، ثمّ أعد sprint done."

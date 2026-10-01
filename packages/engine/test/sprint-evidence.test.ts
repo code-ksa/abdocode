@@ -148,3 +148,36 @@ describe("the UI clock crosses processes", () => {
   })
 })
 
+// 10-01 — مقيس: سبرنتٌ ناتجُه welcome.md رُفض 25 مرّةً ودليلُه صحيح — لم يكن للمستند صنفٌ من القياس.
+describe("a sprint whose deliverable is a document", () => {
+  const measured = "`read welcome.md` → exit 0 — welcome.md موجود في جذر المشروع ومحتواه يذكر \"4 شرائح\" مطابقاً لـ deck.md"
+  test("closes on a read of the document taken after it was written", () => {
+    const clock = newEvidenceClock()
+    noteEvidence(clock, "read deck.md", true, 1)
+    noteEvidence(clock, "write welcome.md <<<\nمرحباً — 4 شرائح", true, 2)
+    noteEvidence(clock, "read welcome.md", true, 3)
+    expect(sprintEvidenceRefusal(measured, clock)).toBeUndefined()
+  })
+  test("a read before the last write, or no read at all, is refused and says to read it now", () => {
+    const before = newEvidenceClock()
+    noteEvidence(before, "read welcome.md", true, 1)
+    noteEvidence(before, "write welcome.md <<<\nx", true, 2)
+    expect(sprintEvidenceRefusal(measured, before)).toContain("ولا قراءةَ له بعد آخر كتابة")
+    expect(sprintEvidenceRefusal(measured, newEvidenceClock())).toContain("اقرأه الآن (read <الملفّ>)")
+  })
+  test("reading code is not a measurement of code, and a code edit after the read makes it stale", () => {
+    const clock = newEvidenceClock()
+    noteEvidence(clock, "read src/app/api/route.ts", true, 1)
+    expect(sprintEvidenceRefusal("read src/app/api/route.ts ✓ — المسار يتحقّق بـzod", clock)).toContain("الدليلُ لا يسمّي قياساً")
+    const edited = newEvidenceClock()
+    noteEvidence(edited, "read notes.md", true, 1)
+    noteEvidence(edited, "write src/a.ts <<<\nexport const a = 1", true, 2)
+    expect(sprintEvidenceRefusal("read notes.md ✓", edited)).toContain("ولا قراءةَ له بعد آخر كتابة")
+  })
+  test("a web project's UI edits still need audit PASS even when the document read is fresh", () => {
+    const clock = newEvidenceClock()
+    noteEvidence(clock, "write src/app/page.tsx <<<\nexport default function P() { return null }", true, 1)
+    noteEvidence(clock, "read README.md", true, 2)
+    expect(sprintEvidenceRefusal("read README.md ✓", clock, { web: true })).toContain("audit")
+  })
+})
