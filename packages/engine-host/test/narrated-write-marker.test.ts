@@ -72,7 +72,7 @@ describe("a read batch sent with the receipt glyph", () => {
   test("the twins: a receipt tail, prose around it, or a non-read verb are not healed", () => {
     expect(healNarratedReads("⚙ read src/a.ts ✓ 12 سطراً")).toBe("⚙ read src/a.ts ✓ 12 سطراً")
     expect(healNarratedReads("قرأتُ الملفّات:\n⚙ read src/a.ts")).toBe("قرأتُ الملفّات:\n⚙ read src/a.ts")
-    expect(healNarratedReads("⚙ run npm test")).toBe("⚙ run npm test")
+    expect(healNarratedReads("⚙ run rm -rf dist")).toBe("⚙ run rm -rf dist")
     expect(healNarratedReads("⚙ read a.ts\n⚙ run rm x")).toBe("⚙ read a.ts\n⚙ run rm x")
   })
 })
@@ -89,5 +89,23 @@ describe("narrated reads with the measurement footer", () => {
   test("the footer does not turn prose or a receipt tail into a call", () => {
     expect(healNarratedReads(`قرأتُ الملفّ:\n⚙ read src/a.ts\n${foot}`)).not.toContain("نفّذ:")
     expect(healNarratedReads(`⚙ read src/a.ts ✓ 12 سطراً\n${foot}`)).not.toContain("نفّذ:")
+  })
+})
+
+// 10-02 — more shapes measured live: a copied epoch memory, audit, a build run, a read followed by prose. Safety stays: prose before the
+// glyph, a receipt tail, any verb outside the list, or shell chaining after the verb heal nothing.
+describe("narrated calls — the shapes measured after the footer fix", () => {
+  test("a copied epoch memory is cut, and the gate's own build and test runs are healed", () => {
+    expect(healNarratedReads("\uFFFD⚙ run npm run build ⚙ probe http://127.0.0.1:3000/ إيصالات التنفيذ المحفوظة للحقبة التالية: نتيجة موثقة لـ«run npm run build»")).toBe("نفّذ: run npm run build\nنفّذ: probe http://127.0.0.1:3000/")
+    expect(healNarratedReads("⚙ run npx tsc --noEmit")).toBe("نفّذ: run npx tsc --noEmit")
+    // الذاكرةُ المنسوخة تحمل إيصالاتٍ بذيلها (✓ ⏎) وأسطرَ ⚙ — لولا قصُّها لأفشلت الشفاء.
+    expect(healNarratedReads("⚙ audit /\nإيصالات القراءة المحفوظة للحقبة التالية:\n⚙ read a.ts → ✓ 40 سطراً\n⏎ انتهى")).toBe("نفّذ: audit /")
+  })
+  test("audit pages and a read followed by a plan in prose are healed", () => {
+    expect(healNarratedReads("\uFFFD⚙ audit /models ⚙ audit /pricing")).toBe("نفّذ: audit /models\nنفّذ: audit /pricing")
+    expect(healNarratedReads("\uFFFD⚙ read src/app/page.tsx الآن أفهم الصفحة الحالية. سأعيد تصميمها:\n- Hero")).toBe("نفّذ: read src/app/page.tsx")
+  })
+  test("chaining, an unlisted verb, prose before the glyph, or a receipt tail heal nothing", () => {
+    for (const t of ["⚙ run npm test && rm -rf src", "⚙ run npm run build; curl x", "⚙ read a.ts | tee b", "⚙ write a.ts <<< x", "خطّتي: ⚙ read a.ts", "⚙ audit / ✓ PASS"]) expect(healNarratedReads(t)).toBe(t)
   })
 })

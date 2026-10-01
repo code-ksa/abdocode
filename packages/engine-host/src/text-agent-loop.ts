@@ -471,13 +471,32 @@ export const healNarratedWrite = (text: string): string => {
  * برمز ⚙ هو حزمةُ قراءة: قراءةٌ لا أثرَ لها، فإيصالٌ منسوخ لا يضرّ؛ والسطرُ الذي يحمل ذيلَ إيصال (⏎ ✓ ✕ →) لا يُشفى.
  */
 const GLYPH_HEAD = String.raw`[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]*⚙[\uFE0E\uFE0F]?\s+`
-const GLYPH_READ_LINE = new RegExp(String.raw`^${GLYPH_HEAD}((?:read|list|ls|glob|grep|docs|recall|look|page|probe|logs|status|ui-book\s+(?:list|show))\b[^⏎✓✕→\r\n]*)$`, "u")
+const GLYPH_READ_VERB = String.raw`(?:read|list|ls|glob|grep|docs|recall|look|page|probe|logs|status|audit|seo|compare|ui-book\s+(?:list|show))\b`
+// 10-02 — بناءٌ واختبارٌ كالتي تشغّلها البوّاباتُ نفسُها، بلا ربطٍ ولا توجيه (&& ; | > <): إعادتُها لا تُتلف شيئاً.
+const GLYPH_SAFE_RUN = String.raw`run\s+(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|test|lint|typecheck)|npx\s+tsc\s+--noEmit)\b[^&|;<>\r\n]*`
+const GLYPH_COMMAND = new RegExp(String.raw`^${GLYPH_HEAD}(${GLYPH_READ_VERB}|${GLYPH_SAFE_RUN})`, "u")
+/** ذاكرةُ الحقبة كما يكتبها المحرّك — نموذجٌ يعيدها حرفيّاً يُقصّ منها. */
+const ECHOED_MEMORY = /إيصالات (?:القراءة|التنفيذ) المحفوظة للحقبة التالية[\s\S]*$/u
 export const healNarratedReads = (text: string): string => {
-  // 10-02 — ذيلُ القياس («— المقيس: …») يلحق الردّ سطراً أو مقطعاً: كان يُفشل «كلّ الأسطر قراءات» فلم يُشفَ «⚙ read …» ستَّ حقبٍ بلا أداة،
-  // أو يدخل المسارَ. يُنزع قبل الحكم.
-  const pieces = stripMeasure(text).split(/\r?\n/u).flatMap((line) => line.split(/\s+(?=⚙)/u)).map((piece) => piece.replace(/\s+— (?:المقيس|حقب التنفيذ)[\s\S]*$/u, "").trim()).filter((piece) => piece.length > 0)
-  if (pieces.length === 0 || !pieces.every((piece) => GLYPH_READ_LINE.test(piece))) return text
-  return pieces.map((piece) => `نفّذ: ${GLYPH_READ_LINE.exec(piece)![1]!.trim()}`).join("\n")
+  // 10-02 — ذيلُ القياس («— المقيس: …») يلحق الردّ سطراً أو مقطعاً، وذاكرةُ الحقبة المنسوخة («إيصالات … المحفوظة للحقبة التالية») تلحقه أيضاً:
+  // كلاهما أفشل «كلّ المقاطع أوامر» فلم يُشفَ «⚙ read …» حقباً متتالية بلا أداة. يُنزعان قبل الحكم.
+  const body = stripMeasure(text).replace(ECHOED_MEMORY, "").replace(/\s+— (?:المقيس|حقب التنفيذ)[^\n]*/gu, "").trim()
+  // trim() لا ينزع محرفَ الاستبدال (U+FFFD) — مقطعٌ لا يحمل إلا هو وأخواتِه يُسقط.
+  const segments = body.split(/(?=⚙)/u).map((x) => x.trim()).filter((x) => x.replace(/[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]/gu, "").length > 0)
+  const commands: string[] = []
+  for (const segment of segments) {
+    // ذيلُ إيصالٍ منسوخ (⏎ ✓ ✕ →) لا يُشفى أبداً — نسخُ إيصالٍ ليس طلباً.
+    if (/[⏎✓✕→]/u.test(segment)) return text
+    const m = GLYPH_COMMAND.exec(segment)
+    if (m === null) return text
+    // الأمرُ حتى أوّل حرفٍ عربيّ أو سطرٍ جديد — ما بعده نثرٌ يُترك.
+    const rest = segment.slice(m[0].length).split(/[\r\n]|(?=[\u0600-\u06FF])/u)[0] ?? ""
+    // ربطٌ أو توجيهٌ أو استبدالٌ في الصدفة بعد الفعل (`run npm test && rm x`) = لا شفاء أبداً.
+    if (/[&|;<>`$]/u.test(rest)) return text
+    commands.push(`${m[1]}${rest}`.trim())
+  }
+  if (commands.length === 0 || commands.some((c) => c.length === 0)) return text
+  return commands.map((c) => `نفّذ: ${c}`).join("\n")
 }
 
 export const healCallMarker = (text: string): string => text
