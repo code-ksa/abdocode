@@ -1120,7 +1120,8 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     // Exec class = the very regex `advancesWorkspace` uses (write|edit|patch|run) — one vocabulary.
     // hadToolFailure/stopReason above are settled before any compaction can run.
     const isExecCommand = EXEC_CLASS.test(command)
-    if (nudge !== undefined) readStreak = isExecCommand ? 0 : isReadCommand ? readStreak + 1 : readStreak
+    // كتابةُ ملفٍّ وحدها تصفّر السلسلة — بناءٌ أو اختبارٌ بلا تعديل ليس تقدّماً (مقيس: 13 قراءة، بناء، 10 قراءات ولم يُنبَّه).
+    if (nudge !== undefined) readStreak = /^(?:write|edit|patch)\b/u.test(command) ? 0 : isReadCommand ? readStreak + 1 : readStreak
     recordAssistant()
     // م11 — رسالةُ المساعد التي حملت حمولةَ الكتابة كاملةً تُتعقّب للضغط (النمطُ النصّيّ وحده؛ الغياب = لا تعقّب).
     if (wc !== undefined && nativeReply === undefined && /^write\s/u.test(command)) {

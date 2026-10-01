@@ -45,6 +45,10 @@ describe("write nudge — reads in a row without a write", () => {
     expect(reset.result.readsWithoutWrite).toBe(3)
     expect(reset.prompts.some((p) => p.includes(writeNudgeLine(3)))).toBe(true)
     expect(reset.prompts.some((p) => p.includes(writeNudgeLine(4)))).toBe(false)
+    // مقيس: 13 قراءة ثمّ بناءٌ ثمّ 10 قراءات — البناءُ ليس كتابةً فلا يصفّر.
+    const built = await drive([...reads(2), "نفّذ: run npm run build", ...reads(1, 10)], { writeNudge: NUDGE })
+    expect(built.result.readsWithoutWrite).toBe(3)
+    expect(built.prompts.some((p) => p.includes(writeNudgeLine(3)))).toBe(true)
     const carried = await drive(reads(1), { writeNudge: { ...NUDGE, prior: 14, after: 15 } })
     expect(carried.prompts[1]).toContain(writeNudgeLine(15))
   })
