@@ -3,7 +3,7 @@
  * القياساتُ من موقعٍ بناه عبدو كود (Next.js، عربيّ) كما قاستها العدّة.
  */
 import { describe, expect, test } from "bun:test"
-import { MEASURE_SCRIPT, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, tailwindV4VarFindings, type PageMeasurement } from "../src/web-audit"
+import { MEASURE_SCRIPT, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, tailwindV4DirectiveFindings, tailwindV4VarFindings, type PageMeasurement } from "../src/web-audit"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -146,3 +146,25 @@ describe("overflow culprit", () => {
   })
 })
 
+
+// 10-01 — مقيس: النموذجُ كتب «@tailwind base;» في globals.css لمشروع Tailwind 4 فانكسر البناء، ثمّ أنزل Tailwind إلى 3.4.
+describe("tailwind 4 with v3 directives", () => {
+  const css = "/* tokens */\n@tailwind base;\n@tailwind components;\n@tailwind utilities;\n:root { --bg: #000 }"
+  test("a v4 project's CSS with @tailwind directives is one error per file, at the first directive, with the v4 entry point", () => {
+    const f = tailwindV4DirectiveFindings([{ path: "src/app/globals.css", text: css }], 4)
+    expect(f).toHaveLength(1)
+    expect(f[0]).toMatchObject({ path: "src/app/globals.css:2", check: "tailwind-v4-directive", severity: "error", measured: "3× @tailwind base",expected: '@import "tailwindcss";' })
+    expect(renderAudit(f, 1, [390]).passed).toBe(false)
+  })
+  test("Tailwind 3, the v4 import, and a comment that mentions the directive mid-line pass", () => {
+    expect(tailwindV4DirectiveFindings([{ path: "a.css", text: css }], 3)).toEqual([])
+    expect(tailwindV4DirectiveFindings([{ path: "a.css", text: '@import "tailwindcss";\n@theme { --color-border: #222; }' }], 4)).toEqual([])
+    expect(tailwindV4DirectiveFindings([{ path: "a.css", text: "/* replaced @tailwind base; with the import */" }], 4)).toEqual([])
+  })
+  test("audit reads the project's CSS for it, and the brief names the v4 entry point and forbids the downgrade", () => {
+    const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
+    expect(cli).toContain("findings.push(...tailwindV4DirectiveFindings(sourceFiles(PROJECT_DIR, 200, /\\.css$/u)")
+    expect(WEB_STANDARDS_BRIEF).toContain('@import "tailwindcss";')
+    expect(WEB_STANDARDS_BRIEF).toContain("ولا تُنزل الإصدار")
+  })
+})

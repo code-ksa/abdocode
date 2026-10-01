@@ -72,6 +72,22 @@ test("diagnoses a stale .next under a live dev server and names stop <pid>", () 
   expect(errorPlaybookHints("Cannot find module 'lodash'")).not.toContain("next-stale-build-under-dev")
 })
 
+// 10-01 — مقيس: «Cannot apply unknown utility class» في مشروع Tailwind 4 فأنزل النموذجُ الإصدارَ إلى 3.4 بدل إصلاح النمط.
+describe("tailwind 4 with v3 syntax", () => {
+  const measured = "Error: Cannot apply unknown utility class `border-border`. Are you using CSS modules or similar and missing `@reference`?\nFailed to compile.\n./src/app/globals.css:1:1\n> 1 | @tailwind base;"
+  test("the measured failure is told to keep v4 and fix the syntax: @import, @theme tokens, the v4 postcss plugin", () => {
+    const hint = errorPlaybookHints(measured)
+    expect(hint).toContain("«tailwind4-v3-syntax»")
+    expect(hint).toContain("لا تُنزل Tailwind إلى 3")
+    expect(hint).toContain('@import \"tailwindcss\";')
+    expect(hint).toContain("@theme { --color-border")
+  })
+  test("Tailwind 3's own message for a missing class, and a clean build, get no such hint", () => {
+    expect(errorPlaybookHints("The `border-border` class does not exist. If `border-border` is a custom class, make sure it is defined within a `@layer` directive.")).not.toContain("tailwind4-v3-syntax")
+    expect(errorPlaybookHints("> next build\n✓ Compiled successfully")).not.toContain("tailwind4-v3-syntax")
+  })
+})
+
 // 10-01 — مقيس في Sprint 14: أربعةُ بناءاتٍ متتالية لاكتشاف outline ثمّ default ثمّ destructive ثمّ link.
 describe("next build stops at the first type error", () => {
   const measured = "> next build\n▲ Next.js 14.2.26\n✓ Compiled successfully\nLinting and checking validity of types ...\nFailed to compile.\n\n./src/app/account/activity/page.tsx:97:27\nType error: Type '\"outline\"' is not assignable to type '\"primary\" | \"secondary\" | \"ghost\" | \"danger\" | undefined'.\nNext.js build worker exited with code: 1 and signal: null\nانتهى الأمر برمز 1"

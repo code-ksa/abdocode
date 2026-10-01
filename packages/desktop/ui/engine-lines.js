@@ -132,6 +132,7 @@ const READ_WHEN = new Map([
   ["حين يُسأل هل التفويضُ متاح", "when delegation availability is checked"],
   ["حين يُبنى كتالوجُ الوكلاء للتفويض", "when the delegation agent catalogue is built"],
   ["عند حدّ حقبة", "at an epoch boundary"],
+  ["عند حدّ حقبة في سبرنتٍ مفتوح", "at an epoch boundary in an open sprint"],
   ["حين يقع نداءُ نموذج", "when a model call happens"],
   ["في غير وضع الدردشة", "outside chat mode"],
   ["حين يظهر سرٌّ في المحادثة", "when a secret appears in the conversation"],

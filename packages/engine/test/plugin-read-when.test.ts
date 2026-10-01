@@ -23,7 +23,7 @@ test("a declared condition belongs to a real conditional reader — measured in 
   expect(conditional.map((p) => p.name).sort()).toEqual([
     "approvalTakeover", "cacheAccounting", "delegation", "denialBreaker", "inboundGuard",
     "mcpClient", "overflowLadder", "providerProbe", "readCompaction", "resumeIntent", "reviewer", "secretIntake",
-    "semanticInfer", "standingGrants", "trailCompaction", "unattendedDeny", "usageMeter",
+    "semanticInfer", "standingGrants", "trailCompaction", "unattendedDeny", "usageMeter", "writeNudge",
   ])
   for (const p of conditional) {
     // شرطٌ لمفتاحٍ بلا قارئ كذبٌ في الاتجاه المقابل.

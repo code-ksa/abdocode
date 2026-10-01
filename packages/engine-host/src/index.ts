@@ -159,6 +159,8 @@ export {
   MAX_TEXT_AGENT_ROUNDS,
   SUMMARY_WITH_COMMAND,
   DUPLICATE_REPLAY_LINE,
+  writeNudgeLine,
+  duplicatePointerLine,
   STATEFUL_ACTION,
   pageGenerationOf,
   type ReadTrailEntry,

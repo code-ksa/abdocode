@@ -159,6 +159,13 @@ export const PLAYBOOKS: readonly Playbook[] = [
     when: /Type error:[\s\S]{0,4000}(?:Next\.js build worker exited|Failed to compile)|Failed to compile[\s\S]{0,4000}Type error:/u,
     hint: "next build يقف عند أوّل خطأ نوعٍ وحده — لا تبنِ لكلّ خطأ. اجمعها كلَّها دفعةً واحدة: run npx tsc --noEmit --incremental false -p . ثمّ أصلحها كلَّها ثمّ ابنِ مرّةً. وإن غيّرتَ خصائصَ مكوّنٍ مشترك (variant، size، أسماءُ التصدير) فابحث عن استعمالاته أوّلاً: grep -rn \"variant=\\|<Button\" src — وأبقِ القيمَ القديمة أو حدّث كلَّ استعمال.",
   },
+  // 10-01 (مقيس على سبرنتِ إعادة تصميمٍ في موقع Next.js): globals.css بنمط v3 في مشروع Tailwind 4 أوقف البناء بـ«Cannot apply unknown utility class
+  // `border-border`»؛ وأوّلُ ما رآه النموذجُ أثرُ مكدّس webpack فأنزل Tailwind إلى 3.4 بدل إصلاح النمط.
+  {
+    id: "tailwind4-v3-syntax",
+    when: /Cannot apply unknown utility class `[^`]+`/u,
+    hint: "Tailwind 4 رفض صنفاً في @apply: هذا نمطُ الإصدار 3 داخل مشروع 4 (`@tailwind base` و`@apply border-border` بألوانٍ معرّفةٍ في ملفّ إعداد Tailwind). لا تُنزل Tailwind إلى 3 — هذا رجوعٌ عن المعيار الحاليّ. أصلح النمط: أوّلُ ملفّ CSS العامّ سطرُ `@import \"tailwindcss\";` بدل الأسطر الثلاثة، والألوانُ في `@theme { --color-border: …; --color-background: …; }` فتصير border-border وbg-background أصنافاً حقيقيّة (أو استبدل @apply بخاصّيةٍ مباشرة مثل `border-color: var(--border)`)، ومكوّنُ postcss في الإصدار 4 هو الحزمة tailwindcss-postcss الرسميّة لا tailwindcss نفسُها. ثمّ ابنِ مرّةً واحدة.",
+  },
   {
     id: "hydration-mismatch",
     when: /hydration failed|text content does not match|did not match.*server|Hydration/iu,

@@ -3938,6 +3938,18 @@ const pluginTranslations = {
 "englishLabel": "Presentations (slides)",
 "englishDescription": "The slides tool: a deck written in Markdown in the project ⇒ PowerPoint (.pptx — opens in PowerPoint and imports into Google Slides as is), PDF (headless Edge printing a local file with embedded images — no network) and HTML. Arabic is detected and slides read right to left, numbered lists are real numbering, and images come from the project only, at their aspect ratio. Every write goes through the kernel and its ledger and never overwrites a file. Disabled means the tool refuses by name. Applies immediately."
   },
+"cvAnalysis": {
+"label": "تحليلُ السِّيَر الذاتيّة (cv)",
+"description": "أداةُ cv: تحليلُ السِّيَر الذاتيّة (PDF وWord وTXT/MD في المشروع) قياساً حتميّاً قبل حكم النموذج — الأقسامُ بالعربيّة والإنجليزيّة، وحضورُ وسائل التواصل لا قيمها، وسنواتُ الخبرة من قسم الخبرة بدمج المتداخل، والنقاطُ بأرقامٍ وأفعالِ إنجاز، وما يقرؤه ATS؛ ومع وصفٍ وظيفيّ: نسبةُ المطابقة والكلماتُ الناقصة، وعدّةُ سِيَرٍ تُرتَّب في جدول. قراءةٌ فقط، ولا يطبع التقريرُ اسماً ولا بريداً ولا هاتفاً. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "Resume analysis (cv)",
+"englishDescription": "The cv tool: analyses resumes (PDF, Word, TXT/MD in the project) deterministically before the model judges them: sections in Arabic and English, contact details as presence only, years of experience from the experience section with overlaps merged, bullets with numbers and action verbs, and what an ATS can read; with a job description, the match percentage and the missing keywords, and several resumes ranked in a table. Read only, and the report never prints a name, an email or a phone number. Off = the tool refuses by name. Applies immediately.",
+  },
+"writeNudge": {
+"label": "دفعُ الكتابة في السبرنت المفتوح",
+"description": "في سبرنتٍ مفتوح («اكمل» على خطّة السبرنتات): بعد 15 قراءةً متتالية بلا كتابة يلحق نتيجةَ القراءة سطرٌ يطلب أوّلَ تعديلٍ الآن، ثمّ كلَّ 10؛ والقراءةُ المكرَّرة بعد نفاد إعادة الإيصالات يُشار إلى إيصالها بسطرٍ قصير (حتى 4 في الدور) بدل حقبةٍ تنتهي بأداةٍ صفر. مقيس: دورٌ واحد 46 قراءةً بلا كتابة ثمّ حقبتان بلا أدوات. لا يمسّ دورَ سؤالٍ أو بحث. المعطَّل = الحلقةُ القديمة بايتاً. يسري من الحقبة التالية.",
+"englishLabel": "Write nudge in an open sprint",
+"englishDescription": "In an open sprint (continuing a sprint plan): after 15 reads in a row with no write, the read result carries a line asking for the first edit now, then every 10; and a repeated read after the receipt replays run out gets a short pointer to its receipt (up to 4 per turn) instead of an epoch that ends with zero tools. Measured: one turn made 46 reads and no write, then two epochs with no tools. Never touches a question or research turn. Off = the old loop byte for byte. Applies from the next epoch.",
+  },
 "auditGate": {
 "label": "بوّابةُ جودة الواجهات عند إغلاق السبرنت",
 "description": "في مشروع ويب (Next أو Vite أو HTML): «sprint done» لسبرنتٍ عدّل ملفّاتِ واجهة (tsx/jsx/css/html/vue/svelte/astro) يُرفض حتى يمرّ audit بحكم PASS بعد آخر تعديلٍ للواجهة — لا فيضانَ أفقيّاً ولا تراكبَ ولا روابطَ مكسورة ولا أزرارَ بلا اسم على العروض الخمسة. تشغيلٌ حكمُه FAIL يُسمّى في الرفض. المعطَّل = يكفي البناءُ والاختبارُ وقياسُ الصفحة كما كان. يسري فوراً.",

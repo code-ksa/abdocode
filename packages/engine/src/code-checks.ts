@@ -20,8 +20,8 @@ const SOURCE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/u
 const TEST_FILE = /(?:^|[\\/])(?:test|tests|__tests__|e2e|cypress|playwright)[\\/]|\.(?:test|spec)\.[jt]sx?$/u
 const CONFIG_FILE = /(?:^|[\\/])(?:next|vite|vitest|jest|playwright|tailwind|postcss|eslint)\.config\.[cm]?[jt]s$|(?:^|[\\/])\.env/u
 
-/** ملفّاتُ المصدر في المشروع (بلا التبعيّات ولا المُخرجات)، بسقف عدد. */
-export function sourceFiles(projectDir: string, cap = 3000): string[] {
+/** ملفّاتُ المصدر في المشروع (بلا التبعيّات ولا المُخرجات)، بسقف عدد؛ `pattern` لصنفٍ آخر (CSS لفحص Tailwind). */
+export function sourceFiles(projectDir: string, cap = 3000, pattern: RegExp = SOURCE): string[] {
   const out: string[] = []
   const walk = (dir: string): void => {
     let entries: string[]
@@ -33,7 +33,7 @@ export function sourceFiles(projectDir: string, cap = 3000): string[] {
       let st
       try { st = statSync(full) } catch { continue }
       if (st.isDirectory()) walk(full)
-      else if (SOURCE.test(name) && st.size <= 512 * 1024) out.push(full)
+      else if (pattern.test(name) && st.size <= 512 * 1024) out.push(full)
     }
   }
   walk(projectDir)

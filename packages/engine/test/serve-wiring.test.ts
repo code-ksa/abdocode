@@ -179,7 +179,7 @@ describe("serve convergence wiring", () => {
       // 10-01 — أدواتُ التدقيق تُلحق في الذيل كذلك.
       "webAudit", "releaseCheck", "visualCompare", "seoAudit",
       // 10-01 — العروضُ التقديميّة، وبوّابةُ جودة الواجهات.
-      "slides", "auditGate",
+      "slides", "cvAnalysis", "writeNudge", "auditGate",
     ])
     expect(declared.map((d) => `${d.name}: ${d.defaultOn}`).sort()).toEqual(
       ("denialBreaker: false, unattendedDeny: true, standingGrants: false, inboundGuard: true, mcpClient: false, delegation: false, reviewer: false, activity: false, walls: true, verifier: false, toolVerdict: true, trailCompaction: true, miner: true, readCompaction: true, cacheAccounting: true, resumeIntent: true, turnBudget: true, receiptFixtures: true, intentField: false"
@@ -190,7 +190,7 @@ describe("serve convergence wiring", () => {
         + ", terminalPanel: true, serversPanel: false, tasksPanel: true"
         // البند 13 (2026-09-27): المسبارُ التلقائيّ يُنفق توكنات فيبدأ مطفأً.
         + ", providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true"
-        + ", webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, auditGate: true").split(", ").sort(),
+        + ", webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, cvAnalysis: true, writeNudge: true, auditGate: true").split(", ").sort(),
     )
     // ولا صفَّ ثابتاً بقي في القشرة: الصفوف عُقدٌ تُبنى من الإطار، والاستعادة تُحسب من الأوصاف.
     expect(desktopUi).toContain('<div id="pluginrows"></div>')
@@ -593,7 +593,7 @@ describe("serve convergence wiring", () => {
         expect(source.split('pluginOnNow("osSandbox")').length - 1).toBe(1)
         continue
       }
-      if (d.name === "webAudit" || d.name === "releaseCheck" || d.name === "visualCompare" || d.name === "seoAudit" || d.name === "slides" || d.name === "auditGate") {
+      if (d.name === "webAudit" || d.name === "releaseCheck" || d.name === "visualCompare" || d.name === "seoAudit" || d.name === "slides" || d.name === "cvAnalysis" || d.name === "auditGate") {
         // 10-01 — كلُّ أداة تدقيقٍ تُسأل عند استدعائها وحده، بالمحلِّل نفسِه (`pluginOnNow`)، قارئاً واحداً لكلٍّ.
         expect(d.site).toBe("call")
         expect(source.split(`pluginOnNow("${d.name}")`).length - 1).toBe(1)

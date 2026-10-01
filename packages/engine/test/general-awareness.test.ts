@@ -300,10 +300,12 @@ describe("S13.3 — برهان العبور: مشروعان لا يتسرّب أ
     // 2026-09-06: +1 كتيّب «cli-flag-not-registered» (علمٌ لا تعرفه الأداة الحيّة — سجلُّ المالك).
     // 2026-09-28: +1 كتيّب «next-stale-build-under-dev» (بناءٌ كُتب فوق .next خادم dev حيّ).
     // 2026-10-01: +1 كتيّب «next-build-first-type-error» (next build يقف عند أوّل خطأ نوع — مقيس في Sprint 14).
-    expect(PLAYBOOKS).toHaveLength(59)
+    // 2026-10-01: +1 كتيّب «tailwind4-v3-syntax» (نمطُ v3 في مشروع Tailwind 4 — أُنزل الإصدارُ بدل إصلاح النمط).
+    expect(PLAYBOOKS).toHaveLength(60)
     // 2026-09-28: next-stale-build-under-dev رُقّي — نصُّه عامٌّ بلا اسم عميلٍ ولا مسار.
     // 2026-10-01: next-build-first-type-error رُقّي كذلك — نصُّه عامٌّ (أمرُ tsc وقاعدةُ البحث قبل تغيير الخصائص) بلا مسارٍ ولا مضيف.
-    expect(run.promoted).toHaveLength(25)
+    // 2026-10-01: tailwind4-v3-syntax رُقّي — نصُّه عامٌّ (ملفُّ CSS العامّ وملفُّ الإعداد بالوصف لا بالاسم المنقَّط).
+    expect(run.promoted).toHaveLength(26)
     // 2026-09-06: الكتيّبُ الجديد (cli-flag-not-registered) رُدّ عن الترقية — نصُّه يحمل أسماءَ أدواتٍ ومساراتٍ، والرفضُ الزائد هو الاتّجاه الآمن.
     expect(run.refusals).toHaveLength(34)
     for (const refusal of run.refusals) expect(refusal).toContain("رُفضت الترقية:")

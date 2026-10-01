@@ -220,6 +220,21 @@ export function tailwindV4VarFindings(files: readonly { readonly path: string; r
   return out
 }
 
+/** 10-01 — توجيهاتُ الإصدار 3 في CSS مشروعِ Tailwind 4. مقيس: النموذجُ كتب `@tailwind base;` في globals.css فانكسر البناء
+ * («Cannot apply unknown utility class») ثمّ أنزل Tailwind إلى 3.4 بدل إصلاح النمط. خطأٌ لكلّ ملفّ بسطره الأوّل. */
+const TW3_DIRECTIVE = /^\s*@tailwind\s+(?:base|components|utilities)\b/gmu
+export function tailwindV4DirectiveFindings(files: readonly { readonly path: string; readonly text: string }[], major: number | undefined): AuditFinding[] {
+  if (major === undefined || major < 4) return []
+  const out: AuditFinding[] = []
+  for (const f of files) {
+    const hits = [...f.text.matchAll(TW3_DIRECTIVE)]
+    if (hits.length === 0) continue
+    const line = f.text.slice(0, hits[0]!.index!).split("\n").length
+    out.push({ path: `${f.path}:${line}`, width: 0, check: "tailwind-v4-directive", severity: "error", measured: `${hits.length}× ${hits[0]![0].trim()}`, expected: '@import "tailwindcss";', detail: "توجيهُ الإصدار 3 في مشروع Tailwind 4: الأسطرُ الثلاثة تصير `@import \"tailwindcss\";` والألوانُ في @theme — لا تُنزل الإصدار." })
+  }
+  return out
+}
+
 /**
  * 10-01 (Q4) — معاييرُ الواجهات والخلفيّة والأمان والرفع للإنتاج (أكتوبر 2026).
  * ما يعرفه المشرفُ قبل أن يكتب واجهة، مقطَّراً من عيوبٍ قيست على موقعٍ بناه عبدو كود (درجٌ جوّاليّ بلا خلفيّة، فيضانٌ أفقيّ، روابطُ مكسورة،
@@ -231,7 +246,7 @@ export const WEB_STANDARDS_BRIEF = [
   "2. القوائمُ والطبقات: درجُ الجوّال بخلفيّةٍ معتمة وغطاءٍ تحته، يُغلق بـEsc وبالغطاء وبالرابط، ويقفل تمريرَ الصفحة، ولا يُرسم شيءٌ منه وهو مغلق؛ z-index من سلّمٍ واحد.",
   "3. العربيّة: <html dir=\"rtl\" lang=\"ar\"> وخصائصُ منطقيّة (ms/me/ps/pe/start/end) لا left/right.",
   "4. الوصول (WCAG 2.2 AA): تباينُ النصّ ≥ 4.5:1، حلقةُ تركيزٍ ظاهرة، aria-label لكلّ زرٍّ أيقونيّ، label لكلّ حقل، هدفُ لمسٍ ≥ 24px، h1 واحدٌ لكلّ صفحة، ورابطُ «تخطَّ إلى المحتوى».",
-  "5. الألوانُ رموزٌ في CSS (متغيّرات) — لا hex داخل المكوّنات؛ والصورُ بأبعادٍ أو aspect-ratio وalt. في Tailwind 4 يُكتب المتغيّرُ bg-(--surface) أو bg-[var(--surface)] (أو رمزٌ في @theme يولّد bg-surface) — bg-[--surface] قيمةٌ باطلة فالخلفيةُ شفّافة.",
+  "5. الألوانُ رموزٌ في CSS (متغيّرات) — لا hex داخل المكوّنات؛ والصورُ بأبعادٍ أو aspect-ratio وalt. في Tailwind 4 يُكتب المتغيّرُ bg-(--surface) أو bg-[var(--surface)] (أو رمزٌ في @theme يولّد bg-surface) — bg-[--surface] قيمةٌ باطلة فالخلفيةُ شفّافة. وأوّلُ CSS العامّ فيه @import \"tailwindcss\"; لا @tailwind base/components/utilities، وإضافةُ postcss هي @tailwindcss/postcss — ولا تُنزل الإصدار لتُصلح نمطاً.",
   "6. الأداء: Server Components افتراضاً و\"use client\" لأصغر جزءٍ تفاعليّ، next/font للخطوط، لا سكربتاتٍ حاجبة، ولا طلباتٍ تتكرّر بلا توقّف.",
   "7. الأمن: لا سرَّ في كود العميل (NEXT_PUBLIC_ للعامّ وحده)، تحقّقٌ (zod) لكلّ مدخلٍ في API، مصادقةٌ على كلّ مسارٍ يغيّر بيانات، ورؤوسُ أمانٍ في next.config (CSP وframe-ancestors وnosniff وReferrer-Policy وpoweredByHeader:false).",
   "8. البحثُ والإجابة: metadata لكلّ صفحة (عنوانٌ ≤ 60 ووصفٌ 50–160 وcanonical وOpen Graph)، sitemap وrobots وllms.txt، وJSON-LD للكيان، والمحتوى في HTML قبل JavaScript.",

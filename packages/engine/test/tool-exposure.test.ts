@@ -46,13 +46,19 @@ describe("quality, document and security tools by intent", () => {
     expect(familyOf("posture")).toBe("security")
     for (const name of ["audit", "compare", "seo", "release-check", "slides", "posture"]) expect(exposedByIntent(name, new Set())).toBe(false)
   })
-  test("the owner's own words open them; a plain coding request does not", () => {
+  test("the user's own words open them; a plain coding request does not", () => {
     expect(familiesFor("سوّ بريزنتيشن عن المشروع وصدّره باوربوينت").has("documents")).toBe(true)
     expect(familiesFor("make slides for the quarterly review").has("documents")).toBe(true)
     expect(familiesFor("هل إعداداتي آمنة؟ افحص الصلاحيات").has("security")).toBe(true)
     expect(familiesFor("اعمل اوديت للسيو للموقع https://example.sa").has("browser")).toBe(true)
     const plain = familiesFor("أصلح دالّة الجمع في utils.ts وأضف اختباراً")
     expect(plain.has("documents") || plain.has("security")).toBe(false)
+  })
+  test("cv rides with documents and opens on resume words in Arabic and English; a coding request about a CV component does not", () => {
+    expect(familyOf("cv")).toBe("documents")
+    expect(exposedByIntent("cv", new Set())).toBe(false)
+    for (const ask of ["حلّل السيرة الذاتية دي", "قارن السير الذاتية بالوصف الوظيفي", "رتّب المرشّحين", "analyze this resume against the job description", "screen these CVs", "ATS check for my CV", "اعمل تحليل للسي في"]) expect(familiesFor(ask).has("documents")).toBe(true)
+    expect(familiesFor("أصلح زرّ الحفظ في صفحة الإعدادات").has("documents")).toBe(false)
   })
 })
 

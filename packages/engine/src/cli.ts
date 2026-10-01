@@ -170,6 +170,8 @@ import { surveyPush } from "./push-survey"
 import { parseSecurityScan, renderProjectScan, scanProject } from "./project-security-scan"
 import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
 import { readPdf } from "./pdf-read"
+import { DOCX_MAX_BYTES, docxText } from "./docx-read"
+import { analyzeCv, jobKeywords, parseCvCommand, renderCvReport, type CvAnalysis, type CvCommand } from "./cv-analysis"
 import { folderInstructions, folderInstructionsLayer } from "./folder-instructions"
 import { diskEvidence, diskSnapshot, type GitRun } from "./disk-evidence"
 import { PlaybookMiner, type PlaybookCandidate } from "./playbook-miner"
@@ -215,7 +217,7 @@ import { BUILD_FAILED, TEST_FAILED, mergeUiClock, newEvidenceClock, noteEvidence
 import { clientBundleSecrets, renderReleaseCheck, securityHeaderGaps, type StageResult } from "./release-check"
 import { codeChecks, renderCodeChecks, sourceFiles } from "./code-checks"
 import { POSTURE_PLUGINS, renderPosture } from "./posture"
-import { AUDIT_MAX_LINKS, AUDIT_WIDTHS, MEASURE_SCRIPT, NEVER_REQUEST, RUNAWAY_WINDOW_MS, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, tailwindV4VarFindings, type AuditFinding } from "./web-audit"
+import { AUDIT_MAX_LINKS, AUDIT_WIDTHS, MEASURE_SCRIPT, tailwindV4DirectiveFindings, NEVER_REQUEST, RUNAWAY_WINDOW_MS, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, tailwindV4VarFindings, type AuditFinding } from "./web-audit"
 import { SEO_MEASURE_SCRIPT, analyzeSeoPage, analyzeSeoSite, renderSeoAudit, type SeoFinding, type SeoPageMeasurement, type SeoSiteMeasurement } from "./seo-audit"
 import { DECK_THEMES, deckHtml, deckPptx, parseDeck, parseSlidesCommand, type DeckAsset, type SlidesCommand } from "./slides"
 import { detectStackForProject } from "./project-stacks"
@@ -913,6 +915,8 @@ const WRITE_COMPACTION = { keepRecent: 1, overChars: 20_000 } as const
  * أو كان فعلاً حاليّاً (tap/fill/key/select) نُفّذت بعده أداةٌ أخرى.
  */
 const DUPLICATE_REPLAY_CAP = 3
+/** 10-01 — سبرنتٌ مفتوح يُقرأ ولا يُكتب (text-agent-loop `writeNudge`): العتبةُ والتكرارُ وإشاراتُ المكرَّر في الدور. */
+const WRITE_NUDGE = { after: 15, every: 10, pointers: 4 } as const
 
 const readThroughKernelV = async (file: string, range?: Readonly<{ from: number; to?: number }>): Promise<DispatchResultV> => {
   const target = resolveProjectPath(file)
@@ -937,6 +941,20 @@ const readThroughKernelV = async (file: string, range?: Readonly<{ from: number;
   if (/\.pdf$/iu.test(target)) {
     const pdf = readPdf(target, range)
     return pdf.ok ? okText(pdf.text) : invalid(pdf.error)
+  }
+
+  // مستندُ Word نصّاً لا بايتاتِ ZIP (docx-read.ts): الفقرةُ سطر، والجدولُ صفوفٌ بـ« | »، والعنوانُ بـ#؛ المقطعُ أسطرٌ كالنصّ.
+  if (/\.docx$/iu.test(target)) {
+    let doc: ReturnType<typeof docxText>
+    try {
+      if (statSync(target).size > DOCX_MAX_BYTES) return invalid(`المستند أكبر من ${DOCX_MAX_BYTES} بايت`)
+      doc = docxText(new Uint8Array(readFileSync(target)))
+    } catch { return invalid(`تعذّرت قراءةُ المستند: ${file}`) }
+    if (!doc.ok) return invalid(doc.error)
+    const whole = sliceReadRange(doc.text, range?.from ?? 1, range?.to)
+    if ("error" in whole) return invalid(whole.error)
+    const shown = clipReadBody(whole.slice, readBudgetChars(), whole.from, whole.to, file)
+    return okText(`📄 Word: ${whole.total} سطراً${range === undefined ? "" : ` (المقطع ${whole.from}–${whole.to})`}\n${shown}`)
   }
 
   // مضيفُ النواة يمسك الدفترَ كاتباً وحيداً طوال القراءة: يمرّ بطابور الدفتر نفسِه مع آثار الوكلاء المتوازين.
@@ -4287,6 +4305,43 @@ const runServeShell = async (): Promise<void> => {
         }
       }
       case "document": {
+        if (spec.name === "cv") {
+          // سِيَرٌ ذاتيّة ⇦ قياسٌ حتميّ (cv-analysis.ts) والحكمُ للنموذج. قراءةٌ فقط: PDF عبر pdftotext، وDOCX مفكوكاً هنا، وTXT/MD كما هي —
+          // كلُّ مسارٍ يُحسم داخل المشروع، والتقريرُ يسمّي حضورَ وسائل التواصل لا قيمها.
+          if (!pluginOnNow("cvAnalysis")) return denied("رُفض cv: تحليلُ السِّيَر مطفأ (plugins.cvAnalysis) — فعّله من الإعدادات.", "tool_not_permitted")
+          let command: CvCommand
+          try { command = parseCvCommand(rest) } catch (cause) { return invalid(String(cause instanceof Error ? cause.message : cause)) }
+          const readDoc = (file: string): { readonly text: string } | { readonly error: string } => {
+            const abs = resolveProjectPath(file)
+            if (abs === undefined) return { error: `${file}: خارج المشروع` }
+            try {
+              if (!statSync(abs).isFile()) return { error: `${file}: ليس ملفّاً` }
+              if (statSync(abs).size > DOCX_MAX_BYTES) return { error: `${file}: أكبر من ${DOCX_MAX_BYTES} بايت` }
+              if (/\.pdf$/iu.test(abs)) {
+                const r = readPdf(abs)
+                return r.ok ? { text: r.text.replace(/^📄 PDF:[^\n]*\n/u, "").replace(/^── صفحة \d+ ──$/gmu, "") } : { error: `${file}: ${r.error}` }
+              }
+              if (/\.docx$/iu.test(abs)) { const r = docxText(new Uint8Array(readFileSync(abs))); return r.ok ? { text: r.text } : { error: `${file}: ${r.error}` } }
+              return { text: readFileSync(abs, "utf-8") }
+            } catch { return { error: `${file}: لا ملفَّ بهذا المسار` } }
+          }
+          let keywords: string[] | undefined
+          if (command.jobFile !== undefined) {
+            const job = readDoc(command.jobFile)
+            if ("error" in job) return invalid(`الوصفُ الوظيفيّ: ${job.error}`)
+            keywords = jobKeywords(job.text)
+          } else if (command.jobText !== undefined) keywords = jobKeywords(command.jobText)
+          if (keywords !== undefined && keywords.length === 0) return invalid("الوصفُ الوظيفيّ بلا كلماتٍ مفتاحيّة بعد حذف الشائع — اكتب المتطلّبات نفسَها")
+          const analyses: CvAnalysis[] = []
+          const failed: string[] = []
+          for (const file of command.files) {
+            const doc = readDoc(file)
+            if ("error" in doc) failed.push(doc.error)
+            else analyses.push(analyzeCv(file, doc.text))
+          }
+          if (analyses.length === 0) return invalid(`لم تُقرأ أيُّ سيرة:\n${failed.map((f) => `- ${f}`).join("\n")}`)
+          return okText(renderCvReport(analyses, keywords) + (failed.length === 0 ? "" : `\n\nتعذّرت قراءةُ ${failed.length}:\n${failed.map((f) => `- ${f}`).join("\n")}`))
+        }
         if (spec.name === "slides") {
           // عرضٌ تقديميّ يُصدَّر PowerPoint وPDF (ويستورده Google Slides).
           // ماركداون في المشروع ⇦ PPTX (OOXML مكتوبٌ في slides.ts، فتحه PowerPoint حيّاً) + HTML + PDF (طباعةُ Edge بلا واجهة لملفٍّ محلّيّ
@@ -5516,6 +5571,7 @@ const runServeShell = async (): Promise<void> => {
       let pkgText = ""
       try { pkgText = readFileSync(join(PROJECT_DIR, "package.json"), "utf-8") } catch { pkgText = "" }
       findings.push(...tailwindV4VarFindings(sourceFiles(PROJECT_DIR).map((path) => { let text = ""; try { text = readFileSync(path, "utf-8") } catch { text = "" } return { path: relative(PROJECT_DIR, path).replace(/\\/gu, "/"), text } }), tailwindMajor(pkgText)))
+      findings.push(...tailwindV4DirectiveFindings(sourceFiles(PROJECT_DIR, 200, /\.css$/u).map((path) => { let text = ""; try { text = readFileSync(path, "utf-8") } catch { text = "" } return { path: relative(PROJECT_DIR, path).replace(/\\/gu, "/"), text } }), tailwindMajor(pkgText)))
       return renderAudit(findings, routes.length, widths).text
     }
 
@@ -7911,6 +7967,9 @@ const runServeShell = async (): Promise<void> => {
       let acceptanceStalls = 0
       // S11 — عدُّ إعادات المكرَّر عبر حقب الدور كلِّه (السقف DUPLICATE_REPLAY_CAP).
       let duplicateReplaysUsed = 0
+      // 10-01 — القراءاتُ المتتالية بلا كتابة وإشاراتُ المكرَّر عبر حقب الدور (WRITE_NUDGE).
+      let readsWithoutWrite = 0
+      let duplicatePointersUsed = 0
       let emptyStalls = 0
       let fabricatedStalls = 0
       // 09-29 (فكرةُ LangGraph): بوّابةُ الخطّة — مرّتان كحدّ، ثمّ يُترك الحكمُ لبقيّة السلسلة.
@@ -8101,6 +8160,10 @@ const runServeShell = async (): Promise<void> => {
           priorReceipts: allReceipts,
           // S11 — إعادةُ إيصال المكرَّر بدل حقبةٍ فارغة، بما بقي من سقف الدور.
           duplicateReplay: { budget: Math.max(0, DUPLICATE_REPLAY_CAP - duplicateReplaysUsed) },
+          // 10-01 — سبرنتٌ مفتوح وحده: دفعٌ إلى الكتابة بعد سلسلة قراءات، وإشارةٌ للمكرَّر بدل حقبةٍ بأداةٍ صفر.
+          ...(sprintPlanPending && plugins.read("writeNudge", "epoch", epoch)
+            ? { writeNudge: { after: WRITE_NUDGE.after, every: WRITE_NUDGE.every, prior: readsWithoutWrite, pointerBudget: Math.max(0, WRITE_NUDGE.pointers - duplicatePointersUsed) } }
+            : {}),
           requireTool: forcedFailed || sprintPlanPending,
           // Repair may need a fresh read; do not force a blind write.
           requireEffectfulTool: false,
@@ -8189,6 +8252,8 @@ const runServeShell = async (): Promise<void> => {
         })
         allCommands.push(...loop.commands)
         duplicateReplaysUsed += loop.duplicateReplays
+        readsWithoutWrite = loop.readsWithoutWrite ?? 0
+        duplicatePointersUsed += loop.duplicatePointers ?? 0
         const nativeHistory = loop.continuation.some((message) => message.toolCalls?.length)
         epochHistory.push(...(nativeHistory ? loop.continuation : loop.memory))
         // S5: القصّ بميزانية بايتات لا بعدّ رسائل — يحمي الأحدث وإيصالات
