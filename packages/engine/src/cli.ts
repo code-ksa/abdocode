@@ -8160,8 +8160,9 @@ const runServeShell = async (): Promise<void> => {
           priorReceipts: allReceipts,
           // S11 — إعادةُ إيصال المكرَّر بدل حقبةٍ فارغة، بما بقي من سقف الدور.
           duplicateReplay: { budget: Math.max(0, DUPLICATE_REPLAY_CAP - duplicateReplaysUsed) },
-          // 10-01 — سبرنتٌ مفتوح وحده: دفعٌ إلى الكتابة بعد سلسلة قراءات، وإشارةٌ للمكرَّر بدل حقبةٍ بأداةٍ صفر.
-          ...(sprintPlanPending && plugins.read("writeNudge", "epoch", epoch)
+          // 10-01 — سبرنتٌ مفتوح وحده (نصُّ السبرنت الجاري؛ لا sprintPlanPending — ذاك «الخطّةُ غائبة» فكان الخيارُ مطفأً حيّاً): دفعٌ إلى
+          // الكتابة بعد سلسلة قراءات، وإشارةٌ للمكرَّر بدل حقبةٍ بأداةٍ صفر.
+          ...(sprintFocusText.length > 0 && plugins.read("writeNudge", "epoch", epoch)
             ? { writeNudge: { after: WRITE_NUDGE.after, every: WRITE_NUDGE.every, prior: readsWithoutWrite, pointerBudget: Math.max(0, WRITE_NUDGE.pointers - duplicatePointersUsed) } }
             : {}),
           requireTool: forcedFailed || sprintPlanPending,

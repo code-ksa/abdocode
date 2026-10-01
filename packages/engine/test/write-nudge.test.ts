@@ -68,7 +68,10 @@ describe("write nudge — a repeated read after the replays run out", () => {
 
 describe("wiring", () => {
   test("only an open sprint gets it, behind its own switch, with the streak and pointer budget carried across epochs", () => {
-    expect(cliSource).toContain('...(sprintPlanPending && plugins.read("writeNudge", "epoch", epoch)')
+    expect(cliSource).toContain('...(sprintFocusText.length > 0 && plugins.read("writeNudge", "epoch", epoch)')
+    // مقيس حيّاً: sprintPlanPending = «خطّةُ السبرنتات غائبة»، فالخيارُ كان مطفأً في كلّ سبرنتٍ مفتوح — الشرطُ نصُّ السبرنت الجاري.
+    expect(cliSource).not.toContain('sprintPlanPending && plugins.read("writeNudge"')
+    expect(cliSource).toContain('const sprintPlanPending = !sprintPlanReady(')
     expect(cliSource).toContain("prior: readsWithoutWrite, pointerBudget: Math.max(0, WRITE_NUDGE.pointers - duplicatePointersUsed)")
     expect(cliSource).toContain("readsWithoutWrite = loop.readsWithoutWrite ?? 0")
     expect(cliSource).toContain("duplicatePointersUsed += loop.duplicatePointers ?? 0")
