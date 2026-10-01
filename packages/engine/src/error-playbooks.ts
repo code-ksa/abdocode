@@ -164,7 +164,7 @@ export const PLAYBOOKS: readonly Playbook[] = [
   {
     id: "tailwind4-v3-syntax",
     when: /Cannot apply unknown utility class `[^`]+`/u,
-    hint: "Tailwind 4 رفض صنفاً في @apply: هذا نمطُ الإصدار 3 داخل مشروع 4 (`@tailwind base` و`@apply border-border` بألوانٍ معرّفةٍ في ملفّ إعداد Tailwind). لا تُنزل Tailwind إلى 3 — هذا رجوعٌ عن المعيار الحاليّ. أصلح النمط: أوّلُ ملفّ CSS العامّ سطرُ `@import \"tailwindcss\";` بدل الأسطر الثلاثة، والألوانُ في `@theme { --color-border: …; --color-background: …; }` فتصير border-border وbg-background أصنافاً حقيقيّة (أو استبدل @apply بخاصّيةٍ مباشرة مثل `border-color: var(--border)`)، ومكوّنُ postcss في الإصدار 4 هو الحزمة tailwindcss-postcss الرسميّة لا tailwindcss نفسُها. ثمّ ابنِ مرّةً واحدة.",
+    hint: "Tailwind 4 رفض صنفاً في @apply: هذا نمطُ الإصدار 3 داخل مشروع 4 (`@tailwind base` و`@apply border-border` بألوانٍ معرّفةٍ في ملفّ إعداد Tailwind). لا تُنزل Tailwind إلى 3 — هذا رجوعٌ عن المعيار الحاليّ. أصلح النمط: أوّلُ ملفّ CSS العامّ سطرُ `@import \"tailwindcss\";` بدل الأسطر الثلاثة، والألوانُ في `@theme { --color-border: …; --color-background: …; }` فتصير border-border وbg-background أصنافاً حقيقيّة (أو استبدل @apply بخاصّيةٍ مباشرة مثل `border-color: var(--border)`)؛ وصنفُك المخصّص في @apply يُعرَّف `@utility btn-base { … }`، ومكوّنُ postcss في الإصدار 4 هو الحزمة tailwindcss-postcss الرسميّة لا tailwindcss نفسُها. ثمّ ابنِ مرّةً واحدة.",
   },
   {
     id: "hydration-mismatch",

@@ -81,6 +81,8 @@ describe("tailwind 4 with v3 syntax", () => {
     expect(hint).toContain("لا تُنزل Tailwind إلى 3")
     expect(hint).toContain('@import \"tailwindcss\";')
     expect(hint).toContain("@theme { --color-border")
+    // مقيس: «Cannot apply unknown utility class `btn-base`» — صنفٌ مخصّص في @apply يحتاج @utility في الإصدار 4.
+    expect(hint).toContain("@utility btn-base { … }")
   })
   test("Tailwind 3's own message for a missing class, and a clean build, get no such hint", () => {
     expect(errorPlaybookHints("The `border-border` class does not exist. If `border-border` is a custom class, make sure it is defined within a `@layer` directive.")).not.toContain("tailwind4-v3-syntax")
