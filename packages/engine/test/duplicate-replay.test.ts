@@ -137,6 +137,6 @@ describe("S11 — الاستدعاءُ المكرَّر: إيصالُه السا
     expect(cliSource).toContain("let duplicateReplaysUsed = 0")
     expect(cliSource).toContain("duplicateReplay: { budget: Math.max(0, DUPLICATE_REPLAY_CAP - duplicateReplaysUsed) },")
     expect(cliSource).toContain("duplicateReplaysUsed += loop.duplicateReplays")
-    expect(cliSource).toContain("· إعادة المكرَّر=${loop.duplicateReplays}`)")
+    expect(cliSource).toContain("· إعادة المكرَّر=${loop.duplicateReplays}${loop.readsWithoutWrite === undefined ? \"\" : ` · قراءات بلا كتابة=")
   })
 })
