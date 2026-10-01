@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { mergeUiClock, newEvidenceClock, noteEvidence, readUiClock, sprintEvidenceRefusal, writeUiClock } from "../src/sprint-evidence"
+import { auditCoversAllWidths, mergeUiClock, newEvidenceClock, noteEvidence, readUiClock, sprintEvidenceRefusal, writeUiClock } from "../src/sprint-evidence"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 
@@ -132,7 +132,7 @@ describe("the UI clock crosses processes", () => {
       mergeUiClock(b, readUiClock(file))
       expect(b.uiAt).toBe(1_000)
       expect(sprintEvidenceRefusal("npm run build ✓", b, { web: true })).toContain("ولم يمرّ audit")
-      noteEvidence(b, "audit /", true, 3_000, "audit: PASS — 1 صفحة × 5 عرض · 0 خطأ · 0 تحذير")
+      noteEvidence(b, "audit /", true, 3_000, "audit: PASS — 1 صفحة × 5 عرض (360/390/412/768/1366) · 0 خطأ · 0 تحذير")
       writeUiClock(file, b)
       const c = newEvidenceClock()
       mergeUiClock(c, readUiClock(file))
@@ -179,5 +179,27 @@ describe("a sprint whose deliverable is a document", () => {
     noteEvidence(clock, "write src/app/page.tsx <<<\nexport default function P() { return null }", true, 1)
     noteEvidence(clock, "read README.md", true, 2)
     expect(sprintEvidenceRefusal("read README.md ✓", clock, { web: true })).toContain("audit")
+  })
+})
+
+// 10-01 — مقيس حيّاً: «audit … --widths 360,1366». PASS على عرضين لا يقيس 390/412/768 — لا يُغلق بوّابةَ الواجهة.
+describe("a PASS on fewer widths", () => {
+  const narrow = "audit: PASS — 8 صفحة × 2 عرض (360/1366) · 0 خطأ · 3 تحذير"
+  const full = "audit: PASS — 8 صفحة × 5 عرض (360/390/412/768/1366) · 0 خطأ · 3 تحذير"
+  test("widths are read from the report header, not the arguments", () => {
+    expect(auditCoversAllWidths(full)).toBe(true)
+    expect(auditCoversAllWidths(narrow)).toBe(false)
+    expect(auditCoversAllWidths("audit: PASS — بلا رأسٍ معروف")).toBe(false)
+  })
+  test("a narrowed PASS does not close a UI sprint and the refusal says to rerun without --widths; the full PASS does", () => {
+    const clock = newEvidenceClock()
+    noteEvidence(clock, "write src/app/page.tsx <<<\nexport default function P() { return null }", true, 1)
+    noteEvidence(clock, "audit / --widths 360,1366", true, 2, narrow)
+    expect(sprintEvidenceRefusal("audit PASS ✓", clock, { web: true })).toContain("غطّى عروضاً أقلّ من الخمسة")
+    expect(sprintEvidenceRefusal("audit PASS ✓", clock, { web: true })).toContain("أعده بلا --widths")
+    // «audit PASS» ادّعاءُ قياسِ صفحة يُتحقَّق منه بساعة الصفحة — بلا audit في الجلسة يُرفض.
+    expect(sprintEvidenceRefusal("audit PASS ✓", newEvidenceClock())).toContain("لم تُقَس أيُّ صفحةٍ")
+    noteEvidence(clock, "audit /", true, 3, full)
+    expect(sprintEvidenceRefusal("audit PASS ✓ — probe / 200", clock, { web: true })).toBeUndefined()
   })
 })

@@ -17,6 +17,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { editsCode } from "./verify-after-edit"
+import { AUDIT_WIDTHS } from "./web-audit"
 
 export interface EvidenceClock {
   pageAt: number
@@ -33,6 +34,19 @@ export interface EvidenceClock {
   docAt?: number
   /** آخرُ كتابةٍ لملفٍّ ناتجٍ غير شيفرة — القراءةُ قبلها لا تقيسه. */
   docWriteAt?: number
+  /** 10-01 — آخرُ audit حكمُه PASS على عروضٍ أقلّ من الخمسة (--widths): لا يُغلق البوّابة، ويُسمّى في الرفض. */
+  auditNarrowAt?: number
+}
+
+/**
+ * 10-01 — مقيس حيّاً: «audit … --widths 360,1366». PASS على عرضين لا يقيس الجوّالَ 390/412 ولا اللوحيَّ 768 — والبوّابةُ تقبل أيَّ PASS.
+ * العروضُ تُقرأ من رأس التقرير نفسِه (ما قيس فعلاً) لا من الوسائط.
+ */
+export function auditCoversAllWidths(output: string): boolean {
+  const m = /^audit: (?:PASS|FAIL)\b[^\n]*\(([\d/]+)\)/mu.exec(output)
+  if (m === null) return false
+  const measured = new Set(m[1]!.split("/").map(Number))
+  return AUDIT_WIDTHS.every((w) => measured.has(w))
 }
 
 export const newEvidenceClock = (): EvidenceClock => ({ pageAt: 0, codeAt: 0, buildAt: 0, testAt: 0, uiAt: 0, auditAt: 0, auditFailAt: 0, docAt: 0, docWriteAt: 0 })
@@ -60,7 +74,11 @@ export function noteEvidence(clock: EvidenceClock, command: string, ok: boolean,
   if (PAGE_TOOLS.has(word)) clock.pageAt = now
   else if (word === "audit") {
     // الحكمُ من رأس التقرير — «audit: PASS» وحده يحسب؛ والتشغيلُ الذي فشل يُسجَّل ليُسمّى.
-    if (/^audit: PASS\b/mu.test(output)) { clock.auditAt = now; clock.pageAt = now }
+    if (/^audit: PASS\b/mu.test(output)) {
+      clock.pageAt = now
+      if (auditCoversAllWidths(output)) clock.auditAt = now
+      else clock.auditNarrowAt = now
+    }
     else if (/^audit: FAIL\b/mu.test(output)) clock.auditFailAt = now
   }
   else if (BUILD_RUN.test(line)) { if (!BUILD_FAILED.test(output)) clock.buildAt = now }
@@ -97,7 +115,7 @@ export function mergeUiClock(clock: EvidenceClock, saved: Pick<EvidenceClock, "u
 }
 
 /** دليلٌ يدّعي عرضَ صفحةٍ أو ردَّها — بالعربيّة أو الإنجليزيّة. */
-const PAGE_CLAIM = /(?:\bpage\s*\/|\brenders?\b|\bshows?\b|\bdisplays?\b|\bvisible\b|\bprobe\b|\bshot\b|\bscreenshot\b|\bHTTP\s*200\b|\b200\s*OK\b|(?:^|\s)\/[a-z][\w/-]*\s+(?:→|=>|->)?\s*200\b|\breturn\s+200\b|تظهر|يظهر|تعرض|يعرض|تُعرض|ظاهر|الصفحة\s+ترد|ترد\s+200)/iu
+const PAGE_CLAIM = /(?:\baudit\b|\bpage\s*\/|\brenders?\b|\bshows?\b|\bdisplays?\b|\bvisible\b|\bprobe\b|\bshot\b|\bscreenshot\b|\bHTTP\s*200\b|\b200\s*OK\b|(?:^|\s)\/[a-z][\w/-]*\s+(?:→|=>|->)?\s*200\b|\breturn\s+200\b|تظهر|يظهر|تعرض|يعرض|تُعرض|ظاهر|الصفحة\s+ترد|ترد\s+200)/iu
 const BUILD_CLAIM = /(?:\bbuild\b|\bcompiled?\b|بناء|البناء|يبني)/iu
 const TEST_CLAIM = /(?:\btests?\b|\bnpm\s+test\b|اختبار|الاختبار|الاختبارات)/iu
 /** 10-01 — مقيس: سبرنتٌ ناتجُه welcome.md رُفض 25 مرّةً والدليلُ «read welcome.md ✓ — يذكر 4 شرائح» صحيح: لم يكن للمستند صنفٌ من القياس. */
@@ -124,7 +142,8 @@ export function sprintEvidenceRefusal(evidence: string, clock: EvidenceClock, op
     return "رُفض إغلاقُ السبرنت: الدليلُ يدّعي نجاحَ الاختبارات ولا تشغيلَ ناجحاً لها بعد آخر تعديلٍ للشيفرة — شغّلها الآن (وإن احتاجت خادماً فشغّله أوّلاً)، ثمّ أعد sprint done."
   if (options.web === true && clock.uiAt > 0 && clock.auditAt < clock.uiAt) {
     const failed = clock.auditFailAt >= clock.uiAt
-    return `رُفض إغلاقُ السبرنت: عدّلتَ الواجهةَ ${failed ? "وآخرُ audit بعد التعديل حكمُه FAIL" : "ولم يمرّ audit بعد آخر تعديلٍ لها"} — شغّل الخادمَ (run --bg npm run start أو dev) ثمّ audit على المسارات التي مسستَها، وأصلح كلَّ ✕ (فيضانٌ أفقيّ، تراكبٌ، روابطُ مكسورة، أزرارٌ بلا اسم) حتى «audit: PASS»، ثمّ أعد sprint done.`
+    const narrow = !failed && (clock.auditNarrowAt ?? 0) >= clock.uiAt
+    return `رُفض إغلاقُ السبرنت: عدّلتَ الواجهةَ ${failed ? "وآخرُ audit بعد التعديل حكمُه FAIL" : narrow ? `وآخرُ audit PASS غطّى عروضاً أقلّ من الخمسة (${AUDIT_WIDTHS.join("/")}) — أعده بلا --widths` : "ولم يمرّ audit بعد آخر تعديلٍ لها"} — شغّل الخادمَ (run --bg npm run start أو dev) ثمّ audit على المسارات التي مسستَها، وأصلح كلَّ ✕ (فيضانٌ أفقيّ، تراكبٌ، روابطُ مكسورة، أزرارٌ بلا اسم) حتى «audit: PASS»، ثمّ أعد sprint done.`
   }
   return undefined
 }
