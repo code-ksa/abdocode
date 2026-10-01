@@ -76,3 +76,18 @@ describe("a read batch sent with the receipt glyph", () => {
     expect(healNarratedReads("⚙ read a.ts\n⚙ run rm x")).toBe("⚙ read a.ts\n⚙ run rm x")
   })
 })
+
+// 10-02 — the measurement footer («— المقيس: …») followed the reply on its own line or on the same line, so «⚙ read …» was not
+// healed and seven epochs ended with no tool. The footer is dropped before the decision; prose and receipt tails still are not healed.
+describe("narrated reads with the measurement footer", () => {
+  const foot = "— المقيس: دخل 29905 توكيناً (قدّرنا 37442)، خرج 37، في ? ثانية، والسياق فهارس L0 كلّها."
+  test("on its own line, after a blank line, or on the same line, the read is healed without the footer", () => {
+    expect(healNarratedReads(`⚙ read src/components/layout/header.tsx\n${foot}`)).toBe("نفّذ: read src/components/layout/header.tsx")
+    expect(healNarratedReads(`\uFFFD⚙ read src/a.tsx\n\n${foot}`)).toBe("نفّذ: read src/a.tsx")
+    expect(healNarratedReads(`⚙ read src/a.tsx ${foot}`)).toBe("نفّذ: read src/a.tsx")
+  })
+  test("the footer does not turn prose or a receipt tail into a call", () => {
+    expect(healNarratedReads(`قرأتُ الملفّ:\n⚙ read src/a.ts\n${foot}`)).not.toContain("نفّذ:")
+    expect(healNarratedReads(`⚙ read src/a.ts ✓ 12 سطراً\n${foot}`)).not.toContain("نفّذ:")
+  })
+})

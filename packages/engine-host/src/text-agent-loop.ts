@@ -473,7 +473,9 @@ export const healNarratedWrite = (text: string): string => {
 const GLYPH_HEAD = String.raw`[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]*⚙[\uFE0E\uFE0F]?\s+`
 const GLYPH_READ_LINE = new RegExp(String.raw`^${GLYPH_HEAD}((?:read|list|ls|glob|grep|docs|recall|look|page|probe|logs|status|ui-book\s+(?:list|show))\b[^⏎✓✕→\r\n]*)$`, "u")
 export const healNarratedReads = (text: string): string => {
-  const pieces = text.split(/\r?\n/u).flatMap((line) => line.split(/\s+(?=⚙)/u)).map((piece) => piece.trim()).filter((piece) => piece.length > 0)
+  // 10-02 — ذيلُ القياس («— المقيس: …») يلحق الردّ سطراً أو مقطعاً: كان يُفشل «كلّ الأسطر قراءات» فلم يُشفَ «⚙ read …» ستَّ حقبٍ بلا أداة،
+  // أو يدخل المسارَ. يُنزع قبل الحكم.
+  const pieces = stripMeasure(text).split(/\r?\n/u).flatMap((line) => line.split(/\s+(?=⚙)/u)).map((piece) => piece.replace(/\s+— (?:المقيس|حقب التنفيذ)[\s\S]*$/u, "").trim()).filter((piece) => piece.length > 0)
   if (pieces.length === 0 || !pieces.every((piece) => GLYPH_READ_LINE.test(piece))) return text
   return pieces.map((piece) => `نفّذ: ${GLYPH_READ_LINE.exec(piece)![1]!.trim()}`).join("\n")
 }
