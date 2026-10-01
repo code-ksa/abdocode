@@ -33,6 +33,8 @@ describe("write nudge — reads in a row without a write", () => {
   })
 
   test("the line joins the read result at the threshold and then every `every` reads", async () => {
+    // مقيس حيّاً: «اكتب الآن» وحدها أُجيبت نثراً — السطرُ يطلب الاستدعاءَ نفسَه.
+    expect(writeNudgeLine(15)).toContain("ردُّك التالي استدعاءٌ واحد يكتب (نفّذ: edit أو write أو patch)")
     const { prompts, result } = await drive(reads(7), { writeNudge: NUDGE })
     // prompts[0] هو الإدخال؛ prompts[i] نتيجةُ القراءة i.
     const nudged = prompts.map((p, i) => (p.includes(writeNudgeLine(i)) ? i : -1)).filter((i) => i > 0)
