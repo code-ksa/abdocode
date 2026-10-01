@@ -143,7 +143,7 @@ export function sprintEvidenceRefusal(evidence: string, clock: EvidenceClock, op
   if (options.web === true && clock.uiAt > 0 && clock.auditAt < clock.uiAt) {
     const failed = clock.auditFailAt >= clock.uiAt
     const narrow = !failed && (clock.auditNarrowAt ?? 0) >= clock.uiAt
-    return `رُفض إغلاقُ السبرنت: عدّلتَ الواجهةَ ${failed ? "وآخرُ audit بعد التعديل حكمُه FAIL" : narrow ? `وآخرُ audit PASS غطّى عروضاً أقلّ من الخمسة (${AUDIT_WIDTHS.join("/")}) — أعده بلا --widths` : "ولم يمرّ audit بعد آخر تعديلٍ لها"} — شغّل الخادمَ (run --bg npm run start أو dev) ثمّ audit على المسارات التي مسستَها، وأصلح كلَّ ✕ (فيضانٌ أفقيّ، تراكبٌ، روابطُ مكسورة، أزرارٌ بلا اسم) حتى «audit: PASS»، ثمّ أعد sprint done.`
+    return `رُفض إغلاقُ السبرنت: عدّلتَ الواجهةَ ${failed ? "وآخرُ audit بعد التعديل حكمُه FAIL" : narrow ? `وآخرُ audit PASS غطّى عروضاً أقلّ من الخمسة (${AUDIT_WIDTHS.join("/")}) — أعده على المسارات التي مسستَها، عشرةً أو أقلّ وبلا --widths (فوق عشرة مساراتٍ يقيس audit عرضين فقط)` : "ولم يمرّ audit بعد آخر تعديلٍ لها"} — شغّل الخادمَ (run --bg npm run start أو dev) ثمّ audit على المسارات التي مسستَها، وأصلح كلَّ ✕ (فيضانٌ أفقيّ، تراكبٌ، روابطُ مكسورة، أزرارٌ بلا اسم) حتى «audit: PASS»، ثمّ أعد sprint done.`
   }
   return undefined
 }

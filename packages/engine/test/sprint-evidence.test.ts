@@ -196,7 +196,10 @@ describe("a PASS on fewer widths", () => {
     noteEvidence(clock, "write src/app/page.tsx <<<\nexport default function P() { return null }", true, 1)
     noteEvidence(clock, "audit / --widths 360,1366", true, 2, narrow)
     expect(sprintEvidenceRefusal("audit PASS ✓", clock, { web: true })).toContain("غطّى عروضاً أقلّ من الخمسة")
-    expect(sprintEvidenceRefusal("audit PASS ✓", clock, { web: true })).toContain("أعده بلا --widths")
+    // مقيس: audit بلا وسائط على 34 مساراً قاس عرضين (390/1366) — «بلا --widths» وحدها كانت ستدور؛ الطريقُ: عشرةُ مساراتٍ أو أقلّ.
+    expect(sprintEvidenceRefusal("audit PASS ✓", clock, { web: true })).toContain("عشرةً أو أقلّ وبلا --widths")
+    // الرسالةُ تقول «عشرة» لأنّ audit يقيس عرضين فوق عشرة مسارات — العتبتان تتغيّران معاً أو لا تتغيّران.
+    expect(readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")).toContain(": routes.length > 10 ? [390, 1366] : [...AUDIT_WIDTHS]")
     // «audit PASS» ادّعاءُ قياسِ صفحة يُتحقَّق منه بساعة الصفحة — بلا audit في الجلسة يُرفض.
     expect(sprintEvidenceRefusal("audit PASS ✓", newEvidenceClock())).toContain("لم تُقَس أيُّ صفحةٍ")
     noteEvidence(clock, "audit /", true, 3, full)
