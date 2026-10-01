@@ -189,6 +189,17 @@ export function staleBuildCause(findings: readonly AuditFinding[]): string | und
   return `⚠ السببُ المرجَّح: الخادمُ أُقلع قبل آخر \`next build\` — ملفّاتُ /_next/static التي يطلبها لم تعد موجودة (400/404 وChunkLoadError على ${pages} صفحة). هذه ليست عيوبَ واجهة: أوقف الخادم (\`stop <pid>\` من إيصاله) ثمّ \`run --bg npm run start\` ثمّ أعد audit — ولا تبنِ والخادمُ يعمل.`
 }
 
+/**
+ * 10-01 — مقيس حيّاً: «run --bg npm run start» ⇦ audit ⇦ تعديل ⇦ `npm run build` ⇦ audit — والخادمُ لم يُعَد تشغيلُه، فالـaudit
+ * الثاني قاس البناءَ القديم (الأرقامُ نفسُها 62/35) والنموذجُ يحسب أنّ إصلاحه لم يعمل. خادمُ الإنتاج (start لا dev — dev يعيد البناء
+ * وحده) الأقدمُ من آخر بناءٍ ناجح يُسمّى فوق النتائج.
+ */
+export function serverOlderThanBuild(servers: readonly { readonly display: string; readonly port: number; readonly pid: number | undefined; readonly alive: boolean; readonly startedAt: number }[], buildAt: number): string | undefined {
+  const stale = servers.filter((s) => s.alive && s.startedAt < buildAt && !/\bdev\b/u.test(s.display) && /\bstart\b|\bpreview\b|\bserve\b/u.test(s.display))
+  if (stale.length === 0) return undefined
+  return stale.map((s) => `⚠ الخادمُ «${s.display}» على :${s.port}${s.pid === undefined ? "" : ` (pid ${s.pid})`} أُقلع قبل آخر بناءٍ ناجح بـ${Math.round((buildAt - s.startedAt) / 1000)} ث — هذه النتائجُ للبناء القديم لا لتعديلاتك. أوقفه (stop ${s.pid ?? "<pid>"}) ثمّ run --bg ${s.display.replace(/^run\s+(?:--bg\s+)?/u, "")} ثمّ أعد audit.`).join("\n")
+}
+
 export function renderAudit(findings: readonly AuditFinding[], pages: number, widths: readonly number[]): { readonly passed: boolean; readonly text: string } {
   const errors = findings.filter((f) => f.severity === "error")
   const warns = findings.filter((f) => f.severity === "warn")

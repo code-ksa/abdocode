@@ -217,7 +217,7 @@ import { BUILD_FAILED, TEST_FAILED, mergeUiClock, newEvidenceClock, noteEvidence
 import { clientBundleSecrets, renderReleaseCheck, securityHeaderGaps, type StageResult } from "./release-check"
 import { codeChecks, renderCodeChecks, sourceFiles } from "./code-checks"
 import { POSTURE_PLUGINS, renderPosture } from "./posture"
-import { AUDIT_MAX_LINKS, AUDIT_WIDTHS, MEASURE_SCRIPT, tailwindV4DirectiveFindings, NEVER_REQUEST, RUNAWAY_WINDOW_MS, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, tailwindV4VarFindings, type AuditFinding } from "./web-audit"
+import { AUDIT_MAX_LINKS, AUDIT_WIDTHS, MEASURE_SCRIPT, serverOlderThanBuild, tailwindV4DirectiveFindings, NEVER_REQUEST, RUNAWAY_WINDOW_MS, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, tailwindV4VarFindings, type AuditFinding } from "./web-audit"
 import { SEO_MEASURE_SCRIPT, analyzeSeoPage, analyzeSeoSite, renderSeoAudit, type SeoFinding, type SeoPageMeasurement, type SeoSiteMeasurement } from "./seo-audit"
 import { DECK_THEMES, deckHtml, deckPptx, parseDeck, parseSlidesCommand, type DeckAsset, type SlidesCommand } from "./slides"
 import { detectStackForProject } from "./project-stacks"
@@ -5572,7 +5572,10 @@ const runServeShell = async (): Promise<void> => {
       try { pkgText = readFileSync(join(PROJECT_DIR, "package.json"), "utf-8") } catch { pkgText = "" }
       findings.push(...tailwindV4VarFindings(sourceFiles(PROJECT_DIR).map((path) => { let text = ""; try { text = readFileSync(path, "utf-8") } catch { text = "" } return { path: relative(PROJECT_DIR, path).replace(/\\/gu, "/"), text } }), tailwindMajor(pkgText)))
       findings.push(...tailwindV4DirectiveFindings(sourceFiles(PROJECT_DIR, 200, /\.css$/u).map((path) => { let text = ""; try { text = readFileSync(path, "utf-8") } catch { text = "" } return { path: relative(PROJECT_DIR, path).replace(/\\/gu, "/"), text } }), tailwindMajor(pkgText)))
-      return renderAudit(findings, routes.length, widths).text
+      // 10-01 — خادمُ إنتاجٍ أقدمُ من آخر بناءٍ ناجح: النتائجُ للبناء القديم — يُسمّى فوقها.
+      const olderServer = serverOlderThanBuild([...turnServers.snapshot(), ...devServers.snapshot()], sprintEvidence.buildAt)
+      const report = renderAudit(findings, routes.length, widths).text
+      return olderServer === undefined ? report : `${olderServer}\n${report}`
     }
 
     if (name === "look") {

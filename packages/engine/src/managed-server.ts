@@ -89,6 +89,8 @@ interface ManagedProcess {
   readonly proc: ReturnType<typeof Bun.spawn>
   readonly port: number
   readonly display: string
+  /** 10-01 — لحظةُ الإقلاع: خادمُ إنتاجٍ أقدمُ من آخر بناءٍ يقدّم البناءَ القديم (audit يسمّيه). */
+  readonly startedAt: number
   /** رقم المُنصت الفعلي على المنفذ — يُقاس بعد الجاهزية، لأن سلسلة
    * npm.cmd ← node ← next تنقطع على ويندوز فلا يصل قتل الشجرة بالنسب
    * إلى الأحفاد المنبتّين (قيس حياً: أبوا الناجين ميتان). */
@@ -320,7 +322,7 @@ export class ManagedServers {
       const reason = error instanceof Error ? error.message : String(error)
       return `فشل تشغيل الخادم «${display}»: تعذّر إطلاقه — ${reason}. تحقّق من توفّر «${launch[0] ?? ""}» في المسار ثم أعد المحاولة.`
     }
-    const managed: ManagedProcess = { proc, port, display }
+    const managed: ManagedProcess = { proc, port, display, startedAt: Date.now() }
     this.#running.push(managed)
     const tail = tailOf(proc.stdout as ReadableStream<Uint8Array> | null, proc.stderr as ReadableStream<Uint8Array> | null)
     managed.tail = tail
@@ -354,8 +356,8 @@ export class ManagedServers {
   }
 
   /** لوحةُ المهامّ الخلفيّة (09-14): الخوادمُ المُدارة الحيّة بمنفذها — قراءةٌ لا أثر. */
-  snapshot(): readonly { readonly display: string; readonly port: number; readonly pid: number | undefined; readonly alive: boolean }[] {
-    return this.#running.map((p) => ({ display: p.display, port: p.port, pid: p.listenerPid ?? p.proc.pid, alive: p.proc.exitCode === null }))
+  snapshot(): readonly { readonly display: string; readonly port: number; readonly pid: number | undefined; readonly alive: boolean; readonly startedAt: number }[] {
+    return this.#running.map((p) => ({ display: p.display, port: p.port, pid: p.listenerPid ?? p.proc.pid, alive: p.proc.exitCode === null, startedAt: p.startedAt }))
   }
 
   /** نهاية الدور: الشجرات كلها تُقتل حتماً — لا يتيم يعلّق أحداً. */

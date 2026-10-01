@@ -3,7 +3,7 @@
  * القياساتُ من موقعٍ بناه عبدو كود (Next.js، عربيّ) كما قاستها العدّة.
  */
 import { describe, expect, test } from "bun:test"
-import { MEASURE_SCRIPT, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, staleBuildCause, tailwindV4DirectiveFindings, tailwindV4VarFindings, type PageMeasurement } from "../src/web-audit"
+import { MEASURE_SCRIPT, WEB_STANDARDS_BRIEF, analyzeLinks, analyzePage, renderAudit, routesFromManifest, tailwindMajor, serverOlderThanBuild, staleBuildCause, tailwindV4DirectiveFindings, tailwindV4VarFindings, type PageMeasurement } from "../src/web-audit"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -129,7 +129,7 @@ describe("tailwind 4 arbitrary var classes", () => {
   test("audit runs it over the project sources, and the brief names the v4 spelling", () => {
     const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
     expect(cli).toContain("findings.push(...tailwindV4VarFindings(sourceFiles(PROJECT_DIR)")
-    expect(cli.indexOf("tailwindV4VarFindings(sourceFiles(PROJECT_DIR)")).toBeLessThan(cli.indexOf("return renderAudit(findings, routes.length, widths).text"))
+    expect(cli.indexOf("tailwindV4VarFindings(sourceFiles(PROJECT_DIR)")).toBeLessThan(cli.indexOf("const report = renderAudit(findings, routes.length, widths).text"))
     expect(WEB_STANDARDS_BRIEF).toContain("bg-(--surface)")
   })
 })
@@ -186,5 +186,31 @@ describe("a server started before the last build", () => {
   test("a failed request that is not a build asset gets no such cause", () => {
     expect(staleBuildCause(analyzePage({ ...clean, failedRequests: ["404 /favicon-32.png", "500 /api/models"] }, { path: "/", width: 390 }))).toBeUndefined()
     expect(renderAudit(analyzePage({ ...clean, failedRequests: ["404 /favicon-32.png"] }, { path: "/", width: 390 }), 1, [390]).text).not.toContain("السببُ المرجَّح")
+  })
+})
+
+// 10-01 — مقيس حيّاً: start ⇦ audit ⇦ تعديل ⇦ build ⇦ audit بلا إعادة تشغيل = الأرقامُ نفسُها (62/35) لأنّ الخادمَ يقدّم البناءَ القديم.
+describe("a production server older than the last build", () => {
+  const start = { display: "npm run start", port: 3000, pid: 4242, alive: true, startedAt: 1_000 }
+  test("is named above the results with how long before the build it started and the restart commands", () => {
+    const line = serverOlderThanBuild([start], 61_000)!
+    expect(line).toContain("«npm run start» على :3000 (pid 4242)")
+    expect(line).toContain("بـ60 ث")
+    expect(line).toContain("stop 4242")
+    expect(line).toContain("run --bg npm run start")
+  })
+  test("a dev server, a server started after the build, no build yet, or a dead server get no such line", () => {
+    expect(serverOlderThanBuild([{ ...start, display: "npm run dev" }], 61_000)).toBeUndefined()
+    expect(serverOlderThanBuild([{ ...start, display: "npm run start:dev" }], 61_000)).toBeUndefined()
+    expect(serverOlderThanBuild([{ ...start, startedAt: 70_000 }], 61_000)).toBeUndefined()
+    expect(serverOlderThanBuild([start], 0)).toBeUndefined()
+    expect(serverOlderThanBuild([{ ...start, alive: false }], 61_000)).toBeUndefined()
+  })
+  test("audit compares the managed servers with the last successful build, and the servers record when they started", () => {
+    const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
+    expect(cli).toContain("const olderServer = serverOlderThanBuild([...turnServers.snapshot(), ...devServers.snapshot()], sprintEvidence.buildAt)")
+    expect(cli).toContain("return olderServer === undefined ? report : `${olderServer}\\n${report}`")
+    const managed = readFileSync(join(import.meta.dir, "../src/managed-server.ts"), "utf8")
+    expect(managed).toContain("const managed: ManagedProcess = { proc, port, display, startedAt: Date.now() }")
   })
 })
