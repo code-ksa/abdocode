@@ -3944,6 +3944,12 @@ const pluginTranslations = {
 "englishLabel": "Resume analysis (cv)",
 "englishDescription": "The cv tool: analyses resumes (PDF, Word, TXT/MD in the project) deterministically before the model judges them: sections in Arabic and English, contact details as presence only, years of experience from the experience section with overlaps merged, bullets with numbers and action verbs, and what an ATS can read; with a job description, the match percentage and the missing keywords, and several resumes ranked in a table. Read only, and the report never prints a name, an email or a phone number. Off = the tool refuses by name. Applies immediately.",
   },
+"driveUpload": {
+"label": "الرفعُ إلى Google Drive (drive-upload)",
+"description": "أداةُ drive-upload: ترفع ملفّاً من المشروع إلى Google Drive وتعيد رابطَه — pptx يصير عرضَ جوجل، وdocx/md/txt/html مستندَ جوجل، وxlsx/csv جدولَ جوجل (--keep يرفعه كما هو). المسارُ داخل المشروع وحده، والرفعُ يُعرض للموافقة قبل أن يغادر الجهاز، والاعتمادُ من موصّل جوجل المربوط (نطاق drive.file). المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+"englishLabel": "Google Drive upload (drive-upload)",
+"englishDescription": "The drive-upload tool: uploads a project file to Google Drive and returns its link — pptx becomes Google Slides, docx/md/txt/html a Google Doc, xlsx/csv a Google Sheet (--keep uploads it as is). Project paths only, every upload is shown for approval before it leaves the machine, and the credential is the linked Google connector (drive.file scope). Off = the tool refuses by name. Applies immediately.",
+  },
 "writeNudge": {
 "label": "دفعُ الكتابة في السبرنت المفتوح",
 "description": "في سبرنتٍ مفتوح («اكمل» على خطّة السبرنتات): بعد 15 قراءةً متتالية بلا كتابة يلحق نتيجةَ القراءة سطرٌ يطلب أوّلَ تعديلٍ الآن، ثمّ كلَّ 10؛ والقراءةُ المكرَّرة بعد نفاد إعادة الإيصالات يُشار إلى إيصالها بسطرٍ قصير (حتى 4 في الدور) بدل حقبةٍ تنتهي بأداةٍ صفر. مقيس: دورٌ واحد 46 قراءةً بلا كتابة ثمّ حقبتان بلا أدوات. لا يمسّ دورَ سؤالٍ أو بحث. المعطَّل = الحلقةُ القديمة بايتاً. يسري من الحقبة التالية.",

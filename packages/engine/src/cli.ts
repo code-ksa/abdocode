@@ -146,6 +146,7 @@ import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation 
 import { moduleResolutionHints } from "./module-resolution-hint"
 import { errorPlaybookHints } from "./error-playbooks"
 import { cssSourceViolation } from "./css-source-guard"
+import { DRIVE_UPLOAD_MAX, GoogleConnector, googleOptionsFromEnv } from "./mcp-servers/google"
 import { ManagedServers, devPortHint, devServerUnderBuildNote, listenerPidOf, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
 import { brokenAliasViolation, dangerousShellViolation, fileWriteViaShellViolation, killByNameViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
@@ -4311,6 +4312,32 @@ const runServeShell = async (): Promise<void> => {
         }
       }
       case "document": {
+        if (spec.name === "drive-upload") {
+          // ملفٌّ من المشروع إلى Google Drive: المسارُ يُحلّ هنا داخل المشروع (لا يفتح خادمُ جوجل مساراً)، والرفعُ يُعرض للموافقة.
+          if (!pluginOnNow("driveUpload")) return denied("رُفض drive-upload: الرفعُ إلى Drive مطفأ (plugins.driveUpload) — فعّله من الإعدادات.", "tool_not_permitted")
+          const words = rest.trim().split(/\s+/u).filter((w) => w.length > 0)
+          const folderAt = words.indexOf("--folder")
+          const folderId = folderAt >= 0 ? words[folderAt + 1] : undefined
+          if (folderAt >= 0 && (folderId === undefined || !/^[A-Za-z0-9_-]{10,}$/u.test(folderId))) return invalid("--folder يأخذ معرّفَ مجلّد Drive (من رابطه)")
+          const file = words.find((w, i) => !w.startsWith("--") && i !== folderAt + 1)
+          if (file === undefined) return invalid(`الصيغة: ${spec.usage}`)
+          const abs = resolveProjectPath(file)
+          if (abs === undefined) return refused(`المسار خارج المشروع: ${file}`)
+          let size = 0
+          try { size = statSync(abs).isFile() ? statSync(abs).size : -1 } catch { size = -1 }
+          if (size < 0) return invalid(`لا ملفَّ بهذا المسار: ${file}`)
+          if (size > DRIVE_UPLOAD_MAX) return invalid(`الملفّ ${size} بايت — فوق سقف الرفع ${DRIVE_UPLOAD_MAX}`)
+          const env: Record<string, string> = {}
+          for (const grant of connectorGrants("google", true)) { const r = await vaultGet(grant.handle, process.env); if ("value" in r) env[grant.env] = r.value }
+          const options = googleOptionsFromEnv(env)
+          if (options.accessToken === undefined && options.refreshToken === undefined) return invalid("جوجل غيرُ مربوط — الإعدادات ← الموصّلات ← جوجل ← وصّل، ثمّ أعد drive-upload.")
+          const convert = !words.includes("--keep")
+          if (!await gate(turnId, "network", `رفعُ «${file}» (${size} بايت) إلى Google Drive${convert ? " وتحويلُه إلى صيغة جوجل" : ""}`)) return denied("رُفض الرفعُ إلى Drive: لم يُوافَق.", "policy_denied")
+          try {
+            const f = await new GoogleConnector(options).upload(basename(abs), new Uint8Array(readFileSync(abs)), { convert, ...(folderId === undefined ? {} : { folderId }) })
+            return okText(`رُفع «${file}» إلى Drive: ${f.name} (${f.mimeType})${f.webViewLink ? ` — ${f.webViewLink}` : ` [${f.id}]`}`)
+          } catch (cause) { return invalid(String(cause instanceof Error ? cause.message : cause)) }
+        }
         if (spec.name === "cv") {
           // سِيَرٌ ذاتيّة ⇦ قياسٌ حتميّ (cv-analysis.ts) والحكمُ للنموذج. قراءةٌ فقط: PDF عبر pdftotext، وDOCX مفكوكاً هنا، وTXT/MD كما هي —
           // كلُّ مسارٍ يُحسم داخل المشروع، والتقريرُ يسمّي حضورَ وسائل التواصل لا قيمها.

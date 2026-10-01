@@ -13,9 +13,32 @@ import { refreshTokens, type Fetch } from "../connectors/oauth"
 import { CONNECTOR_ENV } from "./remote"
 
 export const GOOGLE_MCP_PROTOCOL = "2025-11-25"
-export const GOOGLE_SCOPES = Object.freeze(["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/drive.readonly"])
+// 10-02 — `drive.file`: ما ينشئه عبدو كود أو يفتحه وحده (نطاقُ جوجل الموصى به، لا كلّ Drive) — للرفع وإنشاءِ مستندات/جداول/عروض جوجل.
+export const GOOGLE_SCOPES = Object.freeze(["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.file"])
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 const MAX_TEXT = 8_000
+/** 10-02 — حجمُ الرفع الأقصى (رفعٌ متعدّد الأجزاء واحد). */
+export const DRIVE_UPLOAD_MAX = 25 * 1024 * 1024
+
+/**
+ * الامتدادُ ⇦ نوعُ المصدر ونوعُ جوجل حين يُحوَّل (Drive يحوّل حين يحمل الطلبُ نوعَ google-apps). pptx ⇦ عروضُ جوجل،
+ * docx/md/txt/html ⇦ مستنداتُ جوجل، xlsx/csv ⇦ جداولُ جوجل؛ وما عداها يُرفع كما هو.
+ */
+export const DRIVE_IMPORT: Readonly<Record<string, { readonly source: string; readonly google?: string }>> = Object.freeze({
+  pptx: { source: "application/vnd.openxmlformats-officedocument.presentationml.presentation", google: "application/vnd.google-apps.presentation" },
+  docx: { source: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", google: "application/vnd.google-apps.document" },
+  xlsx: { source: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", google: "application/vnd.google-apps.spreadsheet" },
+  csv: { source: "text/csv", google: "application/vnd.google-apps.spreadsheet" },
+  md: { source: "text/plain", google: "application/vnd.google-apps.document" },
+  txt: { source: "text/plain", google: "application/vnd.google-apps.document" },
+  html: { source: "text/html", google: "application/vnd.google-apps.document" },
+  pdf: { source: "application/pdf" },
+  png: { source: "image/png" },
+  jpg: { source: "image/jpeg" },
+  jpeg: { source: "image/jpeg" },
+})
+
+export interface DriveFile { readonly id: string; readonly name: string; readonly mimeType: string; readonly webViewLink?: string }
 
 type RpcId = string | number | null
 interface RpcRequest { jsonrpc?: string; id?: RpcId; method?: string; params?: Record<string, unknown> }
@@ -29,6 +52,7 @@ export const GOOGLE_TOOLS = Object.freeze([
   { name: "calendar_events", description: "أحداثُ التقويم الرئيسيّ بين تاريخين (ISO 8601) — الافتراض: الأيّام السبعة القادمة، حتى ٢٥ حدثاً", inputSchema: { type: "object", properties: { timeMin: { ...str, maxLength: 40 }, timeMax: { ...str, maxLength: 40 }, max: { type: "integer", minimum: 1, maximum: 25 } }, additionalProperties: false } },
   { name: "calendar_create", description: "إنشاءُ حدثٍ في التقويم الرئيسيّ: عنوانٌ وبدايةٌ ونهاية (ISO 8601) ووصفٌ ومدعوّون اختياريّون", inputSchema: { type: "object", properties: { summary: { ...str, maxLength: 200 }, start: { ...str, maxLength: 40 }, end: { ...str, maxLength: 40 }, description: { ...str, maxLength: 2000 }, attendees: { type: "array", items: { ...str, maxLength: 200 }, maxItems: 20 } }, required: ["summary", "start", "end"], additionalProperties: false } },
   { name: "drive_search", description: "بحثٌ في Google Drive بالاسم أو بصيغة استعلام Drive — يعيد حتى ٢٠ ملفّاً: المعرّف والاسم والنوع وآخر تعديل والرابط", inputSchema: { type: "object", properties: { query: { ...str, maxLength: 300 }, max: { type: "integer", minimum: 1, maximum: 20 } }, required: ["query"], additionalProperties: false } },
+  { name: "drive_create_doc", description: "إنشاءُ مستند جوجل جديد بعنوانٍ ونصٍّ (أو HTML) — يعيد رابطَه. لا يمسّ ملفّاً موجوداً (نطاق drive.file)", inputSchema: { type: "object", properties: { title: { ...str, maxLength: 200 }, content: { ...str, maxLength: 200_000 }, format: { type: "string", enum: ["text", "html"] } }, required: ["title", "content"] } },
   { name: "drive_read", description: "قراءةُ نصّ ملفٍّ بمعرّفه: مستندات جوجل نصّاً، الجداول CSV، والملفّاتُ النصّية كما هي (حتى ٨٠٠٠ حرف)", inputSchema: { type: "object", properties: { id: { ...str, maxLength: 128 } }, required: ["id"], additionalProperties: false } },
 ])
 
@@ -96,8 +120,31 @@ export class GoogleConnector {
     let r = await send()
     if (r.status === 401 && await this.#renew()) r = await send()
     if (r.status === 401) throw new Error("جوجل رفضت الرمز (401) — أعد الربط من الإعدادات ← الموصّلات")
+    // ربطٌ أقدمُ من نطاق drive.file يحمل رمزاً بلا إذن الكتابة — يُقال الحلّ لا رمزُ الخطأ.
+    if (r.status === 403 && /insufficient|scope/iu.test(await r.clone().text())) throw new Error("جوجل: الرمزُ بلا هذا الإذن (403) — أعد ربطَ جوجل من الإعدادات ← الموصّلات ليُمنح نطاقُ drive.file")
     if (!r.ok) throw new Error(`جوجل ردّت ${r.status}: ${(await r.text()).slice(0, 200)}`)
     return raw ? await r.text() : await r.json()
+  }
+
+  /**
+   * 10-02 — رفعٌ متعدّد الأجزاء إلى Drive، بتحويلٍ إلى صيغة جوجل حين يُطلب ويعرف الامتداد. القراءةُ من القرص ليست هنا:
+   * المحرّكُ يحلّ المسارَ داخل المشروع ثمّ يمرّر البايتات — فلا يرفع خادمٌ مسارَه مفتوحاً.
+   */
+  async upload(name: string, bytes: Uint8Array, options: { readonly convert?: boolean; readonly folderId?: string } = {}): Promise<DriveFile> {
+    if (bytes.length > DRIVE_UPLOAD_MAX) throw new Error(`الملفّ ${bytes.length} بايت — فوق سقف الرفع ${DRIVE_UPLOAD_MAX}`)
+    const ext = (/\.([a-z0-9]+)$/iu.exec(name)?.[1] ?? "").toLowerCase()
+    const kind = DRIVE_IMPORT[ext]
+    const source = kind?.source ?? "application/octet-stream"
+    const target = options.convert === false ? undefined : kind?.google
+    const title = target === undefined ? name : name.replace(/\.[a-z0-9]+$/iu, "")
+    const meta = { name: title, ...(target === undefined ? {} : { mimeType: target }), ...(options.folderId === undefined ? {} : { parents: [options.folderId] }) }
+    const boundary = `abdo${crypto.randomUUID().replace(/-/g, "")}`
+    const enc = new TextEncoder()
+    const head = enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${source}\r\n\r\n`)
+    const tail = enc.encode(`\r\n--${boundary}--`)
+    const body = new Uint8Array(head.length + bytes.length + tail.length)
+    body.set(head, 0); body.set(bytes, head.length); body.set(tail, head.length + bytes.length)
+    return await this.#api(`${this.#apis}/upload/drive/v3/files?uploadType=multipart&fields=${encodeURIComponent("id,name,mimeType,webViewLink")}`, { method: "POST", headers: { "content-type": `multipart/related; boundary=${boundary}` }, body }) as DriveFile
   }
 
   async run(name: string, a: Record<string, unknown>): Promise<string> {
@@ -146,6 +193,11 @@ export class GoogleConnector {
         const f = await this.#api(`${this.#apis}/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=${n(a.max, 10, 20)}&fields=${encodeURIComponent("files(id,name,mimeType,modifiedTime,webViewLink)")}`) as { files?: { id: string; name: string; mimeType: string; modifiedTime?: string; webViewLink?: string }[] }
         if (!f.files?.length) return "لا ملفّاتَ تطابق البحث."
         return f.files.map((x) => `[${x.id}] ${x.name} · ${x.mimeType} · ${x.modifiedTime ?? ""}${x.webViewLink ? ` · ${x.webViewLink}` : ""}`).join("\n")
+      }
+      case "drive_create_doc": {
+        const html = a.format === "html"
+        const f = await this.upload(`${String(a.title)}.${html ? "html" : "txt"}`, new TextEncoder().encode(String(a.content)), { convert: true })
+        return `أُنشئ مستندُ جوجل «${f.name}» [${f.id}]${f.webViewLink ? ` — ${f.webViewLink}` : ""}.`
       }
       case "drive_read": {
         const id = encodeURIComponent(String(a.id))

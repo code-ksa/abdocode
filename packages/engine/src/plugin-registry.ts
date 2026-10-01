@@ -76,6 +76,7 @@ export type PluginName =
   | "seoAudit"
   | "slides"
   | "cvAnalysis"
+  | "driveUpload"
   | "writeNudge"
   | "auditGate"
   | "settingsSeam"
@@ -680,6 +681,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     name: "cvAnalysis",
     label: "تحليلُ السِّيَر الذاتيّة (cv)",
     description: "أداةُ cv: تحليلُ السِّيَر الذاتيّة (PDF وWord وTXT/MD في المشروع) قياساً حتميّاً قبل حكم النموذج — الأقسامُ بالعربيّة والإنجليزيّة، وحضورُ وسائل التواصل لا قيمها، وسنواتُ الخبرة من قسم الخبرة بدمج المتداخل، والنقاطُ بأرقامٍ وأفعالِ إنجاز، وما يقرؤه ATS؛ ومع وصفٍ وظيفيّ: نسبةُ المطابقة والكلماتُ الناقصة، وعدّةُ سِيَرٍ تُرتَّب في جدول. قراءةٌ فقط، ولا يطبع التقريرُ اسماً ولا بريداً ولا هاتفاً. المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // 10-02 — رفعُ ملفّات المشروع إلى Google Drive بتحويلٍ إلى صيغ جوجل.
+  Object.freeze({
+    name: "driveUpload",
+    label: "الرفعُ إلى Google Drive (drive-upload)",
+    description: "أداةُ drive-upload: ترفع ملفّاً من المشروع إلى Google Drive وتعيد رابطَه — pptx يصير عرضَ جوجل، وdocx/md/txt/html مستندَ جوجل، وxlsx/csv جدولَ جوجل (--keep يرفعه كما هو). المسارُ داخل المشروع وحده، والرفعُ يُعرض للموافقة قبل أن يغادر الجهاز، والاعتمادُ من موصّل جوجل المربوط (نطاق drive.file). المعطَّل = ترفض الأداةُ باسمها. يسري فوراً.",
     defaultOn: true,
     applies: "immediate",
     site: "call",
