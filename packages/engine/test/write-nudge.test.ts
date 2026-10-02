@@ -4,7 +4,7 @@
  * قصيرة للمكرَّر بدل قطع الحقبة — والغيابُ = الحلقةُ القديمة بايتاً.
  */
 import { describe, expect, test } from "bun:test"
-import { duplicatePointerLine, runTextAgentLoop, unchangedReadLine, writeNudgeLine, type TextAgentLoopOptions } from "@abdo/engine-host"
+import { duplicatePointerLine, runTextAgentLoop, shownRead, unchangedReadLine, writeNudgeLine, type TextAgentLoopOptions } from "@abdo/engine-host"
 
 const cliSource = await Bun.file(new URL("../src/cli.ts", import.meta.url)).text()
 
@@ -112,6 +112,42 @@ describe("write nudge — an unchanged file re-read after a build", () => {
       priorReceipts: [{ command: "read plan.md", output: body("A") }, { command: "run npm run build", output: "✓ build ok" }],
     })
     expect(prompts[1]).toContain(unchangedReadLine("read plan.md"))
+  })
+})
+
+describe("long reads — the cut is declared, and the cap follows the engine's read budget", () => {
+  // مقيس 10-02: الخطّةُ (25 ألف حرف) قُصّت عند 14,000 وسط سطر بلا إعلان، فضاع «البقيّة: read …» الذي يكتبه المحرّك في آخرها.
+  const long = Array.from({ length: 1200 }, (_, i) => `سطر ${i + 1} من الخطّة`).join("\n") + "\n…[قُصّ عند السطر 600 من 900 — البقيّة: read plan.md 601 900]"
+  const once = (extra: Partial<TextAgentLoopOptions>) =>
+    drive(["نفّذ: read plan.md"], { dispatch: async () => long, ...extra })
+
+  test("past the default cap: cut at a line end and the cut is named — never mid-line and silent", async () => {
+    const { prompts } = await once({})
+    const shown = shownRead(long)
+    expect(shown.length).toBeLessThan(long.length)
+    expect(shown).toContain(`حرفاً من ${long.length} — ما بعده لم يُعرض`)
+    expect(shown.split("\n…[عُرض")[0]!.endsWith("من الخطّة")).toBe(true)
+    expect(prompts[1]).toContain(shown)
+  })
+
+  test("with readShowChars above the output the engine's own «rest: read …» line reaches the model", async () => {
+    const { prompts } = await once({ readShowChars: long.length + 100 })
+    expect(prompts[1]).toContain("البقيّة: read plan.md 601 900")
+    expect(prompts[1]).not.toContain("ما بعده لم يُعرض")
+  })
+
+  test("a read batch is cut the same way", async () => {
+    const { prompts } = await drive(["نفّذ: read plan.md\nنفّذ: read notes.md"], { dispatch: async () => long })
+    expect(prompts[1]).toContain("هذه آخرُ نتائج حزمة القراءة")
+    expect(prompts[1]).toContain(shownRead(long))
+  })
+
+  test("a short read is byte for byte as before", () => {
+    expect(shownRead("قصير")).toBe("قصير")
+  })
+
+  test("cli passes the cap from its read budget", () => {
+    expect(cliSource).toContain("readShowChars: Math.max(14_000, readBudgetChars() + 1_000),")
   })
 })
 

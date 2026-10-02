@@ -161,6 +161,7 @@ export {
   DUPLICATE_REPLAY_LINE,
   writeNudgeLine,
   unchangedReadLine,
+  shownRead,
   duplicatePointerLine,
   STATEFUL_ACTION,
   pageGenerationOf,

@@ -8215,6 +8215,8 @@ const runServeShell = async (): Promise<void> => {
           ...(plugins.read("readCompaction", "epoch", epoch) ? { readCompaction: READ_COMPACTION } : {}),
           // 10-01: القراءاتُ المحمولة تتبع النافذة — ≈0.9 حرفٍ لكلّ توكن (59 ألفاً في 65,536؛ ≈20 ألفاً في 22k كما كان) — فلا تُغرق نافذةً صغيرة.
           readCarryChars: Math.min(120_000, Math.max(8_000, Math.round(AGENT_CONTEXT_TOKENS * 0.9))),
+          // 10-02: سقفُ عرض القراءة يتبع ميزانيّتَها هنا (+ رأسُ الإيصال وإعلانُ «البقيّة: read …») — كانت الحلقةُ تقصّ عند 14,000 صامتةً.
+          readShowChars: Math.max(14_000, readBudgetChars() + 1_000),
           // S13.0-b: ضغط إيصالات التنفيذ (سطر الحكم يبقى) + ميزانية أثر الحقبة
           // لكل نداء (TRAIL_COMPACTION). مفتاح مستقل plugins.trailCompaction
           // (الافتراض مفعَّل)؛ إطفاؤه = غياب الخيار = لا أثر تنفيذي يُلمس.
