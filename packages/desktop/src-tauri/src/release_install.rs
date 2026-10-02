@@ -241,6 +241,9 @@ pub(crate) fn release_install(app: AppHandle, version: String) -> Result<(), Str
     if !version_ok(&version) {
         return Err("رقمُ الإصدار غيرُ مفهوم.".into());
     }
+    if crate::release_check::store_managed() {
+        return Err("هذه نسخةُ متجر مايكروسوفت — التحديثُ يأتي من المتجر.".into());
+    }
     if !newer_than(&version, env!("CARGO_PKG_VERSION")) {
         return Err("لا تراجعَ إلى إصدارٍ أقدم أو مساوٍ من هنا.".into());
     }

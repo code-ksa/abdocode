@@ -78,14 +78,37 @@ fn fetch(current: &str) -> Result<ReleaseInfo, String> {
 }
 
 /// Help ▸ التحقّق من التحديثات (وفحصٌ صامت عند البدء تُدير القشرةُ إيقاعَه): يعيد الإصدارَ الحاليَّ والأحدثَ وهل هناك أجدد.
+/// نسخةُ متجر مايكروسوفت (حزمةُ MSIX تُثبَّت تحت WindowsApps): المتجرُ يحدّثها بنفسه، وسياستُه تمنع التطبيقَ من تحديث نفسه —
+/// فلا فحصَ للوثيقة ولا تثبيت.
+pub(crate) fn store_managed_path(exe: &str) -> bool {
+    exe.to_ascii_lowercase().replace('/', "\\").contains("\\windowsapps\\")
+}
+pub(crate) fn store_managed() -> bool {
+    std::env::current_exe().map(|p| store_managed_path(&p.to_string_lossy())).unwrap_or(false)
+}
+
 #[tauri::command]
 pub(crate) fn release_check() -> Result<ReleaseInfo, String> {
-    fetch(env!("CARGO_PKG_VERSION"))
+    let current = env!("CARGO_PKG_VERSION");
+    if store_managed() {
+        return Ok(ReleaseInfo { current: current.into(), latest: current.into(), newer: false, published_at: String::new(), notes: "التحديثاتُ تصل من متجر مايكروسوفت.".into(), page: DEFAULT_PAGE.into() });
+    }
+    fetch(current)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn check_and_install_both_defer_to_the_store() {
+        assert!(include_str!("release_check.rs").contains(concat!("if store_", "managed() {")));
+        assert!(include_str!("release_install.rs").contains(concat!("if crate::release_check::store_", "managed() {")));
+    }
+    #[test] fn store_package_paths_are_store_managed() {
+        assert!(store_managed_path(r"C:\Program Files\WindowsApps\TechnologyKSA.AbdoCode_4.0.109.0_x64__abc\abdocode-desktop.exe"));
+        assert!(store_managed_path("c:/program files/windowsapps/x/abdocode-desktop.exe"));
+        assert!(!store_managed_path(r"C:\Users\u\AppData\Local\AbdoCode\abdocode-desktop.exe"));
+        assert!(!store_managed_path(r"C:\tools\mywindowsappsx\abdocode-desktop.exe"));
+    }
     #[test] fn numeric_not_lexical() {
         assert!(newer_than("4.0.10", "4.0.9"));
         assert!(newer_than("4.1.0", "4.0.99"));
