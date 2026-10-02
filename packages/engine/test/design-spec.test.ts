@@ -236,7 +236,7 @@ describe("S9 — wiring pins across the layers", () => {
     expect(background).toContain(`const SPEC = ${SPEC_WALKER}\n`)
     expect(background).toContain('case "inspect": return String(args.mode) === "spec" ? inPage(tab.id, SPEC, [600, String(args.target || "")]) : inPage(tab.id, INSPECT, [String(args.mode || "styles"), String(args.target || "")])')
     expect(background.indexOf("const SPEC = ")).toBeLessThan(background.indexOf("const INSPECT = ")) // شريحةُ INSPECT في اختبار التكافؤ تبقى دالّةً واحدة
-    expect(JSON.parse(read("..", "browser-bridge", "extension", "manifest.json")).version).toBe("0.6.5")
+    expect(JSON.parse(read("..", "browser-bridge", "extension", "manifest.json")).version).toBe("0.6.8")
     const cdp = read("..", "browser", "src", "cdp.ts")
     expect(cdp).toContain("async readSpec(rootRef = \"\", limit = SPEC_WALKER_LIMIT): Promise<string> {")
     expect(cdp).toContain("return this.#eval(specWalkerExpression(limit, rootRef))")

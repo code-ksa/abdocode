@@ -1176,7 +1176,7 @@ type ChatMessage = TextAgentMessage & { readonly images?: ModelMessage['images']
 // Fresh-install default; startup restores any explicit saved model.
 const INITIAL_MODEL = Providers.parseRef(DEFAULT_CHAT_MODEL)!
 let ASK_MODEL = INITIAL_MODEL.model
-// م9و — عائلاتُ الأدوات المفتوحة للدور الجاري (المتصفّح/سطح المكتب/التفويض): على مستوى الوحدة لأنّ sk (مستوى الوحدة) يرشّح بها.
+// م9و — عائلاتُ الأدوات المفتوحة للدور الجاري (المتصفّح/سطح المكتب/التفويض): على مستوى الوحدة لأنّ ask (مستوى الوحدة) يرشّح بها.
 let turnFamilies = new Set<string>()
 // م9ز — معرِّفُ تثبيت الجلسة للمزوّد: بصمةُ معرِّف الجلسة (لا المعرِّفُ نفسُه ولا سرّ)، ثابتٌ داخل الجلسة ومختلفٌ بين جلستين؛ على مستوى الوحدة لأنّ ask() وحدويّ.
 let sessionAffinityId = ""
@@ -4161,6 +4161,60 @@ const runServeShell = async (): Promise<void> => {
         return unknownTool(`لا محوّل مربوطاً باسم ${spec.name}`)
       }
       case "net": {
+        if (spec.name === "server" || spec.name === "deploy") {
+          // 10-02 — خوادمُ المستخدم والنشر (servers/remote.ts يملك إنشاءَ العمليّات): الملفُّ بلا أسرار، والمفتاحُ في الخزنة، وكلُّ لمسةٍ للخادم بموافقة.
+          if (!pluginOnNow("remoteDeploy")) return denied(`رُفض ${spec.name}: الخوادمُ والنشر مطفأة (plugins.remoteDeploy) — فعّلها من الإعدادات.`, "tool_not_permitted")
+          const remoteMod = await import("./servers/remote")
+          const deps = remoteMod.defaultDeps()
+          const vault = {
+            get: async (handle: string) => { const r = await vaultGet(handle, process.env); return "value" in r ? r.value : undefined },
+            set: async (handle: string, value: string) => "ok" in (await vaultSet(handle, value, process.env)),
+            forget: async (handle: string) => { await vaultForget(handle, process.env) },
+          }
+          const dashDash = rest.indexOf(" -- ")
+          const head = tokenizeArgs(dashDash >= 0 ? rest.slice(0, dashDash) : rest)
+          const flag = (name: string): string | undefined => { const i = head.indexOf(name); return i >= 0 ? head[i + 1] : undefined }
+          const profileOf = (name: string | undefined) => (name === undefined ? undefined : remoteMod.findProfile(STATE_ROOT, name))
+          const missing = (name: string | undefined) => invalid(name === undefined ? `الصيغة: ${spec.usage}` : `لا خادمَ باسم «${name}» — ${remoteMod.renderProfiles(remoteMod.listProfiles(STATE_ROOT))}`)
+          if (spec.name === "deploy") {
+            const profile = profileOf(head[0])
+            if (profile === undefined) return missing(head[0])
+            if (head.includes("--rollback")) {
+              if (!await gate(turnId, spec.effect, `الرجوعُ إلى الإصدار السابق على «${profile.name}» (${profile.user}@${profile.host})`)) return denied("رُفض الرجوع: لم يُوافَق.", "policy_denied")
+              const r = await remoteMod.rollback(STATE_ROOT, profile, flag("--start"), vault, deps)
+              return r.ok ? okText(r.text) : invalid(r.text)
+            }
+            const options = { ...(flag("--build") ? { build: flag("--build")! } : {}), ...(flag("--start") ? { start: flag("--start")! } : {}), ...(flag("--check") ? { check: flag("--check")! } : {}) }
+            if (!await gate(turnId, spec.effect, `نشرُ المشروع على «${profile.name}» (${profile.user}@${profile.host}:${profile.path})${options.build ? ` ثمّ $ ${options.build}` : ""}${options.start ? ` ثمّ $ ${options.start}` : ""}`)) return denied("رُفض النشر: لم يُوافَق.", "policy_denied")
+            const checkUrl = async (url: string) => (await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(20_000) })).status
+            const result = await remoteMod.deploy(STATE_ROOT, PROJECT_DIR, profile, options, vault, deps, checkUrl)
+            const text = remoteMod.renderDeploy(profile, result)
+            return result.ok ? okText(text) : invalid(text)
+          }
+          const sub = head[0] ?? "list"
+          if (sub === "list") return okText(remoteMod.renderProfiles(remoteMod.listProfiles(STATE_ROOT)))
+          if (sub === "add") {
+            if (head[1] === undefined || head[2] === undefined) return invalid(`الصيغة: ${spec.usage}`)
+            const r = await remoteMod.addServer(STATE_ROOT, { name: head[1], target: head[2], ...(flag("--path") ? { path: flag("--path")! } : {}), ...(flag("--key-file") ? { keyFile: flag("--key-file")! } : {}) }, vault, deps)
+            return r.ok ? okText(r.text) : invalid(r.text)
+          }
+          const profile = profileOf(head[1])
+          if (profile === undefined) return missing(head[1])
+          if (sub === "remove") return okText(await remoteMod.removeServer(STATE_ROOT, profile.name, vault))
+          if (sub === "test") {
+            if (!await gate(turnId, spec.effect, `الاتّصالُ بالخادم «${profile.name}» (${profile.user}@${profile.host}:${profile.port})`)) return denied("رُفض الاتّصال: لم يُوافَق.", "policy_denied")
+            const r = await remoteMod.testServer(STATE_ROOT, profile, vault, deps)
+            return r.ok ? okText(r.text) : invalid(r.text)
+          }
+          if (sub === "run") {
+            const command = dashDash >= 0 ? rest.slice(dashDash + 4).trim() : ""
+            if (command.length === 0) return invalid("الصيغة: server run <اسم> -- <أمر>")
+            if (!await gate(turnId, spec.effect, `تنفيذٌ على «${profile.name}»: ${command.slice(0, 160)}`)) return denied("رُفض التنفيذ على الخادم: لم يُوافَق.", "policy_denied")
+            const r = await remoteMod.runOnServer(STATE_ROOT, profile, command, vault, deps)
+            return r.ok ? okText(r.text) : invalid(r.text)
+          }
+          return invalid(`أمرٌ فرعيٌّ مجهول «${sub}» — الصيغة: ${spec.usage}`)
+        }
         if (spec.name === "connectors" || spec.name === "connect") {
           // 10-02 — الموصّلاتُ من المحادثة: الحالُ من الخزنة (حضورُ المقابض لا قيمها) والجلسة؛ والربطُ هو رقصةُ زرّ الإعدادات نفسُها
           // (runConnectorAuth): القشرةُ تفتح المتصفّحَ للموافقة وتُوصل الخادمَ بعد حفظ الإعدادات، والأداةُ تنتظر وتعيد الأدواتِ الحيّة.
@@ -8871,7 +8925,7 @@ const runServeShell = async (): Promise<void> => {
       }
       // ذ4 — البوّاباتُ الأربع بقاعدةٍ واحدة: passed وحده يُرضي؛ الفاشلُ لا، وغيرُ المفحوص لا.
       // 09-29 (LangGraph): خطّةٌ لمسها الدور وفيها خطواتٌ مفتوحة لا تُسلَّم مكتملة — الرسمُ حكمٌ كالبوّابات.
-      const planSatisfied = planOpenSteps().length === 0 || !(allCommands.some((c) => /^plan\s+(?!show)/u.test(c)) || planOpenSteps().some((s) => s.state === "running"))
+      const planSatisfied = planOpenSteps().length === 0 || !(allCommands.some((c) => /^plan\s+(?!show\b)/u.test(c)) || planOpenSteps().some((s) => s.state === "running"))
       const completed = planSatisfied && superAccepted && lastStop === "complete" && !waitingVerdict && acceptanceSatisfied(currentGateReceipts()) && outputEvidenceVerdict(effectiveGoal, allReceipts.slice(outputEvidenceFloor)) === undefined && browserProofVerdict(proofGoal, allReceipts.slice(outputEvidenceFloor), browserAvailable) === undefined && sprintProgressViolation(PROJECT_DIR, !planningOnly && process.env.ABDO_REQUIRE_SPRINT_PLAN === "1") === undefined
       let answer = completed
         ? `${lastAnswer}\n— حقب التنفيذ: ${epochs} · الأدوات: ${allCommands.length} · التوقف: ${lastStop}`

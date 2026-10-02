@@ -41,7 +41,7 @@ function readHead(path: string, maxBytes = MAX_DOC_BYTES): string | undefined {
   } catch { return undefined } finally { if (fd !== undefined) closeSync(fd) }
 }
 
-const clean = (text: string) => text.replace(/[\x00--]/gu, " ").replace(/\s+/gu, " ").trim()
+const clean = (text: string) => text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/gu, " ").replace(/\s+/gu, " ").trim()
 const firstHeading = (text: string) => text.split(/\r?\n/u).find((line) => /^#{1,3}\s+\S/u.test(line))?.replace(/^#+\s+/u, "").slice(0, 120)
 
 function gitLog(root: string): { state: "observed"; commits: { date: string; subject: string }[] } | { state: "unavailable" } {

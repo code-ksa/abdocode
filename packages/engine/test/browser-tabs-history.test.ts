@@ -73,6 +73,6 @@ describe("ن5 — wiring pins across the five layers", () => {
     expect(background).toContain('if (!/^https?:\\/\\//i.test(String(args.url))) throw new Error("http/https only")')
     const mcp = read("src", "shells", "mcp-catalogue.ts")
     expect(mcp).toContain('"select", "upload", "drag", "tabs", "back", "forward"]')
-    expect(JSON.parse(read("..", "browser-bridge", "extension", "manifest.json")).version).toBe("0.6.5") // S9: inspect spec
+    expect(JSON.parse(read("..", "browser-bridge", "extension", "manifest.json")).version).toBe("0.6.8") // S9: inspect spec
   })
 })

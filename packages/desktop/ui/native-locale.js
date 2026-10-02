@@ -3968,6 +3968,12 @@ const pluginTranslations = {
 "englishLabel": "Connect services from the conversation (connect / connectors)",
 "englishDescription": "The connectors and connect tools: the agent sees which connectors (Google, Slack, Notion, GitHub, Asana, Linear…) are linked and live, with their tools, and can ask to link one from the conversation — your browser opens for sign-in and consent (AbdoCode never sees a password), the tokens go to the vault, and the connector's server is connected so its tools can be called in the same turn. Linking asks for approval first. Measured: linking was only a Settings button, so «link Notion and create a page» could not be done from the conversation. Off = both tools refuse by name. Applies immediately.",
   },
+"remoteDeploy": {
+"label": "الخوادمُ والنشر (server / deploy)",
+"description": "أداتا server وdeploy: يضع المستخدمُ خادمَه (user@host، ومسار النشر) فيولّد عبدو كود مفتاحَ SSH في الخزنة ويعيد المفتاحَ العامّ ليُضاف مرّةً على الخادم، ثمّ يتّصل ويقيس، وينفّذ أوامرَ عليه، وينشر المشروعَ: حزمةٌ بلا node_modules و.git ومخرجات البناء و.env ⇦ releases/<وقت> ⇦ current ⇦ البناءُ والتشغيل ⇦ فحصُ الرابط، مع خمسة إصداراتٍ للرجوع. المفتاحُ لا يُكتب إلا ملفّاً مؤقّتاً خاصّاً طوالَ النداء، ومفاتيحُ المضيف تُثبَّت في known_hosts خاصٍّ بعبدو كود، وكلُّ لمسةٍ للخادم تُعرض للموافقة. المعطَّل = ترفض الأداتان باسمهما. يسري فوراً.",
+"englishLabel": "Servers and deploy (server / deploy)",
+"englishDescription": "The server and deploy tools: the user adds their server (user@host and a deploy path); AbdoCode generates an SSH key in the vault and shows the public key to add once on the server, then connects and measures, runs commands, and deploys the project: an archive without node_modules, .git, build output or .env files, unpacked into releases/<time>, current pointed at it, build and start commands, then a URL check, keeping five releases for rollback. The key is only ever a private temporary file for one call, host keys are pinned in AbdoCode's own known_hosts, and every server action asks for approval. Off = both tools refuse by name. Applies immediately.",
+  },
 "resumeIntent": {
 "label": "آلية اكمل من حيث توقفت",
 "description": "دورٌ يقول اكمل فقط يرث هدف الدور السابق وبواباته ويقرأ التسليم أولاً. يسري من الدور القادم.",

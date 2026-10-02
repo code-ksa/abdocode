@@ -12,6 +12,7 @@ export const TOOL_FAMILIES: Readonly<Record<string, readonly string[]>> = Object
   // تجاوزت المدخلَ فأُسقط تبادل). audit وcompare وseo وrelease-check مع المتصفّح؛ والعروضُ والوضعيّةُ بعائلتين تفتحهما النيّة.
   documents: ["slides", "cv", "drive-upload"],
   connectors: ["connectors", "connect"],
+  servers: ["server", "deploy"],
   security: ["posture"],
 })
 const FAMILY_OF = new Map<string, string>()
@@ -23,6 +24,8 @@ const DELEGATION_WORDS = /فريق|team\b|وكلاء|وكيل|agent|فوّ?ض|de
 const DOCUMENT_WORDS = /عرض(?:ٌ|ا)?\s*تقديم|بريزنتيشن|بريزنتيشين|برزنتيشن|presentation|slides?\b|شرائح|سلايد|pptx|power\s*point|باور\s*بوينت|باوربوينت|google\s*slides|جوجل\s*سلايد|google\s*(?:drive|docs|sheets)|(?:جوجل\s*)?درايف|مستند(?:ات)?\s*جوجل|جداول\s*جوجل|سير(?:ة|ه)?\s*(?:ال)?ذاتي|السير(?:ة|ه)|(?:^|\s)(?:لل|ال|بال)?سي\s*في(?:\s|$)|\bcv\b|\bcvs\b|resum[eé]|\bats\b|مرش(?:ّ)?ح|candidates?\b|توظيف|hiring|وصف\s*(?:ال)?وظيفي|job\s*description|\.docx\b/iu
 // 10-02 — اسمُ خدمةٍ مربوطةٍ أو فعلُ ربطٍ يفتح عائلةَ الموصّلات (الكتالوجُ لا يُحمَّل بها في كلّ نداء).
 const CONNECTOR_WORDS = /موص(?:ّ)?ل|تكامل|integration|connector|\bconnect\b|اربط|وص(?:ّ)?ل (?:سلاك|نوشن|جوجل)|slack|سلاك|notion|نوشن|نوتون|gmail|جيميل|google drive|درايف|github|جيت ?هب|asana|اسانا|أسانا|linear|jira|جيرا|confluence|atlassian|figma|فيجما|intercom|granola|gamma/iu
+// 10-02 — خادمٌ أو نشرٌ يفتح عائلةَ الخوادم.
+const SERVER_WORDS = /سيرفر|خادمي|خادم الإنتاج|خادمِ? الاستضافة|\bvps\b|\bssh\b|\bdeploy|انشر المشروع|انشره|نشر المشروع|ارفع المشروع|ارفعه على|استضافة|\bhosting\b|hetzner|digitalocean|\bpm2\b/iu
 const SECURITY_WORDS = /posture|وضعي(?:ّ)?ة|أمان|الأمان|آمن|security|صلاحي(?:ّ)?ات|permissions?\b|تماسك/iu
 
 export function familyOf(toolName: string): string | undefined { return FAMILY_OF.get(toolName) }
@@ -37,6 +40,7 @@ export function familiesFor(goal: string, inherited: ReadonlySet<string> = new S
   if (DOCUMENT_WORDS.test(text)) out.add("documents")
   if (SECURITY_WORDS.test(text)) out.add("security")
   if (CONNECTOR_WORDS.test(text)) out.add("connectors")
+  if (SERVER_WORDS.test(text)) out.add("servers")
   return out
 }
 

@@ -39,7 +39,7 @@ const PATTERNS: readonly { name: string; re: RegExp; confidence: number }[] = [
 // Index-aligned with memory-terms concepts; the two engine families collapse to "database".
 const CONCEPT_TOPIC = ["database", "database", "database", "billing", "auth", "permissions", "tests", "style", "deploy", "memory", "resume", "packages"]
 
-const clean = (value: string) => value.replace(/[\s"'«»“”]+/gu, " ").replace(/[\x00-]/gu, "").trim()
+const clean = (value: string) => value.replace(/[\s"'«»“”]+/gu, " ").replace(/[\x00-\x1f\x7f]/gu, "").trim()
 
 /** Topic: the shared concept when the vocabulary knows it, else the first content word of the decision. */
 export function correctionTopic(to: string, from?: string): string {

@@ -80,6 +80,7 @@ export type PluginName =
   | "writeNudge"
   | "auditGate"
   | "connectTool"
+  | "remoteDeploy"
   | "settingsSeam"
   | "inventory"
   | "rules"
@@ -727,6 +728,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     name: "connectTool",
     label: "ربطُ الموصّلات من المحادثة (connect / connectors)",
     description: "أداتا connectors وconnect: يعرف الوكيلُ من المربوطُ والموصولُ من الموصّلات (جوجل، سلاك، نوشن، GitHub، Asana، Linear…) وبأيّ أدوات، ويطلب الربطَ من المحادثة — يُفتح متصفّحُك لتسجيل الدخول والموافقة (لا يرى عبدو كود كلمةَ مرور)، والرموزُ إلى الخزنة، ويُوصل خادمُ الموصّل فتُستدعى أدواتُه في الدور نفسِه. الربطُ يُعرض للموافقة أوّلاً. مقيس: الربطُ كان زرّاً في الإعدادات وحده فلم تُنجَز «اربط نوشن وأنشئ صفحة» من المحادثة. المعطَّل = ترفض الأداتان باسمهما. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // 10-02 — الخوادمُ والنشر من المحادثة.
+  Object.freeze({
+    name: "remoteDeploy",
+    label: "الخوادمُ والنشر (server / deploy)",
+    description: "أداتا server وdeploy: يضع المستخدمُ خادمَه (user@host، ومسار النشر) فيولّد عبدو كود مفتاحَ SSH في الخزنة ويعيد المفتاحَ العامّ ليُضاف مرّةً على الخادم، ثمّ يتّصل ويقيس، وينفّذ أوامرَ عليه، وينشر المشروعَ: حزمةٌ بلا node_modules و.git ومخرجات البناء و.env ⇦ releases/<وقت> ⇦ current ⇦ البناءُ والتشغيل ⇦ فحصُ الرابط، مع خمسة إصداراتٍ للرجوع. المفتاحُ لا يُكتب إلا ملفّاً مؤقّتاً خاصّاً طوالَ النداء، ومفاتيحُ المضيف تُثبَّت في known_hosts خاصٍّ بعبدو كود، وكلُّ لمسةٍ للخادم تُعرض للموافقة. المعطَّل = ترفض الأداتان باسمهما. يسري فوراً.",
     defaultOn: true,
     applies: "immediate",
     site: "call",
