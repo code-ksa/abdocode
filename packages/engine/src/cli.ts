@@ -226,6 +226,7 @@ import { detectStackForProject } from "./project-stacks"
 import { modelOutputViolation } from "./model-output-guard"
 import { excessiveMetadataDescription } from "./public-content-quality-guard"
 import { grepRegex } from "./grep-pattern"
+import { effectivePattern, parseGrepArgs, tokenizeArgs } from "./grep-args"
 
 installEgressGuard()
 
@@ -2925,29 +2926,36 @@ const runServeShell = async (): Promise<void> => {
       return hits.length ? `${hits.length} مطابقة:\n${hits.join("\n")}` : "لا مطابقة"
     }
     if (word === "grep") {
-      // ذ9ب — أعلامٌ كأداة Grep عند كلود: -i، -C n (≤5)، --type ext، --files، --count. النمطُ أوّلُ ما ليس عَلَماً ثمّ الـglob.
-      const flags = { ignoreCase: false, context: 0, type: "", files: false, count: false }
-      const positional: string[] = []
-      for (let i = 0; i < rest.length; i += 1) {
-        const t = rest[i]!
-        if (t === "-i") flags.ignoreCase = true
-        else if (t === "-C" || t === "-c") { flags.context = Math.min(5, Math.max(0, Number.parseInt(rest[++i] ?? "2", 10) || 2)) }
-        else if (t.startsWith("-C") && /^-C\d$/.test(t)) flags.context = Math.min(5, Number(t.slice(2)))
-        else if (t === "--type") flags.type = (rest[++i] ?? "").replace(/^\./, "").toLowerCase()
-        else if (t === "--files" || t === "-l") flags.files = true
-        else if (t === "--count") flags.count = true
-        else positional.push(t)
-      }
-      const pattern = positional[0]
+      // ذ9ب — أعلامٌ كأداة Grep عند كلود: -i، -C n (≤5)، --type ext، --files، --count. النمطُ أوّلُ ما ليس عَلَماً ثمّ المسارات.
+      // 10-02 — وبصيغة GNU grep كما يكتبها النموذج (grep-args.ts): تنصيصٌ يُحترم، -rn/-A/-B/--include/-F/-w، والمسارُ ملفٌّ أو مجلّدٌ أو glob،
+      // وما لم يُفهم يُسمّى في الجواب — كان `grep -i avatar . -r` يعود «لا مطابقة» عن مشروعٍ فيه عشراتُ المطابقات.
+      const g = parseGrepArgs(tokenizeArgs(rest.join(" ")))
+      const flags = { ignoreCase: g.ignoreCase, context: g.context, type: g.type, files: g.files, count: g.count }
+      const pattern = effectivePattern(g)
       if (!pattern) return "grep يحتاج نمطاً"
-      const glob = positional[1] ?? (flags.type ? `**/*.${flags.type}` : "**/*")
+      const missing: string[] = []
+      const globs: string[] = []
+      for (const raw of g.paths.length > 0 ? g.paths : [flags.type ? `**/*.${flags.type}` : "**/*"]) {
+        const target = raw.replaceAll("\\", "/").replace(/^\.\//u, "")
+        if (/[*?[{]/u.test(target)) { globs.push(target); continue }
+        const abs = insideProject(target === "" ? "." : target)
+        if (abs === undefined || !existsSync(abs)) { missing.push(raw); continue }
+        globs.push(!statSync(abs).isDirectory() ? target : target === "." || target === "" ? "**/*" : `${target.replace(/\/$/u, "")}/**/*`)
+      }
+      const includeGlobs = g.includes.map((include) => new Bun.Glob(include))
       const compiled = grepRegex(pattern, flags.ignoreCase)
       if (compiled === undefined) return "نمط regex غير صالح"
       const re = compiled.re
       const hits: string[] = []
       const perFile = new Map<string, number>()
+      const scanned = new Set<string>()
+      for (const glob of globs) {
+      if (hits.length >= CAP) break
       for await (const p of new Bun.Glob(glob).scan({ cwd: PROJECT_DIR, onlyFiles: true })) {
         if (p.includes("node_modules") || p.includes(".git")) continue
+        if (scanned.has(p)) continue
+        scanned.add(p)
+        if (includeGlobs.length > 0 && !includeGlobs.some((include) => include.match(p.split(/[\\/]/u).pop() ?? p))) continue
         if (flags.type && !p.toLowerCase().endsWith("." + flags.type)) continue
         const abs = insideProject(p)
         if (abs === undefined) continue
@@ -2968,10 +2976,12 @@ const runServeShell = async (): Promise<void> => {
         } catch { /* ثنائيّ أو ممنوع — يُتخطّى */ }
         if (hits.length >= CAP) break
       }
-      if (flags.files) { const files = [...perFile.keys()].slice(0, CAP); return files.length ? `${files.length} ملفّاً:\n${files.join("\n")}` : "لا مطابقة" }
-      if (flags.count) { const rows = [...perFile.entries()].slice(0, CAP).map(([f, n]) => `${f}: ${n}`); const total = [...perFile.values()].reduce((a, b) => a + b, 0); return rows.length ? `${total} مطابقة في ${rows.length} ملفّاً:\n${rows.join("\n")}` : "لا مطابقة" }
+      }
+      const argNote = (missing.length > 0 ? `\nℹ غير موجود: ${missing.join("، ")}` : "") + (g.ignored.length > 0 ? `\nℹ تُجوهل (لا يُدعم هنا): ${g.ignored.join(" ")}` : "")
+      if (flags.files) { const files = [...perFile.keys()].slice(0, CAP); return (files.length ? `${files.length} ملفّاً:\n${files.join("\n")}` : "لا مطابقة") + argNote }
+      if (flags.count) { const rows = [...perFile.entries()].slice(0, CAP).map(([f, n]) => `${f}: ${n}`); const total = [...perFile.values()].reduce((a, b) => a + b, 0); return (rows.length ? `${total} مطابقة في ${rows.length} ملفّاً:\n${rows.join("\n")}` : "لا مطابقة") + argNote }
       const note = compiled.translated ? "\nℹ `\\|` قُرئت «أو» كما في grep — والأنبوبُ الحرفيّ `[|]`." : ""
-      return (hits.length ? `${hits.length} سطراً:\n${hits.join("\n")}` : "لا مطابقة") + note
+      return (hits.length ? `${hits.length} سطراً:\n${hits.join("\n")}` : "لا مطابقة") + note + argNote
     }
     return `أداة قراءةٍ مجهولة: ${word}`
   }
