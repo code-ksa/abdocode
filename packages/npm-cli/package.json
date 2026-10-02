@@ -1,15 +1,42 @@
 {
   "name": "abdocode",
-  "version": "4.0.108",
+  "version": "4.0.109",
   "description": "AbdoCode — a coding agent that runs on your own machine, from the terminal (Arabic and English).",
-  "keywords": ["ai", "coding-agent", "cli", "terminal", "arabic", "agent", "llm"],
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "cli",
+    "terminal",
+    "arabic",
+    "agent",
+    "llm"
+  ],
   "homepage": "https://github.com/code-ksa/abdocode",
-  "repository": { "type": "git", "url": "git+https://github.com/code-ksa/abdocode.git", "directory": "packages/npm-cli" },
-  "bugs": { "url": "https://github.com/code-ksa/abdocode/issues" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/code-ksa/abdocode.git",
+    "directory": "packages/npm-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/code-ksa/abdocode/issues"
+  },
   "license": "SEE LICENSE IN LICENSE",
-  "bin": { "abdocode": "bin/abdocode.js" },
-  "files": ["bin/", "release.json", "README.md", "LICENSE"],
-  "os": ["win32"],
-  "cpu": ["x64"],
-  "engines": { "node": ">=18" }
+  "bin": {
+    "abdocode": "bin/abdocode.js"
+  },
+  "files": [
+    "bin/",
+    "release.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
 }
