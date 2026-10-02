@@ -488,16 +488,19 @@ export const healNarratedWrite = (text: string): string => {
 const GLYPH_HEAD = String.raw`[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]*⚙[\uFE0E\uFE0F]?\s+`
 const GLYPH_READ_VERB = String.raw`(?:read|list|ls|glob|grep|docs|recall|look|page|probe|logs|status|audit|seo|compare|ui-book\s+(?:list|show))\b`
 // 10-02 — بناءٌ واختبارٌ كالتي تشغّلها البوّاباتُ نفسُها، بلا ربطٍ ولا توجيه (&& ; | > <): إعادتُها لا تُتلف شيئاً.
-const GLYPH_SAFE_RUN = String.raw`run\s+(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|test|lint|typecheck)|npx\s+tsc\s+--noEmit)\b[^&|;<>\r\n]*`
+// وخادمُ المشروع (dev/start) خادمٌ مُدار تملكه النواة وتوقفه نهايةَ الدور — مقيس: «⚙ run npm run start --bg ⚙ wait 5000 ⚙ audit» ثلاثَ حقبٍ بأداةٍ صفر.
+const GLYPH_SAFE_RUN = String.raw`run\s+(?:--bg\s+)?(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|test|lint|typecheck|dev|start)|npx\s+tsc\s+--noEmit)\b[^&|;<>\r\n]*`
 const GLYPH_COMMAND = new RegExp(String.raw`^${GLYPH_HEAD}(${GLYPH_READ_VERB}|${GLYPH_SAFE_RUN})`, "u")
 /** ذاكرةُ الحقبة كما يكتبها المحرّك — نموذجٌ يعيدها حرفيّاً يُقصّ منها. */
+/** «⚙ wait 5000» / «⚙ sleep 3» بين نداءين: انتظارٌ لا أداةَ له (الأدواتُ تنتظر الإنصاتَ بنفسها) — يُسقط ولا يُفشل الشفاء. */
+const GLYPH_WAIT = new RegExp(String.raw`^${GLYPH_HEAD}(?:wait|sleep)\s+\d+(?:ms|s)?\s*$`, "u")
 const ECHOED_MEMORY = /إيصالات (?:القراءة|التنفيذ) المحفوظة للحقبة التالية[\s\S]*$/u
 export const healNarratedReads = (text: string): string => {
   // 10-02 — ذيلُ القياس («— المقيس: …») يلحق الردّ سطراً أو مقطعاً، وذاكرةُ الحقبة المنسوخة («إيصالات … المحفوظة للحقبة التالية») تلحقه أيضاً:
   // كلاهما أفشل «كلّ المقاطع أوامر» فلم يُشفَ «⚙ read …» حقباً متتالية بلا أداة. يُنزعان قبل الحكم.
   const body = stripMeasure(text).replace(ECHOED_MEMORY, "").replace(/\s+— (?:المقيس|حقب التنفيذ)[^\n]*/gu, "").trim()
   // trim() لا ينزع محرفَ الاستبدال (U+FFFD) — مقطعٌ لا يحمل إلا هو وأخواتِه يُسقط.
-  const segments = body.split(/(?=⚙)/u).map((x) => x.trim()).filter((x) => x.replace(/[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]/gu, "").length > 0)
+  const segments = body.split(/(?=⚙)/u).map((x) => x.trim()).filter((x) => x.replace(/[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]/gu, "").length > 0 && !GLYPH_WAIT.test(x))
   const commands: string[] = []
   for (const segment of segments) {
     // ذيلُ إيصالٍ منسوخ (⏎ ✓ ✕ →) لا يُشفى أبداً — نسخُ إيصالٍ ليس طلباً.

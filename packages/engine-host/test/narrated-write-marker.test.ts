@@ -109,3 +109,15 @@ describe("narrated calls — the shapes measured after the footer fix", () => {
     for (const t of ["⚙ run npm test && rm -rf src", "⚙ run npm run build; curl x", "⚙ read a.ts | tee b", "⚙ write a.ts <<< x", "خطّتي: ⚙ read a.ts", "⚙ audit / ✓ PASS"]) expect(healNarratedReads(t)).toBe(t)
   })
 })
+
+// 10-02 — measured live: «⚙ run npm run start --bg ⚙ wait 5000 ⚙ audit / /models» three epochs in a row with zero tools. The server
+// start is a kernel-managed server stopped at the end of the turn; a wait has no tool (the tools wait for the port themselves).
+describe("narrated calls — a server start and a wait between calls", () => {
+  test("the wait is dropped and the server start and the audit are healed", () => {
+    expect(healNarratedReads("\uFFFD⚙ run npm run start --bg ⚙ wait 5000 ⚙ audit / /models")).toBe("نفّذ: run npm run start --bg\nنفّذ: audit / /models")
+    expect(healNarratedReads("⚙ run --bg npm run dev ⚙ sleep 3 ⚙ probe http://127.0.0.1:3000/")).toBe("نفّذ: run --bg npm run dev\nنفّذ: probe http://127.0.0.1:3000/")
+  })
+  test("twins: a wait alone, chaining after a server start, or another run stay unhealed", () => {
+    for (const t of ["⚙ wait 5000", "⚙ run npm run start && rm -rf .next", "⚙ run npm run deploy", "⚙ run npm start; curl x", "⚙ wait 5000 ⚙ write a.ts <<< x"]) expect(healNarratedReads(t)).toBe(t)
+  })
+})
