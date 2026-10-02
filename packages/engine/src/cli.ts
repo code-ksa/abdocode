@@ -146,6 +146,7 @@ import { dependencyAudit, dependencyCommandViolation, unexpectedScriptViolation 
 import { moduleResolutionHints } from "./module-resolution-hint"
 import { errorPlaybookHints } from "./error-playbooks"
 import { cssSourceViolation } from "./css-source-guard"
+import { isRootLayout, orphanedStylesheet, orphanedStylesheetLine } from "./root-layout-stylesheet"
 import { DRIVE_UPLOAD_MAX, GoogleConnector, googleOptionsFromEnv } from "./mcp-servers/google"
 import { ManagedServers, devPortHint, devServerUnderBuildNote, listenerPidOf, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
@@ -1023,11 +1024,13 @@ const readThroughKernelV = async (file: string, range?: Readonly<{ from: number;
     }
     // القصُّ بالأسطر لا بالأحرف — والبقيّةُ تُسمّى أمراً (clipReadBody).
     const shown = clipReadBody(body, readBudget, firstLine, lastLine, file)
+    const orphanSheet = isRootLayout(file) ? orphanedStylesheet(PROJECT_DIR, file, text) : undefined
     return okText(
       rangeLine +
       `قرأت النواةُ الملفَّ وتحقّقت منه — بصمة المحتوى ${digest}… ` +
       `والأطوار السبعة في دفتر النواة (صفوفه الآن: ${ledgerRows() + 7}).\n` +
-      `--- ${file} ---\n${shown}`
+      `--- ${file} ---\n${shown}` +
+      (orphanSheet === undefined ? "" : `\n\n⚠ ${orphanedStylesheetLine(orphanSheet, file)}`)
     )
   } finally {
     await host.close()
@@ -3305,6 +3308,11 @@ const runServeShell = async (): Promise<void> => {
       return refused(`رُفض مصدر الشيفرة: ${invalidTsx}. أرسل بايتات المصدر فقط دون شرح لاحق أو pseudo-code؛ ملفات JSX تحتاج مكوّناً مصدّراً.`)
     }
     // 10-01 — صياغةُ CSS كصياغة tsx: ملفٌّ بلا «{» أسقط كلَّ صفحةٍ 500 ولم يُعرف إلا بعد خادمٍ وaudit.
+    // 10-02 — ملفُّ التخطيط الجذر بلا ورقة أنماط وورقتُه يتيمة: الموقعُ كلُّه بأنماط المتصفّح (مقيس: سقط import globals.css ولم يلحظه دوران).
+    const orphanSheet = isRootLayout(normalizedTarget) ? orphanedStylesheet(PROJECT_DIR, normalizedTarget, after) : undefined
+    if (orphanSheet !== undefined) {
+      return refused(`رُفض: ${orphanedStylesheetLine(orphanSheet, normalizedTarget)} — لم يُكتب شيء.`)
+    }
     const invalidCss = await cssSourceViolation(identityWrite)
     if (invalidCss !== undefined) {
       return refused(`رُفض CSS: ${invalidCss}. صحّح الملفَّ كاملاً ثمّ أعد الكتابة — لم يُكتب شيء.`)
