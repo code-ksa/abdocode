@@ -1,6 +1,6 @@
 # Abdo Code Bridge — Privacy Policy / سياسة الخصوصية
 
-_Last updated: 2026-09-06 · Publisher: example (Abdo Code)_
+_Last updated: 2026-10-02 · Publisher: TechnologyKSA (Abdo Code)_
 
 ## English
 

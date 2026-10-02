@@ -25,6 +25,11 @@ el("pair").onclick = async () => {
   if (r && r.paired) { el("token").value = "••••••••"; el("status").textContent = "اقترن ✓ — يتّصل الآن…"; setTimeout(refresh, 1200); return }
   const reason = r ? r.reason : "unreachable"
   if (reason === "closed") el("status").textContent = "عبدو كود يعمل لكن نافذة الاقتران مغلقة: في عبدو كود اكتب «browser extension» (أو الإعدادات ▸ الاتّصالات ▸ إضافة المتصفّح) ثم اضغط هذا الزرّ خلال دقيقتين — أو الصق الرمز يدويّاً."
-  else if (reason === "unreachable") el("status").innerHTML = `لا يوجد عبدو كود يعمل على 127.0.0.1:${(r && r.port) || el("port").value}. افتحه إن كان مثبّتاً، أو <a href="${INSTALL_URL}" target="_blank" rel="noopener">ثبّته من هنا</a> ثم أعد المحاولة.`
+  else if (reason === "unreachable") {
+    // 0.6.8: عقدٌ لا innerHTML — المنفذُ من حقلٍ يكتبه المستخدم، وAMO يرفض الإسنادَ غير الآمن.
+    const link = document.createElement("a")
+    link.href = INSTALL_URL; link.target = "_blank"; link.rel = "noopener"; link.textContent = "ثبّته من هنا"
+    el("status").replaceChildren(`لا يوجد عبدو كود يعمل على 127.0.0.1:${(r && r.port) || el("port").value}. افتحه إن كان مثبّتاً، أو `, link, " ثم أعد المحاولة.")
+  }
   else el("status").textContent = "تعذّر الاقتران: " + reason
 }

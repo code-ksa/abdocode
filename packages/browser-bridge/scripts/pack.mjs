@@ -5,7 +5,8 @@
 // سفاري لا يملك واجهة `debugger` للإضافات فتُنزَع من الصلاحيات (والإضافةُ تعمل بالمسار الاصطناعيّ المعلَن).
 // الضغطُ على ويندوز بـbsdtar المدمج (C:\Windows\System32\tar.exe) لأنّ Compress-Archive في PowerShell 5.1
 // يكتب المسارات بشرطةٍ خلفية فترفضها المتاجر؛ وعلى غيره بـ`zip`.
-//   node scripts/pack.mjs [--deliver <مجلّد>] [--check]
+//   node scripts/pack.mjs [--deliver <مجلّد>] [--check] [--gecko-id <معرّف>]
+//   --gecko-id: معرّفُ فايرفوكس لقائمةٍ قائمة على AMO — معرّفُ القائمة لا يتغيّر أبداً، فالحزمةُ تحمل معرّفَها هي.
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -18,6 +19,8 @@ const dist = join(root, "dist")
 const args = process.argv.slice(2)
 const deliverAt = args.includes("--deliver") ? args[args.indexOf("--deliver") + 1] : undefined
 const checkOnly = args.includes("--check")
+const geckoId = args.includes("--gecko-id") ? args[args.indexOf("--gecko-id") + 1] : "abdo-code-bridge@abdocode.io"
+if (!/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/.test(geckoId ?? "")) { console.error(`--gecko-id غيرُ صالح: ${geckoId}`); process.exit(2) }
 
 const manifest = JSON.parse(readFileSync(join(source, "manifest.json"), "utf8"))
 const version = String(manifest.version)
@@ -90,7 +93,7 @@ const targets = [
     // إلى تطبيق عبدو كود على 127.0.0.1 عند أمرٍ فقط؛ فيُعلَن ما يُنقل فعلاً. والخاصيّةُ يدعمها فايرفوكس 140 (وأندرويد 142) فصاعداً.
     // المعرّفُ من نطاق المنتج نفسِه (`io.abdocode.desktop` مقلوباً) لا من نطاق الشركة: حارسُ الخطّين
     // يرفض معرّفَ منتجٍ آخر لنا داخل خطّ النواة، والإضافةُ جزءٌ من عبدو كود لا من مِلكيّةٍ ثانية.
-    m.browser_specific_settings = { gecko: { id: "abdo-code-bridge@abdocode.io", strict_min_version: "140.0", data_collection_permissions: { required: ["websiteContent", "browsingActivity"] } }, gecko_android: { strict_min_version: "142.0" } }
+    m.browser_specific_settings = { gecko: { id: geckoId, strict_min_version: "140.0", data_collection_permissions: { required: ["websiteContent", "browsingActivity"] } }, gecko_android: { strict_min_version: "142.0" } }
     return m
   } },
 ]

@@ -35,6 +35,21 @@ describe("browser extension store packages", () => {
     } finally { rmSync(out, { recursive: true, force: true }) }
   }, 60_000)
 
+  test("no innerHTML assignment in the extension (AMO flags it; the port in the popup message comes from a field the user types)", () => {
+    for (const file of ["background.js", "popup.js"]) expect(readFileSync(join(ROOT, "extension", file), "utf8")).not.toMatch(/\.innerHTML\s*=/)
+    // the positive twin: the message is still built, as nodes
+    expect(readFileSync(join(ROOT, "extension", "popup.js"), "utf8")).toContain('el("status").replaceChildren(')
+  })
+
+  test("--gecko-id builds the Firefox package for an existing AMO listing; the default id stays", () => {
+    const out = mkdtempSync(join(tmpdir(), "abdo-ext-gecko-"))
+    try {
+      expect(Bun.spawnSync(["node", "scripts/pack.mjs", "--gecko-id", "bridge@example.test", "--deliver", out], { cwd: ROOT }).exitCode).toBe(0)
+      expect(JSON.parse(readFileSync(join(out, "unpacked", "firefox", "manifest.json"), "utf8")).browser_specific_settings.gecko.id).toBe("bridge@example.test")
+      expect(Bun.spawnSync(["node", "scripts/pack.mjs", "--gecko-id", "not an id"], { cwd: ROOT }).exitCode).toBe(2)
+    } finally { rmSync(out, { recursive: true, force: true }); Bun.spawnSync(["node", "scripts/pack.mjs"], { cwd: ROOT }) }
+  }, 60_000)
+
   test("the privacy note says what reaches the local app, matching the Firefox declaration", () => {
     const privacy = readFileSync(join(ROOT, "PRIVACY.md"), "utf8")
     expect(privacy).toContain("websiteContent")
