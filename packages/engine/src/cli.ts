@@ -5312,6 +5312,9 @@ const runServeShell = async (): Promise<void> => {
         const opened = await runSurfaceTool("ui", `http://127.0.0.1:${port}/`, turnId)
         if (surface === undefined) return opened
         surfaceLoadedAt = Date.now()
+      } else if (name === "audit" || name === "shot" || name === "compare") {
+        // 10-02 (مقيس): audit بلا خادمٍ مُدار قال «لا سطحَ موصول — استعمل ui» فلم يُسمَّ السببُ (لا خادمَ يعمل)؛ السببُ وأمرُه بالاسم.
+        if (!/https?:\/\//iu.test(rest)) return `${name} يحتاج خادمَ المشروع يعمل تحت إدارة النواة ولا خادمَ الآن — ابنِ (npm run build) ثمّ run --bg npm run start، أو run --bg npm run dev، ثمّ ${name}`
       } else if (name === "seo") {
         // 10-01 (مقيس في أوّل تشغيلٍ حيّ): seo على موقعٍ خارجيّ بلا خادمٍ مُدار ردّ «لا سطحَ موصول» فاحتاج النموذجُ نداءَ ui ثمّ إعادة.
         // الرابطُ الصريح نفسُه يفتح المتصفّح — والتنقّلُ يمرّ بسياسة المواقع كأيّ ui.
@@ -5691,6 +5694,8 @@ const runServeShell = async (): Promise<void> => {
               overflow: (m.overflow ?? null) as never, inlineDvh: m.inlineDvh === true, textLength: Number(m.textLength ?? 0),
               h1Count: Number(m.h1Count ?? 0), imgNoAlt: Number(m.imgNoAlt ?? 0),
               unnamedControls: list(m.unnamedControls), unlabeledFields: list(m.unlabeledFields), overlaps: list(m.overlaps),
+              // 10-02 — مقيس: القياسُ أعاد الحقولَ الثلاثة وهذه القائمةُ أسقطتها فلم يُحمِّر unstyled صفحةً بلا أنماط (4 قواعد، 52/52 رابطاً أزرق).
+              ...(typeof m.styleRules === "number" ? { styleRules: m.styleRules, linkCount: Number(m.linkCount ?? 0), uaLinks: Number(m.uaLinks ?? 0) } : {}),
             }, { path: route, width }))
           }
         }

@@ -231,6 +231,15 @@ describe("unstyled page", () => {
     expect(f.measured).toBe("3 rules · 22/22 default-blue links")
     expect(f.detail).toContain("root layout imports the global stylesheet")
   })
+  test("cli hands the three fields from the measurement to analyzePage (they were dropped once, and no unit test saw it)", () => {
+    const cli = readFileSync(new URL("../src/cli.ts", import.meta.url), "utf8")
+    expect(cli).toContain('...(typeof m.styleRules === "number" ? { styleRules: m.styleRules, linkCount: Number(m.linkCount ?? 0), uaLinks: Number(m.uaLinks ?? 0) } : {}),')
+  })
+  test("audit with no managed server names the cause and the command, not 'no surface, use ui'", () => {
+    const cli = readFileSync(new URL("../src/cli.ts", import.meta.url), "utf8")
+    expect(cli).toContain("${name} يحتاج خادمَ المشروع يعمل تحت إدارة النواة ولا خادمَ الآن")
+    expect(cli).toContain('} else if (name === "audit" || name === "shot" || name === "compare") {')
+  })
   test("the measurement script collects the three fields", () => {
     expect(MEASURE_SCRIPT).toContain("styleRules, linkCount: shownLinks.length, uaLinks,")
     expect(MEASURE_SCRIPT).toContain('if (r.type === 5) continue;')
