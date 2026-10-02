@@ -147,6 +147,7 @@ import { moduleResolutionHints } from "./module-resolution-hint"
 import { errorPlaybookHints } from "./error-playbooks"
 import { cssSourceViolation } from "./css-source-guard"
 import { isRootLayout, orphanedStylesheet, orphanedStylesheetLine } from "./root-layout-stylesheet"
+import { tailwindApplyViolation } from "./tailwind-apply-guard"
 import { DRIVE_UPLOAD_MAX, GoogleConnector, googleOptionsFromEnv } from "./mcp-servers/google"
 import { ManagedServers, devPortHint, devServerUnderBuildNote, listenerPidOf, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
@@ -1025,12 +1026,14 @@ const readThroughKernelV = async (file: string, range?: Readonly<{ from: number;
     // القصُّ بالأسطر لا بالأحرف — والبقيّةُ تُسمّى أمراً (clipReadBody).
     const shown = clipReadBody(body, readBudget, firstLine, lastLine, file)
     const orphanSheet = isRootLayout(file) ? orphanedStylesheet(PROJECT_DIR, file, text) : undefined
+    const twApplyNote = tailwindApplyViolation(PROJECT_DIR, file, text)
     return okText(
       rangeLine +
       `قرأت النواةُ الملفَّ وتحقّقت منه — بصمة المحتوى ${digest}… ` +
       `والأطوار السبعة في دفتر النواة (صفوفه الآن: ${ledgerRows() + 7}).\n` +
       `--- ${file} ---\n${shown}` +
-      (orphanSheet === undefined ? "" : `\n\n⚠ ${orphanedStylesheetLine(orphanSheet, file)}`)
+      (orphanSheet === undefined ? "" : `\n\n⚠ ${orphanedStylesheetLine(orphanSheet, file)}`) +
+      (twApplyNote === undefined ? "" : `\n\n⚠ ${twApplyNote}`)
     )
   } finally {
     await host.close()
@@ -3314,6 +3317,11 @@ const runServeShell = async (): Promise<void> => {
       return refused(`رُفض: ${orphanedStylesheetLine(orphanSheet, normalizedTarget)} — لم يُكتب شيء.`)
     }
     const invalidCss = await cssSourceViolation(identityWrite)
+    // 10-02 — صياغةٌ صحيحة ويرفضها Tailwind 4: @apply لصنفٍ عاديّ ⇦ كلُّ صفحةٍ 500 (فأُسقط import globals.css لإخفائها).
+    const twApply = invalidCss === undefined ? tailwindApplyViolation(PROJECT_DIR, normalizedTarget, after) : undefined
+    if (twApply !== undefined) {
+      return refused(`رُفض CSS: ${twApply} — لم يُكتب شيء.`)
+    }
     if (invalidCss !== undefined) {
       return refused(`رُفض CSS: ${invalidCss}. صحّح الملفَّ كاملاً ثمّ أعد الكتابة — لم يُكتب شيء.`)
     }
