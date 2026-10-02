@@ -214,3 +214,25 @@ describe("a production server older than the last build", () => {
     expect(managed).toContain("const managed: ManagedProcess = { proc, port, display, startedAt: Date.now() }")
   })
 })
+
+// 10-02 — measured: rewriting the root layout dropped `import "./globals.css"`; the whole site rendered with browser defaults
+// (default-blue underlined links, no layout) and no audit check turned red, because nothing overflowed or overlapped.
+describe("unstyled page", () => {
+  test("few style rules, or most links in the browser's default blue, is an error; a styled page and an old measurement are not", () => {
+    expect(checks({ styleRules: 3, linkCount: 22, uaLinks: 22 })).toContain("error:unstyled")
+    expect(checks({ styleRules: 4, linkCount: 0, uaLinks: 0 })).toContain("error:unstyled")
+    // the stylesheet loaded but the links still default-blue: still unstyled for the reader
+    expect(checks({ styleRules: 400, linkCount: 10, uaLinks: 8 })).toContain("error:unstyled")
+    // twins: a styled page, a page with only a couple of default links, and a measurement from before the field existed
+    expect(checks({ styleRules: 640, linkCount: 30, uaLinks: 0 })).not.toContain("error:unstyled")
+    expect(checks({ styleRules: 640, linkCount: 4, uaLinks: 3 })).not.toContain("error:unstyled")
+    expect(checks({})).not.toContain("error:unstyled")
+    const f = analyzePage({ ...clean, styleRules: 3, linkCount: 22, uaLinks: 22 }, { path: "/workspaces/default", width: 1366 }).find((x) => x.check === "unstyled")!
+    expect(f.measured).toBe("3 rules · 22/22 default-blue links")
+    expect(f.detail).toContain("root layout imports the global stylesheet")
+  })
+  test("the measurement script collects the three fields", () => {
+    expect(MEASURE_SCRIPT).toContain("styleRules, linkCount: shownLinks.length, uaLinks,")
+    expect(MEASURE_SCRIPT).toContain('if (r.type === 5) continue;')
+  })
+})

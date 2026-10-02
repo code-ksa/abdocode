@@ -14,6 +14,8 @@ export const SCALED_ROOT_FONT_PX = 44
 export const AUDIT_MAX_LINKS = 40
 export const RUNAWAY_WINDOW_MS = 3000
 export const RUNAWAY_LIMIT = 6
+/** أقلُّ من هذا من قواعد الأنماط (بلا الخطوط) = صفحةٌ بلا ورقة أنماطها؛ صفحةُ Tailwind مُنسَّقة تحمل المئات. */
+export const UNSTYLED_RULES = 20
 /** مساراتٌ لا تُطلب أبداً ولو ربطت بها الصفحة (GET وحده، ولا جلسةَ تُنهى) — من NEVER_REQUEST في lib.mjs. */
 export const NEVER_REQUEST = /\/(api\/auth|auth|logout|signout|sign-out|delete|remove|unsubscribe)(\/|$|\?)/iu
 
@@ -34,6 +36,10 @@ export interface PageMeasurement {
   readonly unnamedControls: readonly string[]
   readonly unlabeledFields: readonly string[]
   readonly overlaps: readonly string[]
+  /** 10-02 — قواعدُ الأنماط المطبّقة (بلا @font-face) وروابطُ ظاهرةٌ بلون المتصفّح الافتراضيّ: صفحةٌ بلا ورقة أنماطها. غائبةٌ في قياسٍ قديم. */
+  readonly styleRules?: number
+  readonly linkCount?: number
+  readonly uaLinks?: number
 }
 export interface AuditFinding {
   readonly path: string
@@ -117,7 +123,14 @@ export const MEASURE_SCRIPT = String.raw`(() => {
       if (smaller > 0 && (w * h) / smaller > 0.3) overlaps.push(label(a.el) + " «" + (a.el.innerText || "").trim().slice(0, 20) + "» ⟂ " + label(b.el) + " «" + (b.el.innerText || "").trim().slice(0, 20) + "»");
     }
   }
+  // 10-02 — صفحةٌ بلا أنماطها: قواعدُ الأوراق (متداخلةً في @layer/@media) بلا @font-face، وروابطُ بلون المتصفّح الافتراضيّ.
+  let styleRules = 0;
+  const countRules = (rules) => { for (const r of rules) { if (r.type === 5) continue; if (r.cssRules && r.cssRules.length) countRules(r.cssRules); else styleRules++; } };
+  for (const sheet of document.styleSheets) { try { countRules(sheet.cssRules); } catch (e) { styleRules += 50; } }
+  const shownLinks = [...document.querySelectorAll("a[href]")].filter(visible);
+  const uaLinks = shownLinks.filter((a) => { const c = getComputedStyle(a).color; return c === "rgb(0, 0, 238)" || c === "rgb(85, 26, 139)"; }).length;
   return JSON.stringify({
+    styleRules, linkCount: shownLinks.length, uaLinks,
     lang: de.getAttribute("lang"), dir: de.getAttribute("dir") || getComputedStyle(de).direction,
     overflow: { default: def, scaled },
     inlineDvh: [...document.querySelectorAll("style")].some((s) => /100dvh/.test(s.textContent || "")),
@@ -152,6 +165,10 @@ export function analyzePage(m: PageMeasurement, ctx: { readonly path: string; re
   if (m.inlineDvh) add("100dvh", "warn", "inline <style>", "svh / min-height", "Firefox Android scroll jump")
 
   if (m.overlaps.length > 0) add("text-overlap", "error", m.overlaps.length, 0, m.overlaps.slice(0, 3).join(" | "))
+  // 10-02 — مقيس: إعادةُ كتابة layout.tsx أسقطت import globals.css فخرج الموقعُ كلُّه بأنماط المتصفّح، ولم يحمرّ فحصٌ واحد (لا فيضان ولا تراكب).
+  if (m.status < 400 && m.styleRules !== undefined && (m.styleRules < UNSTYLED_RULES || ((m.linkCount ?? 0) >= 5 && (m.uaLinks ?? 0) / (m.linkCount ?? 1) >= 0.6))) {
+    add("unstyled", "error", `${m.styleRules} rules · ${m.uaLinks ?? 0}/${m.linkCount ?? 0} default-blue links`, "the app stylesheet applied", "the page renders with browser defaults — check that the root layout imports the global stylesheet and that the CSS build includes it")
+  }
   if (m.status < 400 && m.textLength >= 50 && m.h1Count !== 1) add("h1", "warn", m.h1Count, 1, "one visible h1 per page")
   if (m.imgNoAlt > 0) add("img-alt", "error", m.imgNoAlt, 0, "img without alt (alt=\"\" for decorative)")
   if (m.unnamedControls.length > 0) add("unnamed-control", "error", m.unnamedControls.length, 0, m.unnamedControls.slice(0, 4).join(" | "))
