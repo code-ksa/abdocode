@@ -160,6 +160,7 @@ export {
   SUMMARY_WITH_COMMAND,
   DUPLICATE_REPLAY_LINE,
   writeNudgeLine,
+  unchangedReadLine,
   duplicatePointerLine,
   STATEFUL_ACTION,
   pageGenerationOf,

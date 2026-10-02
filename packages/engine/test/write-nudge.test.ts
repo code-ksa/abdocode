@@ -4,7 +4,7 @@
  * قصيرة للمكرَّر بدل قطع الحقبة — والغيابُ = الحلقةُ القديمة بايتاً.
  */
 import { describe, expect, test } from "bun:test"
-import { duplicatePointerLine, runTextAgentLoop, writeNudgeLine, type TextAgentLoopOptions } from "@abdo/engine-host"
+import { duplicatePointerLine, runTextAgentLoop, unchangedReadLine, writeNudgeLine, type TextAgentLoopOptions } from "@abdo/engine-host"
 
 const cliSource = await Bun.file(new URL("../src/cli.ts", import.meta.url)).text()
 
@@ -69,6 +69,49 @@ describe("write nudge — a repeated read after the replays run out", () => {
     expect(legacy.prompts.some((p) => p.includes("نفدت إعادةُ الإيصالات"))).toBe(false)
     expect(legacy.prompts.length).toBeLessThan(prompts.length)
     expect(legacy.result.stopReason).toBe("duplicate")
+  })
+})
+
+describe("write nudge — an unchanged file re-read after a build", () => {
+  // مقيس 10-02: البناءُ يقدّم الجيلَ فلا تُعدّ القراءةُ مكرَّرة — والنموذجُ أعاد قراءةَ الخطّة والملفّاتِ نفسِها كلَّ حقبة.
+  const body = (tag: string) => `${tag} ${"سطرٌ من الملفّ ".repeat(80)}`
+  const run = (outputs: Record<string, string[]>, replies: readonly string[], extra: Partial<TextAgentLoopOptions> = {}) =>
+    drive(replies, {
+      dispatch: async (command) => (command.startsWith("run") ? "✓ build ok" : outputs[command]!.shift()!),
+      ...extra,
+    })
+  const replies = ["نفّذ: read plan.md", "نفّذ: run npm run build", "نفّذ: read plan.md"]
+
+  test("the same bytes after a build come back as a short line, not the file again — the dispatch still ran", async () => {
+    const outputs = { "read plan.md": [body("A"), body("A")] }
+    const { prompts } = await run(outputs, replies, { writeNudge: NUDGE })
+    expect(outputs["read plan.md"]).toEqual([]) // القراءتان نُفّذتا فعلاً: السطرُ يبدّل ما يُعرض لا التنفيذ
+    expect(prompts[3]).toContain(unchangedReadLine("read plan.md"))
+    expect(prompts[3]).not.toContain(body("A").slice(0, 400))
+  })
+
+  test("twins: changed bytes, no option, or the earlier text not in context ⇒ the full file", async () => {
+    // التغييرُ في آخر الملفّ: البادئةُ ظاهرةٌ في السياق، فالمساواةُ بايتاً وحدها تمنع الإشارة.
+    const changed = await run({ "read plan.md": [body("A"), `${body("A")} سطرٌ أُضيف`] }, replies, { writeNudge: NUDGE })
+    expect(changed.prompts[3]).toContain("سطرٌ أُضيف")
+    expect(changed.prompts[3]).not.toContain(unchangedReadLine("read plan.md"))
+    const off = await run({ "read plan.md": [body("A"), body("A")] }, replies)
+    expect(off.prompts[3]).toContain(body("A").slice(0, 400))
+    // إيصالٌ سابق خارج السياق (قُصّ التاريخ): لا يُفترض أنّ النموذجَ يراه.
+    const trimmed = await run({ "read plan.md": [body("A")] }, ["نفّذ: read plan.md"], {
+      writeNudge: NUDGE,
+      priorReceipts: [{ command: "read plan.md", output: body("A") }, { command: "run npm run build", output: "✓ build ok" }],
+    })
+    expect(trimmed.prompts[1]).toContain(body("A").slice(0, 400))
+  })
+
+  test("a carried receipt in the history counts as visible", async () => {
+    const { prompts } = await run({ "read plan.md": [body("A")] }, ["نفّذ: read plan.md"], {
+      writeNudge: NUDGE,
+      history: [{ role: "assistant", content: `إيصالات القراءة المحفوظة للحقبة التالية:\nنتيجة موثقة لـ«read plan.md»:\n${body("A")}` }],
+      priorReceipts: [{ command: "read plan.md", output: body("A") }, { command: "run npm run build", output: "✓ build ok" }],
+    })
+    expect(prompts[1]).toContain(unchangedReadLine("read plan.md"))
   })
 })
 
