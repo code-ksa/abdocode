@@ -180,6 +180,8 @@ describe("serve convergence wiring", () => {
       "webAudit", "releaseCheck", "visualCompare", "seoAudit",
       // 10-01 — العروضُ التقديميّة، وبوّابةُ جودة الواجهات.
       "slides", "cvAnalysis", "driveUpload", "writeNudge", "auditGate",
+      // 10-02 — الموصّلاتُ من المحادثة.
+      "connectTool",
     ])
     expect(declared.map((d) => `${d.name}: ${d.defaultOn}`).sort()).toEqual(
       ("denialBreaker: false, unattendedDeny: true, standingGrants: false, inboundGuard: true, mcpClient: false, delegation: false, reviewer: false, activity: false, walls: true, verifier: false, toolVerdict: true, trailCompaction: true, miner: true, readCompaction: true, cacheAccounting: true, resumeIntent: true, turnBudget: true, receiptFixtures: true, intentField: false"
@@ -190,7 +192,7 @@ describe("serve convergence wiring", () => {
         + ", terminalPanel: true, serversPanel: false, tasksPanel: true"
         // البند 13 (2026-09-27): المسبارُ التلقائيّ يُنفق توكنات فيبدأ مطفأً.
         + ", providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true"
-        + ", webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, cvAnalysis: true, driveUpload: true, writeNudge: true, auditGate: true").split(", ").sort(),
+        + ", webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, cvAnalysis: true, driveUpload: true, writeNudge: true, auditGate: true, connectTool: true").split(", ").sort(),
     )
     // ولا صفَّ ثابتاً بقي في القشرة: الصفوف عُقدٌ تُبنى من الإطار، والاستعادة تُحسب من الأوصاف.
     expect(desktopUi).toContain('<div id="pluginrows"></div>')
@@ -593,7 +595,7 @@ describe("serve convergence wiring", () => {
         expect(source.split('pluginOnNow("osSandbox")').length - 1).toBe(1)
         continue
       }
-      if (d.name === "webAudit" || d.name === "releaseCheck" || d.name === "visualCompare" || d.name === "seoAudit" || d.name === "slides" || d.name === "cvAnalysis" || d.name === "driveUpload" || d.name === "auditGate") {
+      if (d.name === "webAudit" || d.name === "releaseCheck" || d.name === "visualCompare" || d.name === "seoAudit" || d.name === "slides" || d.name === "cvAnalysis" || d.name === "driveUpload" || d.name === "auditGate" || d.name === "connectTool") {
         // 10-01 — كلُّ أداة تدقيقٍ تُسأل عند استدعائها وحده، بالمحلِّل نفسِه (`pluginOnNow`)، قارئاً واحداً لكلٍّ.
         expect(d.site).toBe("call")
         expect(source.split(`pluginOnNow("${d.name}")`).length - 1).toBe(1)
@@ -700,7 +702,8 @@ describe("serve convergence wiring", () => {
     // Connectors (2026-09-06): linking a connector writes its MCP server, and forgetting removes it — both publish canonical settings.
     // 2026-09-13: «browser owned|extension|off» من الشات يحفظ خلفيّة المتصفّح ويبثّ الإعدادات القانونيّة أيضاً.
     // 2026-09-14: «وصّل» على جسر المتصفّح يفعّل عميلَ MCP بنفسه ويبثّ الإعدادات القانونيّة (كان يُرفض بمفتاحٍ لا يعرفه المستخدم).
-    expect(source.match(/pluginFrameFields\(/gu)).toHaveLength(14)
+    // 2026-10-02: «connect <موصّل>» من المحادثة يربط ويبثّ الإعدادات القانونيّة كزرّ الإعدادات.
+    expect(source.match(/pluginFrameFields\(/gu)).toHaveLength(15)
     expect(source).toContain("const pluginFrameFields = (s: Settings): Record<string, unknown> => ({")
     // السياق يُمرَّر إلى الوصف: بلا وسيطٍ كانت os تُثبَّت على «other» فتُعرض كلُّ
     // قاعدةٍ على `os == windows` معطَّلةً بينما يقرؤها كلُّ دورٍ مفعَّلة.

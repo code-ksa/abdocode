@@ -11,6 +11,7 @@ export const TOOL_FAMILIES: Readonly<Record<string, readonly string[]>> = Object
   // 10-01 — أدواتُ اليوم بلا عائلة كانت تُعرض في كلّ نداء (≈3 آلاف حرفٍ من الكتالوج): قيس بحمل context-window-live (نافذةٌ 22k
   // تجاوزت المدخلَ فأُسقط تبادل). audit وcompare وseo وrelease-check مع المتصفّح؛ والعروضُ والوضعيّةُ بعائلتين تفتحهما النيّة.
   documents: ["slides", "cv", "drive-upload"],
+  connectors: ["connectors", "connect"],
   security: ["posture"],
 })
 const FAMILY_OF = new Map<string, string>()
@@ -20,6 +21,8 @@ const BROWSER_WORDS = /متصفّ?ح|browser|إضافة المتصفّ?ح|الإ
 const DESKTOP_WORDS = /سطح المكتب|desktop|computer use|نافذة|window\b|تطبيق سطح|\bapp\b.*(?:افتح|open)|اضغط على|click on the app|desk\b|الماوس|ماوس|الكيبورد|كيبورد|لوحة المفاتيح|\bmouse\b|\bkeyboard\b|فوتوشوب|photoshop|illustrator|premiere|برنامج سطح المكتب|املأ|ملء|عبّئ|تعبئة|نموذج|form\b|fill in|اكتب في|type into|المفكرة|notepad|excel|إكسل|word\b|وورد|تطبيق|application/iu
 const DELEGATION_WORDS = /فريق|team\b|وكلاء|وكيل|agent|فوّ?ض|delegate|بالتوازي|parallel|handoff|سلّم المهمّة/iu
 const DOCUMENT_WORDS = /عرض(?:ٌ|ا)?\s*تقديم|بريزنتيشن|بريزنتيشين|برزنتيشن|presentation|slides?\b|شرائح|سلايد|pptx|power\s*point|باور\s*بوينت|باوربوينت|google\s*slides|جوجل\s*سلايد|google\s*(?:drive|docs|sheets)|(?:جوجل\s*)?درايف|مستند(?:ات)?\s*جوجل|جداول\s*جوجل|سير(?:ة|ه)?\s*(?:ال)?ذاتي|السير(?:ة|ه)|(?:^|\s)(?:لل|ال|بال)?سي\s*في(?:\s|$)|\bcv\b|\bcvs\b|resum[eé]|\bats\b|مرش(?:ّ)?ح|candidates?\b|توظيف|hiring|وصف\s*(?:ال)?وظيفي|job\s*description|\.docx\b/iu
+// 10-02 — اسمُ خدمةٍ مربوطةٍ أو فعلُ ربطٍ يفتح عائلةَ الموصّلات (الكتالوجُ لا يُحمَّل بها في كلّ نداء).
+const CONNECTOR_WORDS = /موص(?:ّ)?ل|تكامل|integration|connector|\bconnect\b|اربط|وص(?:ّ)?ل (?:سلاك|نوشن|جوجل)|slack|سلاك|notion|نوشن|نوتون|gmail|جيميل|google drive|درايف|github|جيت ?هب|asana|اسانا|أسانا|linear|jira|جيرا|confluence|atlassian|figma|فيجما|intercom|granola|gamma/iu
 const SECURITY_WORDS = /posture|وضعي(?:ّ)?ة|أمان|الأمان|آمن|security|صلاحي(?:ّ)?ات|permissions?\b|تماسك/iu
 
 export function familyOf(toolName: string): string | undefined { return FAMILY_OF.get(toolName) }
@@ -33,6 +36,7 @@ export function familiesFor(goal: string, inherited: ReadonlySet<string> = new S
   if (DELEGATION_WORDS.test(text)) out.add("delegation")
   if (DOCUMENT_WORDS.test(text)) out.add("documents")
   if (SECURITY_WORDS.test(text)) out.add("security")
+  if (CONNECTOR_WORDS.test(text)) out.add("connectors")
   return out
 }
 

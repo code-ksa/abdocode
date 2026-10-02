@@ -3962,6 +3962,12 @@ const pluginTranslations = {
 "englishLabel": "UI quality gate on sprint close",
 "englishDescription": "In a web project (Next, Vite or HTML): «sprint done» for a sprint that edited UI files (tsx/jsx/css/html/vue/svelte/astro) is refused until audit returns PASS after the last UI edit — no horizontal overflow, no overlap, no broken links and no unnamed buttons across the five widths. A run that returned FAIL is named in the refusal. Disabled means build, tests and a page measurement suffice, as before. Applies immediately."
   },
+"connectTool": {
+"label": "ربطُ الموصّلات من المحادثة (connect / connectors)",
+"description": "أداتا connectors وconnect: يعرف الوكيلُ من المربوطُ والموصولُ من الموصّلات (جوجل، سلاك، نوشن، GitHub، Asana، Linear…) وبأيّ أدوات، ويطلب الربطَ من المحادثة — يُفتح متصفّحُك لتسجيل الدخول والموافقة (لا يرى عبدو كود كلمةَ مرور)، والرموزُ إلى الخزنة، ويُوصل خادمُ الموصّل فتُستدعى أدواتُه في الدور نفسِه. الربطُ يُعرض للموافقة أوّلاً. مقيس: الربطُ كان زرّاً في الإعدادات وحده فلم تُنجَز «اربط نوشن وأنشئ صفحة» من المحادثة. المعطَّل = ترفض الأداتان باسمهما. يسري فوراً.",
+"englishLabel": "Connect services from the conversation (connect / connectors)",
+"englishDescription": "The connectors and connect tools: the agent sees which connectors (Google, Slack, Notion, GitHub, Asana, Linear…) are linked and live, with their tools, and can ask to link one from the conversation — your browser opens for sign-in and consent (AbdoCode never sees a password), the tokens go to the vault, and the connector's server is connected so its tools can be called in the same turn. Linking asks for approval first. Measured: linking was only a Settings button, so «link Notion and create a page» could not be done from the conversation. Off = both tools refuse by name. Applies immediately.",
+  },
 "resumeIntent": {
 "label": "آلية اكمل من حيث توقفت",
 "description": "دورٌ يقول اكمل فقط يرث هدف الدور السابق وبواباته ويقرأ التسليم أولاً. يسري من الدور القادم.",

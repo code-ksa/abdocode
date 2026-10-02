@@ -79,6 +79,7 @@ export type PluginName =
   | "driveUpload"
   | "writeNudge"
   | "auditGate"
+  | "connectTool"
   | "settingsSeam"
   | "inventory"
   | "rules"
@@ -715,6 +716,17 @@ export const PLUGINS: readonly PluginDescriptor[] = Object.freeze([
     name: "auditGate",
     label: "بوّابةُ جودة الواجهات عند إغلاق السبرنت",
     description: "في مشروع ويب (Next أو Vite أو HTML): «sprint done» لسبرنتٍ عدّل ملفّاتِ واجهة (tsx/jsx/css/html/vue/svelte/astro) يُرفض حتى يمرّ audit بحكم PASS بعد آخر تعديلٍ للواجهة — لا فيضانَ أفقيّاً ولا تراكبَ ولا روابطَ مكسورة ولا أزرارَ بلا اسم على العروض الخمسة. تشغيلٌ حكمُه FAIL يُسمّى في الرفض. المعطَّل = يكفي البناءُ والاختبارُ وقياسُ الصفحة كما كان. يسري فوراً.",
+    defaultOn: true,
+    applies: "immediate",
+    site: "call",
+    wired: true,
+    requiresVault: Object.freeze([]),
+  }),
+  // 10-02 — الموصّلاتُ من المحادثة: حالُها وطلبُ ربطها.
+  Object.freeze({
+    name: "connectTool",
+    label: "ربطُ الموصّلات من المحادثة (connect / connectors)",
+    description: "أداتا connectors وconnect: يعرف الوكيلُ من المربوطُ والموصولُ من الموصّلات (جوجل، سلاك، نوشن، GitHub، Asana، Linear…) وبأيّ أدوات، ويطلب الربطَ من المحادثة — يُفتح متصفّحُك لتسجيل الدخول والموافقة (لا يرى عبدو كود كلمةَ مرور)، والرموزُ إلى الخزنة، ويُوصل خادمُ الموصّل فتُستدعى أدواتُه في الدور نفسِه. الربطُ يُعرض للموافقة أوّلاً. مقيس: الربطُ كان زرّاً في الإعدادات وحده فلم تُنجَز «اربط نوشن وأنشئ صفحة» من المحادثة. المعطَّل = ترفض الأداتان باسمهما. يسري فوراً.",
     defaultOn: true,
     applies: "immediate",
     site: "call",

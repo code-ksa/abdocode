@@ -227,6 +227,7 @@ import { modelOutputViolation } from "./model-output-guard"
 import { excessiveMetadataDescription } from "./public-content-quality-guard"
 import { grepRegex } from "./grep-pattern"
 import { effectivePattern, parseGrepArgs, tokenizeArgs } from "./grep-args"
+import { connectReceipt, renderConnectors, resolveConnector } from "./connectors/agent-tools"
 
 installEgressGuard()
 
@@ -4160,6 +4161,41 @@ const runServeShell = async (): Promise<void> => {
         return unknownTool(`لا محوّل مربوطاً باسم ${spec.name}`)
       }
       case "net": {
+        if (spec.name === "connectors" || spec.name === "connect") {
+          // 10-02 — الموصّلاتُ من المحادثة: الحالُ من الخزنة (حضورُ المقابض لا قيمها) والجلسة؛ والربطُ هو رقصةُ زرّ الإعدادات نفسُها
+          // (runConnectorAuth): القشرةُ تفتح المتصفّحَ للموافقة وتُوصل الخادمَ بعد حفظ الإعدادات، والأداةُ تنتظر وتعيد الأدواتِ الحيّة.
+          if (!pluginOnNow("connectTool")) return denied(`رُفض ${spec.name}: ربطُ الموصّلات من المحادثة مطفأ (plugins.connectTool) — فعّله من الإعدادات.`, "tool_not_permitted")
+          const toolsOf = (id: string): string[] => externals.get(connectorServerId(id))?.tools().map((t) => t.name) ?? []
+          const rows = await connectorRows((serverId) => externals.has(serverId))
+          const views = rows.map((r) => ({ id: String(r.id), label: String(r.label), labelAr: String(r.labelAr), linked: r.linked === true, needsClient: r.needsClient === true, connected: r.connected === true, ownerClient: r.ownerClient as { howTo: string } | null }))
+          if (spec.name === "connectors") return okText(renderConnectors(views, toolsOf))
+          const word = rest.trim()
+          const target = resolveConnector(word)
+          if (target === undefined) return invalid(`موصّلٌ مجهول «${word.slice(0, 40)}» — الموصّلات: ${CONNECTORS.map((c) => c.id).join("، ")}`)
+          const view = views.find((v) => v.id === target.id)!
+          if (view.linked && view.connected) return okText(connectReceipt(target.labelAr, "linked", undefined, toolsOf(target.id)).text)
+          if (view.needsClient) return invalid(`«${target.labelAr}» يحتاج تطبيقاً خاصّاً قبل الربط — ${view.ownerClient?.howTo ?? "الإعدادات ← الموصّلات"}`)
+          if (shellKind !== "desktop") return invalid(`ربطُ «${target.labelAr}» يفتح متصفّحك للموافقة — يعمل من تطبيق عبدو كود على سطح المكتب.`)
+          if (!await gate(turnId, spec.effect, `ربطُ «${target.labelAr}»: يُفتح متصفّحك لتسجيل الدخول والموافقة، والرموزُ تُحفظ في الخزنة`)) return denied(`رُفض ربطُ «${target.labelAr}»: لم يُوافَق.`, "policy_denied")
+          let last: { state?: string; detail?: string } = {}
+          const watch = (frame: object) => {
+            emit(frame)
+            const f = frame as { kind?: string; id?: string; state?: string; detail?: string }
+            if (f.kind === "connector-status" && f.id === target.id) { last = { state: f.state, detail: f.detail }; if (f.state === "authorizing") void emitEvent(turnId, `🔗 ${f.detail ?? "افتح المتصفّح وأكمل تسجيل الدخول"} («${target.labelAr}»)`) }
+          }
+          const running = connectorTasks.get(target.id)
+          if (running !== undefined) await running
+          else {
+            const task = runConnectorAuth(target.id, watch, (next) => emit({ kind: "settings", settings: next, ...pluginFrameFields(next) })).finally(() => connectorTasks.delete(target.id))
+            connectorTasks.set(target.id, task)
+            await task
+          }
+          if (running !== undefined && last.state === undefined) last = (await connectorRows((serverId) => externals.has(serverId))).find((r) => r.id === target.id)?.linked === true ? { state: "linked" } : { state: "error", detail: "ربطٌ سابقٌ جارٍ انتهى بلا ربط" }
+          // القشرةُ تُوصل الخادمَ بعد حفظ الإعدادات — يُنتظر حتى عشرين ثانية كي تُستدعى أدواتُه في الدور نفسِه.
+          for (let i = 0; i < 80 && last.state === "linked" && !externals.has(connectorServerId(target.id)); i += 1) await Bun.sleep(250)
+          const receipt = connectReceipt(target.labelAr, last.state, last.detail, toolsOf(target.id))
+          return receipt.ok ? okText(receipt.text) : invalid(receipt.text)
+        }
         if (spec.name === "search") {
           const { GoogleSearch } = await import("./mind/google-search")
           let request: import("./mind/google-search").GoogleSearchRequest
