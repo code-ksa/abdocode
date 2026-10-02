@@ -151,7 +151,7 @@
     },
     "packages/desktop": {
       "name": "@abdo/desktop",
-      "version": "4.0.108",
+      "version": "4.0.109",
       "dependencies": {
         "@abdo/engine": "workspace:*",
         "@abdo/kernel": "workspace:*",
