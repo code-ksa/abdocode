@@ -29,6 +29,7 @@ cd packages/browser-bridge && node scripts/pack.mjs --deliver "%USERPROFILE%\Des
 | `dist/abdo-code-bridge-chrome-<v>.zip` | Chrome Web Store |
 | `dist/abdo-code-bridge-edge-<v>.zip` | Microsoft Edge Add-ons (الحزمة نفسها) |
 | `dist/abdo-code-bridge-safari-<v>.zip` | مادّة المحوّل على ماك (بلا صلاحية `debugger`) |
+| `dist/abdo-code-bridge-firefox-<v>.zip` | Firefox Add-ons (AMO): صفحةُ أحداث بدل عامل الخدمة، بلا `debugger`، والمعرّف `abdo-code-bridge@abdocode.io`، وفايرفوكس 140+ (أندرويد 142+) |
 
 ## ٣) حسابات المطوّرين — الروابط (مؤكَّدة من الوثائق الرسمية 2026-09-06)
 
@@ -36,7 +37,14 @@ cd packages/browser-bridge && node scripts/pack.mjs --deliver "%USERPROFILE%\Des
 |---|---|---|---|
 | **Chrome Web Store** | <https://chrome.google.com/webstore/devconsole> (بحساب جوجل؛ البريد لا يتغيّر لاحقاً) | رسمُ تسجيلٍ لمرّةٍ واحدة — «بمبلغٍ تحدّده جوجل» (يظهر عند الدفع؛ المتداول ٥ دولارات) | New item ← ارفع zip ← Store listing ← Privacy ← Distribution ← Test instructions ← Submit for review |
 | **Edge Add-ons** | <https://partner.microsoft.com/dashboard/microsoftedge/public/login> (حساب مايكروسوفت؛ حسابٌ فرديّ أسرع من حساب شركة) | **مجّاني** | Create new extension ← ارفع zip ← Properties ← Store listings ← Privacy ← Notes for certification ← Publish |
+| **Firefox Add-ons (AMO)** | <https://addons.mozilla.org/developers/> (حساب Mozilla) | **مجّاني** | Submit a New Add-on ← On this site ← ارفع zip ← (قد يُطلب المصدر: الحزمةُ بلا تصغير فلا يلزم) ← الوصف والفئة ← Submit |
 | **Safari / App Store** | <https://developer.apple.com/programs/enroll/> ثمّ <https://appstoreconnect.apple.com> | ٩٩ دولاراً سنوياً (يتفاوت بالمنطقة؛ الشركات تحتاج D-U-N-S) | Xcode ← Archive ← App Store Connect ← Review |
+
+### إفصاحُ البيانات (يُطابق المتاجرَ الثلاثة — 2026-10)
+
+- **كروم (سياساتُ 1 أغسطس 2026):** غرضٌ واحد = «يربط التبويبَ النشط بتطبيق عبدو كود على الجهاز نفسِه». في Privacy practices: محتوى الموقع (Website content) ونشاطُ التصفّح (عنوانُ التبويب) — يُرسلان إلى التطبيق المحلّيّ فقط، لا يُباعان ولا يُستعملان لغير الغرض.
+- **إيدج:** الإفصاحُ نفسُه في Privacy، ورابطُ `PRIVACY.md`.
+- **فايرفوكس:** يُعلَن في المانيفست `data_collection_permissions.required = ["websiteContent", "browsingActivity"]` (AMO يعدّ نقلاً كلَّ ما يغادر المتصفّح ولو إلى 127.0.0.1)، ويظهر للمستخدم عند التثبيت.
 
 ## ٤) نصوص المتجر (تُنسخ كما هي)
 

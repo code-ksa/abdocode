@@ -8,7 +8,9 @@ _Last updated: 2026-09-06 · Publisher: example (Abdo Code)_
 
 **Data accessed.** Only the content, URL and title of the **active tab**, and only **when a command is issued**. The extension never reads passwords: fields recognised as credentials are refused and handed back to you to type yourself.
 
-**Where data goes.** Exclusively to the Abdo Code application on the same machine, over a local socket bound to `127.0.0.1`. Nothing is transmitted to example, to Anthropic, to Google, or to any other server. Screenshots are saved on your own disk by the application and never uploaded by the extension.
+**Where data goes.** Exclusively to the Abdo Code application on the same machine, over a local socket bound to `127.0.0.1`. Nothing is transmitted to the developer, to Google, or to any other server. Screenshots are saved on your own disk by the application and never uploaded by the extension.
+
+**Store declarations.** Because the active tab's content and URL leave the browser (to the local application), the Firefox package declares `data_collection_permissions` as `websiteContent` and `browsingActivity`, and the Chrome Web Store and Edge listings disclose the same two categories. Nothing else is collected.
 
 **Storage.** The extension stores two values in browser storage: the local port and the pairing token you pasted. It does not store page content, history, or cookies.
 

@@ -86,10 +86,11 @@ const targets = [
     delete m.minimum_chrome_version
     m.background = { scripts: ["background.js"] }
     // `data_collection_permissions` شرطٌ يفرضه AMO على كلّ حزمة (ردَّ التحقّق حرفياً: "property is missing").
-    // وإضافتُنا لا تجمع شيئاً — لا تُرسل إلا إلى 127.0.0.1 ولا تخزّن محتوى صفحات — فتُعلَن `none` صراحةً لا صمتاً.
+    // 10-02: كان `none` — لكنّ AMO يعدّ «نقلاً» كلَّ ما يغادر الإضافةَ أو المتصفّح، وإضافتُنا ترسل محتوى الصفحة وعنوانَ التبويب
+    // إلى تطبيق عبدو كود على 127.0.0.1 عند أمرٍ فقط؛ فيُعلَن ما يُنقل فعلاً. والخاصيّةُ يدعمها فايرفوكس 140 (وأندرويد 142) فصاعداً.
     // المعرّفُ من نطاق المنتج نفسِه (`io.abdocode.desktop` مقلوباً) لا من نطاق الشركة: حارسُ الخطّين
     // يرفض معرّفَ منتجٍ آخر لنا داخل خطّ النواة، والإضافةُ جزءٌ من عبدو كود لا من مِلكيّةٍ ثانية.
-    m.browser_specific_settings = { gecko: { id: "abdo-code-bridge@abdocode.io", strict_min_version: "128.0", data_collection_permissions: { required: ["none"] } } }
+    m.browser_specific_settings = { gecko: { id: "abdo-code-bridge@abdocode.io", strict_min_version: "140.0", data_collection_permissions: { required: ["websiteContent", "browsingActivity"] } }, gecko_android: { strict_min_version: "142.0" } }
     return m
   } },
 ]

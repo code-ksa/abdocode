@@ -81,13 +81,13 @@ describe("S11 — chrome.look على حقل يعيد قيمتَه في `value`،
     expect(lookReceipt({ text: "x" }, undefined)).toBe('{"text":"x"}')
   })
 
-  test("الإضافة 0.6.5 تقرأ القيمة في الصفحة وتحجب كلمةَ المرور فيها، والمانيفست 0.6.5", () => {
+  test("الإضافة 0.6.5 تقرأ القيمة في الصفحة وتحجب كلمةَ المرور فيها، والمانيفست 0.6.8", () => {
     const background = readFileSync(resolve(import.meta.dir, "../../browser-bridge/extension/background.js"), "utf8")
     expect(background).toContain('const field = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"')
     expect(background).toContain(': tag === "INPUT" && (el.getAttribute("type") || "").toLowerCase() === "password" ? "«محجوب»"')
     expect(background).toContain(': String(el.value || "").slice(0, 2000)')
     expect(background).toContain("...(value === undefined ? {} : { value }), styles })")
-    expect(JSON.parse(readFileSync(resolve(import.meta.dir, "../../browser-bridge/extension/manifest.json"), "utf8")).version).toBe("0.6.5")
+    expect(JSON.parse(readFileSync(resolve(import.meta.dir, "../../browser-bridge/extension/manifest.json"), "utf8")).version).toBe("0.6.8")
   })
 })
 

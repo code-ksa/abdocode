@@ -45,6 +45,10 @@ const READ_TREE = () => {
     if (t !== "INPUT" && t !== "TEXTAREA" && t !== "SELECT") return undefined
     const type = t === "INPUT" ? (el.getAttribute("type") || "text").toLowerCase() : ""
     if (type === "submit" || type === "button" || type === "file" || type === "checkbox" || type === "radio" || type === "hidden") return undefined
+    // 0.6.6: كروم يُظهر الحقلَ معبّأً بحفظه لكنّه يُخفي قيمتَه عن السكربت حتى أوّل لمسةٍ حقيقيّة —
+    // فكان يُقرأ «فارغاً» فيُطلب من المستخدم الضغط (مقيس 09-19 على صفحة دخولٍ حقيقيّة). الحالةُ من :autofill لا من القيمة.
+    const autofilled = (() => { for (const sel of [":autofill", ":-webkit-autofill"]) { try { if (el.matches(sel)) return true } catch { /* قديم */ } } return false })()
+    if (autofilled) return "autofilled"
     return (el.value || "").trim().length > 0 ? "filled" : "empty"
   }
   const role = (el) => {
@@ -117,6 +121,14 @@ const SELECT_FIELD = (ref) => {
   if (typeof el.select === "function" && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) { el.select(); return { length: String(el.value || "").length } }
   if (el.isContentEditable) { const sel = window.getSelection(); sel.removeAllRanges(); const range = document.createRange(); range.selectNodeContents(el); sel.addRange(range); return { length: String(el.textContent || "").length } }
   return { length: 0 }
+}
+
+// What the field holds after a fill: its length only (never the value — it can be a password).
+const READ_FIELD = (ref) => {
+  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  if (!el) return null
+  const v = (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) ? String(el.value || "") : String(el.textContent || "")
+  return { length: v.length }
 }
 
 const SYNTH_FILL = (ref, text) => {
@@ -348,7 +360,7 @@ const settled = (tabId, ms = 15000) => new Promise((resolve) => {
 const perform = async (action, args) => {
   const tab = await activeTab({ createIfNone: action === "open" || action === "tabs" })
   switch (action) {
-    // 0.6.3 — إعادةُ تحميل الإضافة من قرصها بأمر عبدو كود (المالك: «عبدو كود هو من يضغط» لا هو): الردُّ أوّلاً ثمّ التحميل، والمقبسُ يعود بالرمز المحفوظ.
+    // 0.6.3 — إعادةُ تحميل الإضافة من قرصها بأمر عبدو كود (عبدو كود يعيد التحميل لا المستخدم): الردُّ أوّلاً ثمّ التحميل، والمقبسُ يعود بالرمز المحفوظ.
     case "reload": setTimeout(() => api.runtime.reload(), 300); return { ok: true, version: api.runtime.getManifest().version }
     case "hello": return { trusted: TRUSTED_INPUT, ua: navigator.userAgent.slice(0, 120), version: api.runtime.getManifest().version }
     case "page": return inPage(tab.id, READ_TREE)
@@ -377,7 +389,7 @@ const perform = async (action, args) => {
       })
     }
     case "fill": {
-      if (!TRUSTED_INPUT) { const r = await inPage(tab.id, SYNTH_FILL, [args.ref, String(args.text)]); if (!r) throw new Error("element not found"); return r }
+      if (!TRUSTED_INPUT) { const r = await inPage(tab.id, SYNTH_FILL, [args.ref, String(args.text)]); if (!r) throw new Error("element not found"); const back = await inPage(tab.id, READ_FIELD, [args.ref]); return { ...r, length: back ? back.length : null, expected: String(args.text).length } }
       const at = await inPage(tab.id, LOCATE, [args.ref])
       if (!at) throw new Error("element not found")
       return withDebugger(tab.id, async (send) => {
@@ -390,8 +402,18 @@ const perform = async (action, args) => {
           await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 })
           await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 })
         }
-        for (const ch of text) { await send("Input.dispatchKeyEvent", { type: "keyDown", text: ch }); await send("Input.dispatchKeyEvent", { type: "keyUp", text: ch }) }
-        return { mode: "trusted", replaced: selected ? selected.length : 0 }
+        // 0.6.7: one Input.insertText, not a keyDown per character. Per-character keyDown{text} left React-controlled
+        // fields (a CMS article editor) empty and took minutes for a long article (measured 2026-09-19: two fills
+        // read back "" after a "successful" fill). insertText is the browser's own typing path: beforeinput + input fire.
+        if (text.length > 0) await send("Input.insertText", { text })
+        const after = await inPage(tab.id, READ_FIELD, [args.ref])
+        // The framework may still have discarded it: set the value through the native setter and report which path held.
+        if (text.length > 0 && after && after.length === 0) {
+          await inPage(tab.id, SYNTH_FILL, [args.ref, text])
+          const again = await inPage(tab.id, READ_FIELD, [args.ref])
+          return { mode: "trusted+native", replaced: selected ? selected.length : 0, length: again ? again.length : null, expected: text.length }
+        }
+        return { mode: "trusted", replaced: selected ? selected.length : 0, length: after ? after.length : null, expected: text.length }
       })
     }
     case "key": {
@@ -504,7 +526,7 @@ const pairLoop = async () => {
   if (!result.paired) pairTimer = setTimeout(pairLoop, 5000)
 }
 
-// ب8ب (مقيس 09-14 على جهاز المالك): بعد إعادة تشغيل عبدو كود لم تعد الإضافةُ تتّصل — مؤقّتُ إعادة المحاولة يموت مع إيقاف عامل
+// ب8ب (مقيس 09-14): بعد إعادة تشغيل عبدو كود لم تعد الإضافةُ تتّصل — مؤقّتُ إعادة المحاولة يموت مع إيقاف عامل
 // الخدمة (MV3)، والرمزُ قد يتبدّل. فالمنبّهُ يوقظ العاملَ كلَّ دقيقة ليعيد الاتّصال، وقبل كلّ اتّصالٍ برمزٍ محفوظ يُسأل /pair:
 // إن كانت نافذةُ الاقتران مفتوحةً وأعطت رمزاً مختلفاً حلّ محلَّ القديم (الرمزُ تبدّل) — وإلّا يُستعمل المحفوظ كما هو.
 const refreshToken = async (port, token) => {
