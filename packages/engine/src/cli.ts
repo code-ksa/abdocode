@@ -1125,7 +1125,8 @@ const CHAT_OUTPUT_RESERVE = 4_096
 const AGENT_OUTPUT_RESERVE = 16_384
 // Thinking-capable local 9B repairs repeatedly exhausted 4096 before emitting
 // a complete tool call. This remains inside the separate 16384 output reserve.
-const AGENT_EPOCH_OUTPUT_TOKENS = 8_192
+// 10-02 — 8,192 قطع كتابةَ صفحةٍ كاملة (25 ألف حرف) مرّتين متتاليتين؛ 16,384 = احتياطيُّ الخرج نفسُه، فلا تنقص ميزانيّةُ المدخل.
+const AGENT_EPOCH_OUTPUT_TOKENS = 16_384
 
 /** خطّافا البثّ والمقاطعة — تنفيذٌ واحد للـCLI والقشرتين، فلا يفترقان. */
 interface AskHooks {
@@ -2296,7 +2297,7 @@ const askOnce = async (
       // التوكنز أُنفقت فعلاً — يُحاسَب الدور ولو فشل الدفتر على القرص (خارج try عمداً).
       hooks.turnMeter?.charge(charged)
     }
-    const incomplete = modelOutputViolation(decoded.finishReason)
+    const incomplete = modelOutputViolation(decoded.finishReason, false, "text" in decoded && typeof decoded.text === "string" ? decoded.text : "")
     if (incomplete !== undefined) {if(hooks.conversationMode==='chat')throw Error(incomplete);return incomplete}
     if (decoded.kind === "tools") {
       if(hooks.conversationMode==='chat')throw Error('Chat mode does not execute model tool calls. Switch to Code for project actions.')
@@ -2394,7 +2395,7 @@ const askOnce = async (
   // ذيلِ بثٍّ فلا محاسبةَ خبيئة (لا قارئَ رابعاً لـcacheAccounting). المقطوعُ قبل الذيل يعود من catch أعلاه.
   const streamedUsage = { inputTokens: tail.prompt_eval_count, outputTokens: tail.eval_count }
   meterCall(prov, selected.model, undefined, startedAt, streamedUsage, chargeableUsage(streamedUsage, estimated, requestOutputCap, false))
-  const incomplete = modelOutputViolation(finishReason)
+  const incomplete = modelOutputViolation(finishReason, false, partial)
   if (incomplete !== undefined) {if(hooks.conversationMode==='chat')throw Error(incomplete);return incomplete}
   const cleanAnswer=normalizeToolNames(partial.replace(/<think>[\s\S]*?<\/think>/g, "").trim())
   if(hooks.conversationMode==='chat'&&(!cleanAnswer||finishReason==='tool_calls'||finishReason==='function_call'))throw Error('The model did not return a conversation answer. Chat mode does not execute tools.')
