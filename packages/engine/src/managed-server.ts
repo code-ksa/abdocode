@@ -12,6 +12,7 @@
  * بأدوات HTTP العادية.
  */
 
+import { pidAlive } from "./owner-watch"
 import { existsSync, readFileSync, realpathSync } from "node:fs"
 import { isAbsolute, join } from "node:path"
 import { systemTool } from "./system-tools"
@@ -284,6 +285,12 @@ export function devServerUnderBuildNote(servers: readonly { readonly display: st
   return `\n⚠ بُني والخادمُ «${dev.display}» (pid ${dev.pid ?? "?"}) حيٌّ على :${dev.port} للمشروع نفسِه — يكتبان .next معاً فتفسد أصولُه (404 على /_next/static). أوقفه (stop ${dev.pid ?? "<pid>"})، وللإنتاج: run --bg npm run start بعد البناء.`
 }
 
+/** 10-02 — الخادمُ المُدار حيٌّ إن بقي مُغلِّفُه، أو بقي المُنصتُ المسجَّل له بعد خروج المُغلِّف (npm ⇦ next). */
+export function serverAlive(exitCode: number | null, wrapperPid: number | undefined, listenerPid: number | undefined, alive: (pid: number) => boolean = pidAlive): boolean {
+  if (exitCode === null) return true
+  return listenerPid !== undefined && listenerPid !== wrapperPid && alive(listenerPid)
+}
+
 export class ManagedServers {
   #running: ManagedProcess[] = []
 
@@ -385,7 +392,9 @@ export class ManagedServers {
 
   /** لوحةُ المهامّ الخلفيّة (09-14): الخوادمُ المُدارة الحيّة بمنفذها — قراءةٌ لا أثر. */
   snapshot(): readonly { readonly display: string; readonly port: number; readonly pid: number | undefined; readonly alive: boolean; readonly startedAt: number }[] {
-    return this.#running.map((p) => ({ display: p.display, port: p.port, pid: p.listenerPid ?? p.proc.pid, alive: p.proc.exitCode === null, startedAt: p.startedAt }))
+    // 10-02 — مقيس حيّاً: «npm run dev» يسلّم الإنصاتَ لابنه ويخرج المُغلِّف، فقال run «خادمك يعمل فعلاً» (المنفذُ يُنصت) وقال audit
+    // «يحتاج خادماً مُداراً» (المُغلِّفُ خرج) — فأوقفه النموذجُ وأعاده ودار. الحيُّ: المُغلِّفُ أو المُنصتُ الذي سُجّل له.
+    return this.#running.map((p) => ({ display: p.display, port: p.port, pid: p.listenerPid ?? p.proc.pid, alive: serverAlive(p.proc.exitCode, p.proc.pid, p.listenerPid), startedAt: p.startedAt }))
   }
 
   /** نهاية الدور: الشجرات كلها تُقتل حتماً — لا يتيم يعلّق أحداً. */

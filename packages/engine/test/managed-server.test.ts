@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { ManagedServers, longPathOf, parseServerCommand, resolveLauncher, wrappedServerViolation } from "../src/managed-server"
+import { ManagedServers, longPathOf, parseServerCommand, resolveLauncher, serverAlive, wrappedServerViolation } from "../src/managed-server"
 
 describe("server command detection — managed lifecycle", () => {
   test("recognises the server shapes that orphaned live", () => {
@@ -244,5 +244,21 @@ describe("8.3 short path — the managed server starts from the long path (09-30
     expect(start).toBeGreaterThan(0)
     expect(resolveAt).toBeGreaterThan(start)
     expect(resolveAt).toBeLessThan(spawnAt)
+  })
+})
+
+// 10-02 — measured live: «npm run dev» hands the port to its child and the wrapper exits; run said «your server is already running»
+// (the port listens) while audit said «needs a managed server» (the wrapper exited) — the model stopped it, restarted it, and went round.
+describe("serverAlive — the wrapper or its recorded listener", () => {
+  test("a live wrapper is alive; an exited wrapper is alive only while its own recorded listener lives", () => {
+    expect(serverAlive(null, 10, undefined, () => false)).toBe(true)
+    expect(serverAlive(0, 10, 22, (pid) => pid === 22)).toBe(true)
+    expect(serverAlive(0, 10, 22, () => false)).toBe(false)
+    expect(serverAlive(0, 10, undefined, () => true)).toBe(false)
+    // the listener recorded as the wrapper itself is not a second witness
+    expect(serverAlive(1, 10, 10, () => true)).toBe(false)
+  })
+  test("snapshot (what audit and probe read) uses it", () => {
+    expect(readFileSync(new URL("../src/managed-server.ts", import.meta.url), "utf-8")).toContain("alive: serverAlive(p.proc.exitCode, p.proc.pid, p.listenerPid)")
   })
 })
