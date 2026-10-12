@@ -86,4 +86,8 @@ describe("rail policy — a cloud provider is a strong model (owner directive 20
     expect(railProfile("strict", "deepseek/deepseek-chat", false).tier).toBe("strict")
     expect(railProfile("thin", "ollama/qwen3.5:9b", true).tier).toBe("thin")
   })
+  test("10-08 OpenAI's 2026 families (measured from /v1/models and the price page): sol/astra/plain are strong, luna/mini/nano are small", () => {
+    for (const m of ["gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5", "gpt-5.4", "gpt-5.3-codex"]) expect(railProfile("auto", `openai/${m}`, false).tier).toBe("thin")
+    for (const m of ["gpt-6-luna", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5.4-nano"]) expect(railProfile("auto", `openai/${m}`, false).tier).toBe("medium")
+  })
 })

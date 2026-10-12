@@ -67,6 +67,16 @@ export interface CdpRefLocation {
 }
 
 /** ن3 — نتيجةُ اختيار خيارٍ في قائمةٍ منسدلة: ما اختير فعلاً كما تقرؤه الصفحة، أو سببُ الرفض مع الخيارات المتاحة. */
+/** «Copy element» على <html> مع أوراق الأنماط والسكربتات — نصوصٌ كما جاءت، والمحجوبُ يُسمّى سببُه. */
+export interface CdpDocumentCopy {
+  readonly url: string
+  readonly title: string
+  readonly viewport: { readonly width: number; readonly height: number }
+  readonly html: string
+  readonly styles: readonly { readonly href: string | null; readonly media?: string; readonly text?: string; readonly error?: string; readonly truncated?: boolean }[]
+  readonly scripts: readonly { readonly src: string | null; readonly type?: string; readonly text?: string; readonly error?: string; readonly truncated?: boolean }[]
+}
+
 export type CdpSelectResult =
   | { readonly ok: true; readonly picked: string; readonly value: string; readonly index: number; readonly total: number }
   | { readonly ok: false; readonly why: "not-select" | "no-option"; readonly role: string; readonly options: readonly string[] }
@@ -202,7 +212,17 @@ export class CdpBrowser {
     try { return url === "about:blank" || this.navigationAllowed?.(url) !== false } catch { return false }
   }
 
+  // 10-10 (مقيس على تبويب n8n في الخلفيّة): إيدج يجمّد التبويبَ الخفيّ — مؤقّتاتُه وردودُ fetch فيه ومحتوى موارده كلّها تنتظر، فكان
+  // «page save» يتجاوز كلَّ مهلة (أكثر من ٢٠٠ ث) و«page» يتعطّل أحياناً. إيقاظُه بـsetWebLifecycleState قبل الأمر: ١٩٤ms لـ٣٦ ملفّاً بعده.
+  #wokenAt = 0
+  async #wake(): Promise<void> {
+    if (Date.now() - this.#wokenAt < 3_000) return
+    this.#wokenAt = Date.now()
+    await this.#send("Page.setWebLifecycleState", { state: "active" }, this.#pageSession, 3_000).catch(() => undefined)
+  }
+
   async #guardCurrentPage(): Promise<void> {
+    await this.#wake()
     if (this.navigationAllowed && !this.#allowed(await this.#eval("location.href"))) throw new Error("Page access blocked by saved site permissions")
   }
 
@@ -320,7 +340,9 @@ export class CdpBrowser {
     await this.#send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true, filter: [{ type: "iframe" }, { exclude: true }] }, session)
   }
 
-  #send(method: string, params: object, sessionId: string | null | undefined = this.#pageSession): Promise<unknown> {
+  // 10-10 (مقيس في مهمّة n8n: «page save» انقضى أربع مرّات): مهلةُ القناة كانت ١٥ ث ثابتة لكلّ أمر، فمهلةُ evaluateAsync (٦٠ ث لـpage save)
+  // لا تصل أبداً — القناةُ تقطع قبلها. `waitMs` يمدّها لأمرٍ بعينه؛ الافتراضُ كما كان.
+  #send(method: string, params: object, sessionId: string | null | undefined = this.#pageSession, waitMs = 15_000): Promise<unknown> {
     const socket = this.#ws
     if (socket === undefined) return Promise.reject(new Error("القناة مغلقة"))
     this.#seq += 1
@@ -328,7 +350,7 @@ export class CdpBrowser {
     const done = new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         if (this.#pending.delete(id)) reject(new Error("Browser control command timed out"))
-      }, 15_000)
+      }, waitMs)
       timer.unref?.()
       this.#pending.set(id, { resolve, reject, timer })
       try { socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })) }
@@ -461,7 +483,7 @@ export class CdpBrowser {
   }
 
   async evaluateAsync(expression: string, timeoutMs = 20_000): Promise<string> {
-    const result = (await this.#send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true, timeout: timeoutMs })) as {
+    const result = (await this.#send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true, timeout: timeoutMs }, this.#pageSession, timeoutMs + 5_000)) as {
       result?: { value?: unknown }
     }
     return String(result?.result?.value ?? "")
@@ -645,6 +667,84 @@ ${TREE_HELPERS}
         " for (const sheet of document.styleSheets) { let list; try { list = sheet.cssRules } catch { foreign += 1; continue } walk(list, \"\", (sheet.href || \"inline\").slice(-60)); if (rules.length >= 30) break }" +
         " return JSON.stringify({ needle, matched: rules.length, foreignSheets: foreign, rules, fontFaces: fonts }) })()",
     )
+  }
+
+  /**
+   * 10-10 مرجعُ التصميم يؤخذ كما يأخذه هو في DevTools — «Inspect ⇦ سطرُ <html> بعد DOCTYPE ⇦ Copy element». هذا هو النداءُ
+   * نفسُه الذي تستعمله DevTools (`DOM.getOuterHTML` لعقدة الجذر)، مع نصوص أوراق الأنماط والسكربتات (الخارجيّةُ تُجلب من سياق الصفحة
+   * بأصلها وملفّات تعريفها، والمحجوبةُ بـCORS تُقرأ قواعدُها إن أمكن أو تُسمّى). قراءةٌ بلا أثر؛ سقوفٌ للملفّ وللمجموع.
+   */
+  async copyDocument(limits: { readonly file?: number; readonly total?: number } = {}): Promise<CdpDocumentCopy> {
+    await this.#guardCurrentPage()
+    const file = limits.file ?? 3_000_000
+    const total = limits.total ?? 20_000_000
+    let outer = ""
+    try {
+      const doc = (await this.#send("DOM.getDocument", { depth: 1 })) as { root?: { children?: { nodeId: number; nodeName: string }[] } }
+      const htmlNode = doc.root?.children?.find((c) => c.nodeName === "HTML")
+      if (htmlNode !== undefined) outer = ((await this.#send("DOM.getOuterHTML", { nodeId: htmlNode.nodeId })) as { outerHTML?: string }).outerHTML ?? ""
+    } catch { /* بعضُ الصفحات بلا DOM agent — الاحتياطُ من سياق الصفحة */ }
+    if (outer.length === 0) outer = await this.#eval("document.documentElement.outerHTML")
+    // مراجعُ القيادة التي يحقنها السطحُ ليست من الموقع.
+    const html = "<!DOCTYPE html>\n" + outer.replace(/\sdata-abdo-(?:ref|seq)="[^"]*"/gu, "")
+    // ١) القائمةُ بنداءٍ متزامن واحد (لا مؤقّتات ولا شبكة داخل الصفحة): الأوراقُ والسكربتات، والمضمَّنُ بنصّه، وقواعدُ الأوراق الخارجيّة احتياطاً.
+    type Listed = { url: string; title: string; viewport: { width: number; height: number }
+      styles: { href: string | null; media?: string; text?: string; rules?: string }[]; scripts: { src: string | null; type?: string; text?: string }[] }
+    const listed = JSON.parse(await this.#eval(`(() => { const rulesOf = (s) => { try { return Array.from(s.cssRules).map((r) => r.cssText).join("\\n") } catch { return undefined } };
+  const styles = []; for (const s of document.styleSheets) { const media = s.media && s.media.mediaText || undefined; if (s.href) styles.push({ href: s.href, media, rules: rulesOf(s) }); else styles.push({ href: null, media, text: (s.ownerNode && s.ownerNode.textContent) || rulesOf(s) || "" }) }
+  for (const s of document.adoptedStyleSheets || []) styles.push({ href: null, media: "adopted", text: rulesOf(s) || "" });
+  const scripts = []; for (const sc of document.scripts) { if (sc.src) scripts.push({ src: sc.src, type: sc.type || undefined }); else if ((sc.textContent || "").trim().length > 0) scripts.push({ src: null, type: sc.type || undefined, text: sc.textContent }) }
+  return JSON.stringify({ url: location.href, title: document.title, viewport: { width: innerWidth, height: innerHeight }, styles, scripts }) })()`) || "{}") as Listed
+    const styles: { href: string | null; media?: string; text?: string; error?: string; truncated?: boolean }[] = (listed.styles ?? []).map(({ rules: _r, ...rest }) => rest)
+    const scripts: { src: string | null; type?: string; text?: string; error?: string; truncated?: boolean }[] = [...(listed.scripts ?? [])]
+    // ٢) المحتوى من مخزن موارد المتصفّح نفسِه (ما يعرضه DevTools في Sources) — بلا شبكة، بالتوازي.
+    const wanted = [...styles.map((x) => x.href), ...scripts.map((x) => x.src)].filter((u): u is string => typeof u === "string")
+    const content = new Map<string, string>()
+    try {
+      await this.#send("Page.enable", {}).catch(() => undefined)
+      const tree = (await this.#send("Page.getResourceTree", {})) as { frameTree?: { frame?: { id?: string } } }
+      const frameId = tree.frameTree?.frame?.id
+      if (frameId !== undefined) {
+        const queue = [...new Set(wanted)]
+        const worker = async () => {
+          for (let url = queue.shift(); url !== undefined; url = queue.shift()) {
+            try {
+              const r = (await this.#send("Page.getResourceContent", { frameId, url }, this.#pageSession, 10_000)) as { content?: string; base64Encoded?: boolean }
+              if (typeof r.content === "string") content.set(url, r.base64Encoded === true ? Buffer.from(r.content, "base64").toString("utf8") : r.content)
+            } catch { /* ليس في المخزن — يُجلب أدناه */ }
+          }
+        }
+        await Promise.all(Array.from({ length: 8 }, worker))
+      }
+    } catch { /* بلا Page agent — الجلبُ من الصفحة */ }
+    // ٣) ما ليس في المخزن يُجلب من الصفحة بمهلةٍ لكلّ ملفّ (الصفحةُ موقَظة)، ٦ معاً وسقفُ ٣٠ ث للكلّ.
+    const missing = [...new Set(wanted.filter((u) => !content.has(u)))]
+    if (missing.length > 0) {
+      const fetched = await this.evaluateAsync(`(async () => { const until = Date.now() + 30000; const out = {}; const queue = ${JSON.stringify(missing)};
+  const grab = async (url) => { if (Date.now() > until) { out[url] = { error: "skipped: time budget (30s)" }; return } const c = new AbortController(); const k = setTimeout(() => c.abort(), 10000); try { const r = await fetch(url, { credentials: "include", signal: c.signal }); out[url] = r.ok ? { text: await r.text() } : { error: "HTTP " + r.status } } catch (e) { out[url] = { error: c.signal.aborted ? "timeout 10s" : String(e).slice(0, 100) } } finally { clearTimeout(k) } };
+  const worker = async () => { for (let u = queue.shift(); u; u = queue.shift()) await grab(u) };
+  await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]); return JSON.stringify(out) })()`, 40_000).catch(() => "{}")
+      let got: Record<string, { text?: string; error?: string }> = {}
+      try { got = JSON.parse(fetched) as typeof got } catch { /* لا ردّ */ }
+      for (const url of missing) { const g = got[url]; if (typeof g?.text === "string") content.set(url, g.text) }
+      for (const x of [...styles, ...scripts]) { const u = "href" in x ? x.href : x.src; if (u !== null && u !== undefined && !content.has(u)) x.error = got[u]?.error ?? "not in the browser's resource store and could not be fetched" }
+    }
+    ;(listed.styles ?? []).forEach((orig, i) => {
+      const x = styles[i]!
+      if (x.href === null) return
+      const text = content.get(x.href)
+      if (text !== undefined) { x.text = text; delete x.error }
+      else if (typeof orig.rules === "string" && orig.rules.length > 0) { x.text = orig.rules; x.error = `${x.error ?? "unavailable"} — rules read from the page (normalised)` }
+    })
+    for (const x of scripts) if (x.src !== null) { const text = content.get(x.src); if (text !== undefined) { x.text = text; delete x.error } }
+    // ٤) السقوف: ملفٌّ واحد ٣MB، والنسخةُ كلّها ٢٠MB.
+    let used = 0
+    for (const x of [...styles, ...scripts]) {
+      if (typeof x.text !== "string") continue
+      if (x.text.length > file) { x.text = x.text.slice(0, file); x.truncated = true }
+      if (used + x.text.length > total) { x.text = undefined; x.error = "skipped: total size cap" } else used += x.text.length
+    }
+    return { url: listed.url ?? "", title: listed.title ?? "", viewport: listed.viewport ?? { width: 0, height: 0 }, styles, scripts, html }
   }
 
   /** م2 — أصولُ الصفحة: صورٌ (بأبعادها)، أيقونات، أوراقُ أنماط، خطوطٌ محمَّلة — ليعرف النموذجُ ما يعيد بناءه ومن أين. */

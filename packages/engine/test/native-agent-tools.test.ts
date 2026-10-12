@@ -7,6 +7,51 @@ const names = new Map([['abdo_write', 'write'], ['abdo_edit', 'edit'], ['abdo_ru
 const response = (name: string, input: unknown, finish = "stop") => decodeChatResponse("native-ollama", {
   message: { content: "سأصلح الملف", tool_calls: [{ function: { name, arguments: input } }] }, done_reason: finish,
 })
+// 10-09 (measured on nemotron-ultra with native tools): every multi-line argument outside write/edit was refused with the bare code
+// single_line_argument_required — block tools whose usage IS <<< could not be called, and the model repeated the call 18 times.
+describe("native block tools and refusals that say what to fix", () => {
+  const blockNames = new Map([["abdo_plan", "plan"], ["abdo_medit", "medit"], ["abdo_patch", "patch"], ["abdo_run", "run"], ["abdo_read", "read"]])
+  const command = (name: string, input: unknown): string => {
+    const reply = nativeToolReply(response(name, input), blockNames)
+    if (typeof reply === "string") throw new Error(reply)
+    return reply.command
+  }
+  test("a multi-line input to a block tool becomes the same text command the dispatcher already guards", () => {
+    expect(command("abdo_plan", { input: "set\na: read README\nb: write tests [after: a]" })).toBe("plan set <<<\na: read README\nb: write tests [after: a]")
+    expect(command("abdo_plan", { input: "a: read README\nb: write tests [after: a]" })).toBe("plan set <<<\na: read README\nb: write tests [after: a]")
+    expect(command("abdo_medit", { input: "src/a.ts\nold\n=>\nnew" })).toBe("medit src/a.ts <<<\nold\n=>\nnew")
+    expect(command("abdo_patch", { input: "*** Begin Patch\n*** End Patch" })).toBe("patch <<<\n*** Begin Patch\n*** End Patch")
+    expect(command("abdo_plan", { input: "set <<<\na: x" })).toBe("plan set <<<\na: x")
+    expect(command("abdo_plan", { input: "show" })).toBe("plan show")
+  })
+  test("the twins: a multi-line shell command or path is still refused, and the refusal names the tool and the fix", () => {
+    const run = nativeToolReply(response("abdo_run", { command: "node -e \"a\nb\"" }), blockNames)
+    expect(run).toBe("رُفض إخراج النموذج: single_line_argument_required — run: أمرُ run سطرٌ واحد: للبرنامج متعدّد الأسطر اكتب ملفاً بـwrite ثمّ شغّله باستدعاء run مستقلّ")
+    expect(nativeToolReply(response("abdo_read", { path: "a\nb" }), blockNames)).toMatch(/^رُفض إخراج النموذج: single_path_required/u)
+  })
+})
+
+// 10-09 — up to four native read calls in one reply; writes and runs stay one call per reply.
+describe("native read batch", () => {
+  const readNames = new Map([["abdo_read", "read"], ["abdo_grep", "grep"], ["abdo_write", "write"], ["abdo_run", "run"]])
+  const multi = (...calls: { name: string; input: unknown }[]) => decodeChatResponse("native-ollama", {
+    message: { content: "", tool_calls: calls.map((c) => ({ function: { name: c.name, arguments: c.input } })) }, done_reason: "stop",
+  })
+  test("two reads become one reply carrying a batch, each member checked as if alone", () => {
+    const reply = nativeToolReply(multi({ name: "abdo_read", input: { path: "a.ts" } }, { name: "abdo_grep", input: { input: "TODO" } }), readNames)
+    if (typeof reply === "string") throw new Error(reply)
+    expect(reply.batch!.map((m) => m.command)).toEqual(["read a.ts", "grep TODO"])
+    expect(reply.command).toBe("read a.ts")
+  })
+  test("the twins: a write in the batch, five reads, or one bad member refuse the whole reply by name", () => {
+    expect(nativeToolReply(multi({ name: "abdo_read", input: { path: "a.ts" } }, { name: "abdo_write", input: { path: "b.ts", content: "x" } }), readNames)).toContain("الحزمةُ للقراءة وحدها")
+    const five = multi(...["a", "b", "c", "d", "e"].map((x) => ({ name: "abdo_read", input: { path: `${x}.ts` } })))
+    expect(nativeToolReply(five, readNames)).toContain("حتى 4 نداءات قراءة")
+    expect(nativeToolReply(multi({ name: "abdo_read", input: { path: "a.ts" } }, { name: "abdo_read", input: { path: "a\nb" } }), readNames)).toMatch(/single_path_required/u)
+    expect(nativeToolReply(multi(), readNames)).toMatch(/one_native_tool_call_required/u)
+  })
+})
+
 describe("native tool surface", () => {
   test("keeps file bytes separate from explanation and preserves delimiters and whitespace", () => {
     const content = '\n```ts\nconst fn = () => `نفّذ: غير قابل للتنفيذ`;\n```\n'

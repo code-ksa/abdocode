@@ -185,10 +185,12 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     expect(source).toContain('const answer=await ask(secretNotice+turn.body,hooks,turnConversation,turnSelection)')
     expect(source).toContain('return {answer,completed:true}')
     expect(source).toContain("const text = await ask(prompt, { ...hooks, toolAllowlist: allowlist }, history, childModel,")
-    expect(source).toContain("ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {")
+    expect(source).toContain("askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {")
     // 4.0.46 (2026-09-17): الثاني عن قصدٍ معلَن — `ask` يلفّ `askOnce` ويعيد نداءَ نفسِه مرّةً بعد تصعيد الازدحام
     // (provider_unavailable ⇦ الدرجة التالية من السلّم)؛ الكلفةُ في الدفتر نفسه، ولا مسارَ تسعيرٍ ثانٍ. كان المسمارُ أحمر منذها بلا قياس.
-    expect(source.match(/\breturn ask\(/gu)).toHaveLength(2)
+    // 10-09: +2 in askDecision — the decision model is the turn model (one ask), or it failed and the working model judges (one ask
+    // instead of the failed one). No call is added to a turn; a judge call is redirected.
+    expect(source.match(/\breturn ask\(/gu)).toHaveLength(4)
     expect(source).toContain("outageRoute = { from: outageRoute?.from ?? sel.ref, to: outcome.to }")
     expect(source.match(/runTextAgentLoop\(\{/gu)).toHaveLength(1)
     expect(source.match(/await gateAsk\(/gu)).toHaveLength(1)
@@ -211,5 +213,6 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     // 09-29 (عينُ الوكيل): السادس عشر معلَن — describeShots: نداءٌ واحد لنموذج الرؤية بنظامٍ بلا أدوات يصف اللقطة، والوكيلُ يقرّر.
     // 2026-10-01: السابع عشر معلَن — أداةُ compare: نداءٌ واحد لنموذج الرؤية بنظام VISION_EYE_SYSTEM بلا أدوات (toolAllowlist: [])
     // يصف الفروقَ بين لقطتَي الأصل ونسختنا؛ الوصفُ بياناتٌ لا أوامر، وبلا نموذج رؤيةٍ مضبوط لا نداء.
-    expect(source.match(/\bawait ask\(/gu)).toHaveLength(17)
+    // 10-09: three judge calls go through askDecision (two attempts on the decision model, then the working model) — same count.
+    expect(source.match(/\bawait ask(?:Decision)?\(/gu)).toHaveLength(17)
     expect(source).toContain("const reply = await ask(buildReviewPrompt(reviewGoal, diff.text, lens), { ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REVIEW_SYSTEM }, [], turnSelection)")

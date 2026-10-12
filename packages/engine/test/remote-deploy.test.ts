@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { familiesFor } from "../src/tool-exposure"
-import { DEPLOY_EXCLUDES, addServer, deploy, findProfile, keyHandleFor, listProfiles, parseTarget, removeServer, renderDeploy, rollback, runOnServer, shq, testServer, type RemoteDeps, type VaultAccess } from "../src/servers/remote"
+import { DEPLOY_EXCLUDES, addServer, decodeKeyFromVault, deploy, findProfile, keyHandleFor, listProfiles, parseTarget, removeServer, renderDeploy, rollback, runOnServer, shq, testServer, type RemoteDeps, type VaultAccess } from "../src/servers/remote"
 
 // 10-02 — the user puts in their server, AbdoCode connects and deploys. Here every binary is a recorder, so the exact ssh/scp/tar
 // calls, their order, the key's lifetime and what stays out of the archive are measured without a real server.
@@ -16,7 +16,8 @@ function harness(fail: Partial<Record<"ssh" | "scp" | "tar", (argv: readonly str
   const vaultStore = new Map<string, string>()
   const vault: VaultAccess = {
     get: async (h) => vaultStore.get(h),
-    set: async (h, v) => { vaultStore.set(h, v); return true },
+    // the real vault (vaultSet) refuses empty values and line breaks — the fake one must too, or a multi-line key "saves" here and fails live (10-08)
+    set: async (h, v) => { if (v.length === 0 || /[\r\n\0]/u.test(v)) return false; vaultStore.set(h, v); return true },
     forget: async (h) => { vaultStore.delete(h) },
   }
   const deps: RemoteDeps = {
@@ -64,14 +65,14 @@ describe("server add / list / remove", () => {
     try {
       const r = await addServer(root, { name: "prod", target: "deploy@1.2.3.4", path: "/srv/app" }, h.vault, h.deps)
       expect(r.ok).toBe(true)
-      expect(r.text).toContain("ssh-ed25519 AAAAgenerated abdocode-prod")
-      expect(h.vaultStore.get(keyHandleFor("prod"))).toBe(PRIVATE)
+      // 10-08: the key is generated in-process (ssh-keys.ts), not by ssh-keygen — OpenSSH private half in the vault only, public half in the reply.
+      expect(r.text).toMatch(/^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/=]+ abdocode-prod$/mu)
+      expect(decodeKeyFromVault(h.vaultStore.get(keyHandleFor("prod"))!)).toStartWith("-----BEGIN OPENSSH PRIVATE KEY-----")
       const file = readFileSync(join(root, "servers.json"), "utf8")
       expect(file).not.toContain("PRIVATE KEY")
       expect(findProfile(root, "prod")).toMatchObject({ user: "deploy", host: "1.2.3.4", port: 22, path: "/srv/app", keyHandle: "custom-server-prod-key" })
-      // the keygen temp folder is gone
-      const genDir = h.calls.find((c) => c[0] === "ssh-keygen")![h.calls.find((c) => c[0] === "ssh-keygen")!.indexOf("-f") + 1]!
-      expect(existsSync(genDir)).toBe(false)
+      // no external ssh-keygen is called to generate (it hung when PowerShell dropped `-N ""`)
+      expect(h.calls.some((c) => c[0] === "ssh-keygen")).toBe(false)
       expect(await removeServer(root, "prod", h.vault)).toContain("أُزيل")
       expect(h.vaultStore.has(keyHandleFor("prod"))).toBe(false)
       expect(listProfiles(root)).toEqual([])
@@ -83,8 +84,10 @@ describe("server add / list / remove", () => {
     try {
       const r = await addServer(root, { name: "web", target: "u@host.example", keyFile }, h.vault, h.deps)
       expect(r.ok).toBe(true)
-      expect(h.vaultStore.get(keyHandleFor("web"))).toBe(PRIVATE)
+      expect(decodeKeyFromVault(h.vaultStore.get(keyHandleFor("web"))!)).toBe(PRIVATE)
       expect(findProfile(root, "web")!.path).toBe("/home/u/apps/web")
+      expect((await addServer(root, { name: "box", target: "root@127.0.0.1:2222" }, h.vault, h.deps)).ok).toBe(true)
+      expect(findProfile(root, "box")!.path).toBe("/root/apps/box")
       expect((await addServer(root, { name: "Bad Name", target: "u@h" }, h.vault, h.deps)).ok).toBe(false)
       expect((await addServer(root, { name: "x", target: "u@h", path: "relative/path" }, h.vault, h.deps)).ok).toBe(false)
     } finally { rmSync(root, { recursive: true, force: true }) }
@@ -104,7 +107,7 @@ describe("connecting", () => {
       expect(ssh).toContain(`UserKnownHostsFile="${join(root, "known_hosts")}"`)
       expect(ssh.slice(ssh.indexOf("-p"), ssh.indexOf("-p") + 2)).toEqual(["-p", "2200"])
       expect(ssh).toContain("deploy@1.2.3.4")
-      expect(h.keySeen[0]).toMatchObject({ existed: true, body: PRIVATE })
+      expect(h.keySeen[0]).toMatchObject({ existed: true, body: decodeKeyFromVault(h.vaultStore.get(keyHandleFor("prod"))!) })
       expect(existsSync(h.keySeen[0]!.path)).toBe(false)
     } finally { rmSync(root, { recursive: true, force: true }) }
   })
@@ -114,7 +117,9 @@ describe("connecting", () => {
       await addServer(root, { name: "prod", target: "deploy@1.2.3.4" }, h.vault, h.deps)
       const r = await testServer(root, findProfile(root, "prod")!, h.vault, h.deps)
       expect(r.ok).toBe(false)
-      expect(r.text).toContain("المفتاحُ العامّ غيرُ مضافٍ على الخادم")
+      // 10-08: the refusal now carries the exact public line to install
+      expect(r.text).toContain("authorized_keys")
+      expect(r.text).toMatch(/ssh-ed25519 AAAAC3NzaC1lZDI1NTE5\S+ abdocode-prod/u)
       h.vaultStore.clear()
       expect((await runOnServer(root, findProfile(root, "prod")!, "uptime", h.vault, h.deps)).text).toContain("غائبٌ عن الخزنة")
     } finally { rmSync(root, { recursive: true, force: true }) }
@@ -122,22 +127,25 @@ describe("connecting", () => {
 })
 
 describe("deploy and rollback", () => {
-  test("pack without secrets or dependencies → prepare → upload → release+current → build → start, in that order", async () => {
+  test("pack without secrets or dependencies → prepare → upload → unpack → build in the release → current → start, in that order", async () => {
     const root = state(), project = state(), h = harness()
     try {
       await addServer(root, { name: "prod", target: "deploy@1.2.3.4", path: "/srv/app" }, h.vault, h.deps)
       const result = await deploy(root, project, findProfile(root, "prod")!, { build: "npm ci && npm run build", start: "pm2 restart app" }, h.vault, h.deps)
       expect(result.ok).toBe(true)
       expect(result.release).toBe("20261002-183005")
-      expect(result.steps.map((s) => s.step)).toEqual(["pack", "prepare", "upload", "release", "build", "start"])
+      expect(result.steps.map((s) => s.step)).toEqual(["pack", "prepare", "upload", "unpack", "build", "release", "start"])
       const tar = h.calls.find((c) => c[0] === "tar")!
       for (const ex of [".env", ".env.*", "node_modules", ".git", ".next"]) expect(tar[tar.indexOf(ex) - 1]).toBe("--exclude")
       expect(DEPLOY_EXCLUDES).toContain(".env")
       const remote = h.calls.filter((c) => c[0] === "ssh").map((c) => c[c.length - 1]!)
-      expect(remote[1]).toContain("ln -sfn '/srv/app/releases/20261002-183005' '/srv/app/current'")
-      expect(remote[1]).toContain("tail -n +6")
-      expect(remote[2]).toBe("cd '/srv/app/current' && npm ci && npm run build")
-      expect(remote[3]).toBe("cd '/srv/app/current' && pm2 restart app")
+      expect(remote[1]).toContain("tar -xzf '/srv/app/releases/20261002-183005.tgz'")
+      expect(remote[1]).not.toContain("ln -sfn")
+      // 10-08: the build runs inside the new release, before current moves
+      expect(remote[2]).toBe("cd '/srv/app/releases/20261002-183005' && npm ci && npm run build")
+      expect(remote[3]).toContain("ln -sfn '/srv/app/releases/20261002-183005' '/srv/app/current'")
+      expect(remote[3]).toContain("tail -n +6")
+      expect(remote[4]).toBe("cd '/srv/app/current' && pm2 restart app")
       const scp = h.calls.find((c) => c[0] === "scp")!
       expect(scp.slice(scp.indexOf("-P"), scp.indexOf("-P") + 2)).toEqual(["-P", "22"])
       expect(scp[scp.length - 1]).toBe("deploy@1.2.3.4:/srv/app/releases/20261002-183005.tgz")
@@ -145,6 +153,21 @@ describe("deploy and rollback", () => {
       for (const k of h.keySeen) expect(existsSync(k.path)).toBe(false)
       expect(existsSync(tar[tar.indexOf("-czf") + 1]!)).toBe(false)
       expect(renderDeploy(findProfile(root, "prod")!, result)).toContain("للرجوع: deploy prod --rollback")
+    } finally { rmSync(root, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }) }
+  })
+  test("a failed build leaves current where it was and deletes the failed release (10-08: npm ci without a lockfile)", async () => {
+    const root = state(), project = state()
+    try {
+      const h = harness({ ssh: (argv) => /&& npm ci$/u.test(argv[argv.length - 1]!) })
+      await addServer(root, { name: "prod", target: "deploy@1.2.3.4", path: "/srv/app" }, h.vault, h.deps)
+      const r = await deploy(root, project, findProfile(root, "prod")!, { build: "npm ci", start: "node server.js" }, h.vault, h.deps)
+      expect(r.ok).toBe(false)
+      expect(r.steps.map((s) => `${s.step}:${s.ok}`)).toEqual(["pack:true", "prepare:true", "upload:true", "unpack:true", "build:false"])
+      const remote = h.calls.filter((c) => c[0] === "ssh").map((c) => c[c.length - 1]!)
+      expect(remote.some((c) => /ln -sfn/u.test(c))).toBe(false)
+      expect(remote.some((c) => /node server\.js/u.test(c))).toBe(false)
+      expect(remote[remote.length - 1]).toBe("rm -rf -- '/srv/app/releases/20261002-183005' '/srv/app/releases/20261002-183005.tgz'")
+      expect(r.steps[r.steps.length - 1]!.detail).toContain("current لم يُقلب")
     } finally { rmSync(root, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }) }
   })
   test("a failed upload stops before current moves; a failed URL check fails the deploy", async () => {
@@ -189,5 +212,55 @@ describe("tool family", () => {
   test("a remote server or a deploy opens the server tools; the local dev server does not", () => {
     for (const goal of ["اربط سيرفري وانشر المشروع", "deploy to my VPS", "ارفع المشروع على الاستضافة", "connect over ssh"]) expect(familiesFor(goal).has("servers")).toBe(true)
     for (const goal of ["شغّل الخادم وافتح الصفحة", "run the dev server", "بعد تشغيل الخادم خذ لقطة"]) expect(familiesFor(goal).has("servers")).toBe(false)
+  })
+})
+
+// 10-08 (measured on abdo-router): re-adding the same server only to change its path generated a new key over the working one.
+describe("re-adding the same target keeps the working key", () => {
+  test("same user/host/port: the path changes, the vault key does not; a different target gets a new key", async () => {
+    const root = state(), h = harness()
+    try {
+      await addServer(root, { name: "box", target: "root@127.0.0.1:2222" }, h.vault, h.deps)
+      const keyBefore = h.vaultStore.get(keyHandleFor("box"))
+      const again = await addServer(root, { name: "box", target: "root@127.0.0.1:2222", path: "/app" }, h.vault, h.deps)
+      expect(again.ok).toBe(true)
+      expect(again.text).toContain("أُبقي")
+      expect(h.vaultStore.get(keyHandleFor("box"))).toBe(keyBefore)
+      expect(findProfile(root, "box")!.path).toBe("/app")
+      await addServer(root, { name: "box", target: "deploy@10.0.0.9" }, h.vault, h.deps)
+      expect(h.vaultStore.get(keyHandleFor("box"))).not.toBe(keyBefore)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+// 10-08 (measured on abdo-router): the publickey refusal now carries the exact public line of this profile's key.
+describe("server test on a publickey refusal names the key to install", () => {
+  test("the reply holds the profile's own public key", async () => {
+    const root = state(), h = harness({ ssh: () => true })
+    try {
+      const added = await addServer(root, { name: "box", target: "root@127.0.0.1:2222" }, h.vault, h.deps)
+      const pub = /^ssh-ed25519 \S+/mu.exec(added.text)![0]
+      const r = await testServer(root, findProfile(root, "box")!, h.vault, h.deps)
+      expect(r.ok).toBe(false)
+      expect(r.text).toContain(pub)
+      expect(r.text).toContain("authorized_keys")
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+// 10-08 (measured on abdo-router): «✕ pack:» with nothing after it — tar failed with an empty stderr.
+describe("a pack failure names its code and the likely cause", () => {
+  test("empty stderr still yields the exit code and the locked-file hint", async () => {
+    const root = state(), project = state()
+    try {
+      const h = harness()
+      const quietTar: RemoteDeps = { ...h.deps, run: (argv, o) => (argv[0] === "tar" ? { code: 1, stdout: "", stderr: "" } : h.deps.run(argv, o)) }
+      await addServer(root, { name: "box", target: "root@127.0.0.1:2222" }, h.vault, quietTar)
+      const r = await deploy(root, project, findProfile(root, "box")!, {}, h.vault, quietTar)
+      expect(r.ok).toBe(false)
+      expect(r.steps[0]).toMatchObject({ step: "pack", ok: false })
+      expect(r.steps[0]!.detail).toContain("tar خرج برمز 1")
+      expect(r.steps[0]!.detail).toContain("أوقف الخادم")
+    } finally { rmSync(root, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }) }
   })
 })

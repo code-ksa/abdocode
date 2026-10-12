@@ -53,10 +53,12 @@ describe("السكربتُ المُنتَج", () => {
     const typed = desktopScript({ kind: "type", text: "it's \"quoted\" $var `tick`" }, "", BOUND)
     expect(typed).not.toContain("$var")
     expect(typed).toContain("FromBase64String('")
-    expect(typed).toContain("Unicode($ch)")
+    // 10-11 — حقلٌ أصليٌّ مركَّز برسالةٍ مباشرة، وغيرُه بمفاتيح محروسة (TypeGuarded) لا حلقةِ PowerShell.
+    expect(typed).toContain("[AbdoDesk]::TypeGuarded($want, $text)")
   })
   test("المفاتيح: المعدِّلات تُضغط أوّلاً وتُحرَّر آخراً بترتيبٍ معكوس", () => {
-    const s = desktopScript({ kind: "key", combo: "ctrl+shift+s" }, "", BOUND)
+    const whole = desktopScript({ kind: "key", combo: "ctrl+shift+s" }, "", BOUND)
+    const s = whole.slice(whole.indexOf("function Out-Json"))
     const order = [...s.matchAll(/Key(Down|Up)\((\d+)\)/g)].map((m) => `${m[1]}${m[2]}`)
     expect(order).toEqual(["Down17", "Down16", "Down83", "Up83", "Up16", "Up17"])
     expect(desktopScript({ kind: "key", combo: "enter" }, "", BOUND)).toContain("KeyDown(13)")
@@ -98,7 +100,7 @@ describe("السكربتُ المُنتَج", () => {
       const s = whole.slice(whole.indexOf("function Out-Json"))
       const guard = s.indexOf("GetForegroundWindow()")
       const exit = s.indexOf("error = 'focus moved'")
-      const inject = Math.min(...["[AbdoDesk]::Unicode(", "[AbdoDesk]::KeyDown(", "[AbdoDesk]::Wheel(", "[AbdoDesk]::MouseButton(", "[AbdoDesk]::SetCursorPos("].map((m) => { const i = s.indexOf(m); return i < 0 ? Number.MAX_SAFE_INTEGER : i }))
+      const inject = Math.min(...["[AbdoDesk]::Unicode(", "[AbdoDesk]::KeyDown(", "[AbdoDesk]::Wheel(", "[AbdoDesk]::MouseButton(", "[AbdoDesk]::SetCursorPos(", "[AbdoDesk]::TypeGuarded(", "[AbdoDesk]::SendMessageText("].map((m) => { const i = s.indexOf(m); return i < 0 ? Number.MAX_SAFE_INTEGER : i }))
       expect(`${action.kind}: guard ${guard > -1} inject ${inject < Number.MAX_SAFE_INTEGER}`).toBe(`${action.kind}: guard true inject true`)
       expect(guard).toBeLessThan(inject)
       expect(exit).toBeLessThan(inject)

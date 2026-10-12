@@ -155,6 +155,8 @@ export {
   isTrailDigest,
   isWriteDigest,
   writeDigest,
+  nativeWriteDigest,
+  nativeWritePayloadChars,
   verdictLineOf,
   MAX_TEXT_AGENT_ROUNDS,
   SUMMARY_WITH_COMMAND,
@@ -162,6 +164,7 @@ export {
   writeNudgeLine,
   unchangedReadLine,
   shownRead,
+  carriedReads,
   duplicatePointerLine,
   STATEFUL_ACTION,
   pageGenerationOf,
@@ -172,6 +175,8 @@ export {
   type TextAgentMessage,
   type NativeAgentCall,
   type NativeAgentReply,
+  healNarratedReads,
+  healNarratedWrite,
 } from "./text-agent-loop"
 
 export {

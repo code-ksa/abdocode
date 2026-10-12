@@ -254,9 +254,50 @@ describe("assistedIntake — الملفّ يُزفَّر ويُحذف في كل�
         directory,
         editor: stubEditor("--noop"),
         timeoutMs: 30_000,
+        handoffMs: 0, // a real close, not a hand-off to an open window
         store: async () => { throw new Error("الخزنة لا تُلمس أصلاً") },
       })
       expect(outcome.refusal).toBe(INTAKE_REFUSALS.TEMPLATE_UNTOUCHED)
+      expect(outcomeFilesGone(directory)).toBe(true)
+    })
+  }, 30_000)
+
+  // 10-08 (مقيس على ويندوز 11): Notepad بالتبويبات يسلّم الملفَّ لنافذته القائمة ويخرج المُطلِقُ فوراً — كان القالبُ يُقرأ فارغاً ويُرفض.
+  test("an editor that hands the file to an open window and exits at once: the save that comes later is stored", async () => {
+    await withDirectory(async (directory) => {
+      const seen: string[] = []
+      const writer = setTimeout(() => {
+        const file = readdirSync(directory).find((f) => f.endsWith(".intake.txt"))!
+        writeFileSync(join(directory, file), "sk-saved-later-7c1d9f2b\r\n")
+      }, 1_500)
+      const outcome = await assistedIntake({
+        handle: "abdocode-openai",
+        kinds: [],
+        directory,
+        editor: stubEditor("--noop"),
+        timeoutMs: 20_000,
+        pollMs: 100,
+        store: async (_h, value) => { seen.push(value); return { ok: true } },
+      })
+      clearTimeout(writer)
+      expect(outcome.ok).toBe(true)
+      expect(seen).toEqual(["sk-saved-later-7c1d9f2b"])
+      expect(outcomeFilesGone(directory)).toBe(true)
+    })
+  }, 30_000)
+
+  test("hand-off with no save: a named timeout, and no claim that no file remains when one does", async () => {
+    await withDirectory(async (directory) => {
+      const outcome = await assistedIntake({
+        handle: "abdocode-openai",
+        kinds: [],
+        directory,
+        editor: stubEditor("--noop"),
+        timeoutMs: 1_500,
+        pollMs: 100,
+        store: async () => { throw new Error("no vault on the timeout path") },
+      })
+      expect(outcome.refusal).toBe(INTAKE_REFUSALS.EDITOR_TIMEOUT)
       expect(outcomeFilesGone(directory)).toBe(true)
     })
   }, 30_000)

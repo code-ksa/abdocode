@@ -44,10 +44,10 @@ describe("قارئُ الحزم المضمَّنة", () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  test("التوأمُ الإيجابيّ: مجلّدُ المستودع يعطي الحزمَ الإحدى والأربعين بلا إسقاط", () => {
+  test("التوأمُ الإيجابيّ: مجلّدُ المستودع يعطي الحزمَ الاثنتين والأربعين بلا إسقاط (abdo-ops 10-09)", () => {
     const listing = listBundledExtensions(bundledRoot([REPO_BUNDLED]))
     expect(listing.dropped).toEqual([])
-    expect(listing.entries.length).toBe(41)
+    expect(listing.entries.length).toBe(42)
     for (const id of ["code-review", "design", "abdo-security", "abdo-skills", "rust-lsp"]) expect(listing.entries.some((e) => e.id === id)).toBe(true)
     expect(listing.entries.find((e) => e.id === "abdo-skills")!.skills.some((s) => s.id === "morning")).toBe(true)
   })

@@ -117,7 +117,7 @@ test("native submit returns its real turn ID or busy null and a rejected send se
   const emitted:any[]=[],rejects:((error:Error)=>void)[]=[];
   const create=new Function('Turns','sendFrame','window','el','notice','uiText',`
     let outbox={kind:'idle'},turnCounter=0,lastPrompt,working,trajStore,pendingSubmissionEnvelope;
-    const mode='full-access',Trajectory=null,renderStatus=()=>{},addBlock=()=>{},openAnswerBlock=()=>{},trajTouch=()=>{};
+    const mode='full-access',Trajectory=null,renderStatus=()=>{},renderSend=()=>{},turnSessions=new Map(),turnStartedAt=new Map(),currentSessionId=null,addBlock=()=>{},openAnswerBlock=()=>{},trajTouch=()=>{};
     const settle=(id)=>{if(outbox.kind==='offering'&&outbox.turn.id===id){outbox={kind:'idle'};working=undefined;}};
     ${source}
     return {submit:submitBody,settle,snapshot:()=>({outbox,working})};

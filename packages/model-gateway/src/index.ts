@@ -191,15 +191,23 @@ const sessionAffinityValue = (value: string | undefined): string | undefined => 
 }
 const affinityHeader = (value: string | undefined): Record<string, string> => value === undefined ? {} : { "x-session-id": value }
 
-/** نماذجُ الاستدلال تقبل `max_completion_tokens` وحدَه (عقدُ المزوّد المنشور؛ غيرُ مقيسٍ عندنا). */
-const REASONING_OUTPUT_CAP = /^(?:o[1-9](?:[.\-]|$)|gpt-5)/iu
+/**
+ * نماذجُ الاستدلال تقبل `max_completion_tokens` وحدَه، ولا تقبل `temperature` غيرَ الافتراضيّ (1).
+ * 10-08 — **مقيسٌ بمفتاحٍ حيّ**: gpt-6.1-sol ⇦ 400 «'max_tokens' is not supported … Use 'max_completion_tokens'»، وgpt-5.5 ⇦ 400
+ * «'temperature' does not support 0 … Only the default (1)»، وكلاهما 200 بلا temperature/presence_penalty ومع max_completion_tokens؛
+ * وgpt-4.1 يقبل الشكلَ القديم. فالعائلةُ من gpt-5 فما بعدها (gpt-6، gpt-7…) وسلسلةُ o.
+ */
+export const REASONING_OUTPUT_CAP = /^(?:o[1-9](?:[.\-]|$)|gpt-(?:[5-9]|[1-9][0-9])(?:[.\-]|$))/iu
 
 export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
   if (input.model.trim().length === 0) throw new Error("model is required")
   assertMessages(input.messages)
   const affinity = sessionAffinityValue(input.sessionAffinity)
   const affinityBody = input.sessionAffinityBody === true ? affinity : undefined
-  if (input.wire !== "native-ollama" && (input.tools?.length || input.messages.some((m) => m.toolCalls?.length))) {
+  // 10-08 (مقيس على NIM): gpt-oss-20b يستدعي أدواتِه بقناته الأصليّة — بلا أدواتٍ معلَنة في الطلب أسقطها المزوّدُ فعاد المحتوى فارغاً
+  // والوسائطُ في `reasoning` ({"path":"src/price.js",…}) ثلاثَ مرّاتٍ ولو بتنبيه. الشكلُ المتوافق مع OpenAI صار ينقل الأدوات الأصليّة
+  // (tools، tool_calls، رسائل tool)؛ والأنثروبيّ وحده باقٍ غيرَ مؤهَّل.
+  if (input.wire === "anthropic" && (input.tools?.length || input.messages.some((m) => m.toolCalls?.length))) {
     throw new Error("native tool transport is not qualified for this provider")
   }
   const stop = input.stop?.length ? input.stop : undefined
@@ -264,8 +272,8 @@ export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
     body: JSON.stringify({
       model: input.model,
       stream: input.stream,
-      temperature: 0,
-      presence_penalty: 0,
+      // 10-08 (مقيس): نماذجُ الاستدلال ترفض temperature=0 بـ400 — تُترك على افتراضها.
+      ...(REASONING_OUTPUT_CAP.test(input.model) ? {} : { temperature: 0, presence_penalty: 0 }),
       // 🔴 **سقفُ الإخراج كان يُحسب ولا يُرسل.** المحرّك يحجز ثمانيةَ آلافٍ للحقبة
       // ويحاسب عليها، والجسمُ المتوافق مع OpenAI كان يخرج **بلا `max_tokens`** —
       // فالمزوّدُ لا يعرف حدّاً، ومهلةُ المحاولة المبنيّةُ على السقف لا تجد رقماً
@@ -282,7 +290,12 @@ export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
 
       ...(stop === undefined ? {} : { stop }),
       ...(affinityBody === undefined ? {} : { user: affinityBody }),
-      messages: input.messages.map(({images,...message}) => images?.length ? {...message,content:[{type:'text',text:message.content},...images.map(image=>({type:'image_url',image_url:{url:`data:${image.mime};base64,${image.data}`}}))]} : message),
+      ...(input.tools?.length ? { tools: input.tools.map((tool) => ({ type: "function", function: tool })) } : {}),
+      messages: input.messages.map(({ images, toolCallId, toolCalls, ...message }) => {
+        if (message.role === "tool") return { role: "tool", tool_call_id: toolCallId, content: message.content }
+        if (toolCalls?.length) return { ...message, content: message.content.trim().length > 0 ? message.content : null, tool_calls: toolCalls.map((call) => ({ id: call.id, type: "function", function: { name: call.name, arguments: typeof call.input === "string" ? call.input : JSON.stringify(call.input ?? {}) } })) }
+        return images?.length ? {...message,content:[{type:'text',text:message.content},...images.map(image=>({type:'image_url',image_url:{url:`data:${image.mime};base64,${image.data}`}}))]} : message
+      }),
     }),
   })
 }

@@ -209,18 +209,25 @@ export class McpSession implements ToolProviderSession {
     return done
   }
 
+  /**
+   * 10-10 — مقيس على سلاك المربوط: الخدمةُ ردّت initialize بـ«App is not enabled for Slack MCP server access. Please enable it here: …»
+   * فأعادت المصافحةُ [] صامتةً وقالت الواجهةُ «لم يُعلن أدواتٍ داخل المهلة». سببُ الرفض الحرفيّ يُحفظ هنا ويُعرض كما هو.
+   */
+  handshakeFailure: string | undefined
+
   async handshake(timeoutMs = 10_000): Promise<readonly ExternalTool[]> {
+    this.handshakeFailure = undefined
     const half = Math.max(1_000, Math.floor(timeoutMs / 2))
     const hello = await this.#rpc("initialize", {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: { name: "abdocode", version: "4" },
     }, half)
-    if (!hello.ok) return []
+    if (!hello.ok) { this.handshakeFailure = `initialize: ${hello.why ?? "رُفض"}`; return [] }
     this.#notify("notifications/initialized")
 
     const listed = await this.#rpc("tools/list", {}, half)
-    if (!listed.ok) return []
+    if (!listed.ok) { this.handshakeFailure = `tools/list: ${listed.why ?? "رُفض"}`; return [] }
     const tools = asObject(listed.result)?.tools
     if (!Array.isArray(tools)) return []
 

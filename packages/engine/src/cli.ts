@@ -31,7 +31,7 @@ import {
 import { readBoundObjectTool } from "@abdo/kernel-tools"
 import { createEnforcedToolRunner, ProductTools as Tools, ToolRegistry, type ToolOutcome } from "@abdo/tools"
 import { grantableEnvName, stripChildEnv } from "@abdo/tools/env-strip"
-import { backgroundLogs, backgroundRuns, startBackgroundRun, stopAllBackgroundRuns } from "./background-runs"
+import { backgroundLogs, backgroundLogsAwaitingNew, backgroundRuns, startBackgroundRun, stopAllBackgroundRuns } from "./background-runs"
 import { guardInbound } from "./inbound-guard"
 import { StandingGrants } from "./standing-grants"
 import { DenialBreaker } from "./denial-breaker"
@@ -42,12 +42,12 @@ import { CdpBrowser, launchBrowserProcess } from "@abdo/browser"
 import { browserSiteAllowed, desktopBrowserOwnership, ownedDesktopBrowserPort, sitePolicyCommand } from "./browser-site-policy"
 import { BrowserHistory, BrowserSessionStore, PROFILE_DIR, historyCommand, loginPageVerdict, loginReceipt, originOf, sessionsCommand } from "./browser-sessions"
 import { shotRoute, shotFitsModel, tilePlan } from "./vision-fallback"
-import { renderVisionReport, VISION_EYE_SYSTEM, visionReportUsable, visionRubric } from "./vision-describe"
+import { renderVisionReport, VISION_EYE_SYSTEM, visionReportUsable, visionRubric, withDeadline } from "./vision-describe"
 import { MAX_IMAGE_BASE64 } from "@abdo/model-gateway"
 import { Shell } from "./shells/shell"
 import { Database } from "bun:sqlite"
 import { readFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, statSync, renameSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { companionFiles, ledgerUnreadable, quarantineName, quarantineNotice } from "./ledger-quarantine"
 import { fabricatedImage, looksLikeShot } from "./fabricated-artifact-guard"
 import { keepLineEndings, keptLineEndingsLine, lineEndingViolation } from "./line-ending-guard"
@@ -66,7 +66,10 @@ import { definedCssClasses, tailwindUtilityCount, TAILWIND_REFUSAL_THRESHOLD } f
 import { globalInstallRefused } from "./global-install-guard"
 import { admitShell, beginShellEffect, settleShellEffect, unknownShellEffect, type ShellAdmission } from "./shell-admission"
 import { INSTALLER_BUNDLE_DIR, installerNameAt } from "./installer-bundle"
-import { loadLocalExtensions, localExtensionServers, localSkillBody, localSkillInstructions, localSkillsBrief, localSkillsCatalogue, SKILL_REF } from "./local-extensions"
+import { loadLocalExtensions, localExtensionServers, localSkillBody, localSkillInstructions, localSkillsBrief, localSkillsCatalogue, SKILL_REF, type SkillListing } from "./local-extensions"
+import { bundledRoot } from "./bundled-extensions"
+import { CORE_SKILL_PACKAGES, coreSkillBody, coreSkillsBrief, coreSkillsCatalogue } from "./core-skills"
+import { clearSecretHostBindings, secretHostVerdict } from "./secret-host-binding"
 import { isProjectSkillRef, projectSkillBody, projectSkills } from "./project-skills"
 import { CONNECTORS, connectorById, connectorCommand, connectorGrants, connectorHandles, connectorServerId } from "./connectors/registry"
 import { usesNativeToolProtocol } from "./native-model-protocol"
@@ -83,7 +86,7 @@ import {
   type ModelRole,
 } from "@abdo/providers"
 import { estimateTokens } from "@abdo/schema"
-import { idempotencyKeyFor, mergeSessionSummary, openServeJournal, parseStoredSummary, renderSessionSummary, runTextAgentLoop, SUMMARY_INSTRUCTION, summaryEventLine, toolReceiptFailed, ToolVerdictLedger, VERDICT_OK, verifySummary, type DispatchResult, type NativeAgentCall, type NativeAgentReply, type OperationKind, type SessionSummary, type TextAgentMessage, type ToolReceipt, type ToolVerdict, type ToolVerdictReason } from "@abdo/engine-host"
+import { carriedReads, healNarratedReads, healNarratedWrite, idempotencyKeyFor, mergeSessionSummary, openServeJournal, parseStoredSummary, renderSessionSummary, runTextAgentLoop, SUMMARY_INSTRUCTION, summaryEventLine, toolReceiptFailed, ToolVerdictLedger, VERDICT_OK, verifySummary, type DispatchResult, type NativeAgentCall, type NativeAgentReply, type OperationKind, type SessionSummary, type TextAgentMessage, type ToolReceipt, type ToolVerdict, type ToolVerdictReason } from "@abdo/engine-host"
 import { nativeToolDefinition, nativeToolReply, dropOldestExchange } from "./native-agent-tools"
 import { composeSystem, isoDate, systemReceiptLine, type ComposeInput } from "./prompt-composer"
 import { epochReceiptLine } from "./receipt-ledger-line"
@@ -91,23 +94,25 @@ import { admitCredentials } from "./credential-admission"
 import { PROBE_OUTPUT_TOKENS, probeProvider } from "./provider-probe"
 import { AGENT_DIR, AGENT_FILE_RE, BUILTIN_AGENT_FILES, buildAgentCatalogue, describeAgents, describeAgentsBrief, findAgent, type AgentCatalogue, type AgentDefinition } from "./agent-definitions"
 import { DELEGATE_TOOL, MAX_DELEGATION_DEPTH, NESTED_TEAM_MAX, childToolRefusal, parseDelegateCommand, renderDelegateReport, runDelegatedAgent } from "./delegation"
-import { applyEdit, countOccurrences, nearestHint, parseEditCommand, resolveAmbiguousEdit } from "./edit-match"
+import { applyEdit, countOccurrences, heredocEditHint, nearestHint, parseEditCommand, resolveAmbiguousEdit } from "./edit-match"
 import { EditRefusalTracker, SHRINK_FLAG, shrinkViolation } from "./adaptive-write-guards"
 import { fabricatedOutputSignals, fabricationCorrection, fabricationNoticeLine, narratedToolCalls } from "./fabricated-output-guard"
 import { bracketDeleteNote } from "./powershell-bracket-guard"
 import { killByPidTargets, killRefusal, pidCommandLine, pidOwnedByProject } from "./process-ownership"
 import { probeTargets, probeUrls, renderProbe } from "./probe-targets"
-import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport, workerTask, workerPortOffset } from "./parallel-workers"
+import { PARALLEL_USAGE, MERGE_USAGE, mergeBranchRefusal, parseParallelTasks, renderParallelReport, requestedWorkers, workerTask, workerPortOffset } from "./parallel-workers"
 import { buildNextStepPrompt, candidatesFrom, commandFor as nextStepCommand, deterministicNextStep, parseNextStep, renderNextStep } from "./browser-next-step"
-import { powershellCallOperatorRepair, powershellChainRepair, powershellLiteralPathRepair } from "./powershell-call-repair"
+import { dockerExecChainRepair, linuxismRepair, powershellCallOperatorRepair, powershellChainRepair, powershellLiteralPathRepair, remoteChainViolation } from "./powershell-call-repair"
 import { imageReceiptLine, prepareImageFile } from "./image-file"
 import { terminalDialectLine, toolVocabulary, browserBridgeHint, policyLine } from "./tool-vocabulary"
 import { projectTestPassed, recallExecutionFact } from "./project-test-acceptance"
 import { runIntegrationProof } from "./composition"
 import { productCapabilityStatus } from "./product-capabilities"
-import { encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
+import { DEFAULT_MAX_FRAME_BYTES, encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
+import { fitFrame } from "./frame-fit"
+import { asksPlanReview, planHoldRefusal } from "./plan-review-hold"
 import { RustReachEffects } from "./provider-effects"
-import { chargeableUsage, cloudBudgetVerdict, cloudUsageSnapshot, readLedgerSummary, recordCloudUsage, renderLedgerLine } from "./token-budget"
+import { cacheDiscountFor, chargeableUsage, cloudBudgetVerdict, cloudUsageSnapshot, readLedgerSummary, recordCloudUsage, renderLedgerLine, useCloudCapSetting } from "./token-budget"
 import { ledgerFor, quotaVerdict, type ModelPrice, type ModelUsage, type SubscriberPlan } from "./commerce-ledger"
 import { meterSummary, readMeter, recordMeterEntry } from "./usage-meter"
 import { ownerGoneLine, parseOwnerPid, watchOwner } from "./owner-watch"
@@ -139,6 +144,7 @@ import { projectBuildViolation } from "./project-build-acceptance"
 import { nextAppPageShellViolation } from "./next-app-structure-guard"
 import { unsupportedPublicContactClaim } from "./public-content-evidence-guard"
 import { tsxSourceViolation } from "./tsx-source-guard"
+import { dependencyFingerprint, installCommandFor, missingDepsInstall, projectHasDependencies } from "./audit-applies"
 import { openSprintCount, sprintPlanReady, sprintPlanWriteViolation, sprintProgressViolation, sprintPlanTemplate, sprintBrief, sprintAdvance, openSprintSection, sprintDone, sprintShow, SPRINT_USAGE, openSprintsSummary } from "./project-sprint-plan-guard"
 import { projectAuthAudit, projectAuthViolation } from "./project-auth-guard"
 import { AWARENESS_FILE, AWARENESS_READ_CAP, awarenessRefused, awarenessUpdateFrom, mergeProjectAwareness, projectAwarenessBrief } from "./project-awareness"
@@ -149,15 +155,16 @@ import { cssSourceViolation } from "./css-source-guard"
 import { isRootLayout, orphanedStylesheet, orphanedStylesheetLine } from "./root-layout-stylesheet"
 import { tailwindApplyViolation } from "./tailwind-apply-guard"
 import { DRIVE_UPLOAD_MAX, GoogleConnector, googleOptionsFromEnv } from "./mcp-servers/google"
-import { ManagedServers, devPortHint, devServerUnderBuildNote, listenerPidOf, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
+import { ManagedServers, devPortHint, devServerUnderBuildNote, listenerPidOf, listeningPorts, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
-import { brokenAliasViolation, dangerousShellViolation, fileWriteViaShellViolation, killByNameViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
+import { brokenAliasViolation, dangerousShellViolation, fileWriteViaShellViolation, killByNameViolation, dockerPublishViolation, narrationEchoViolation, unquotedTemplateViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
 import { redactSecretValues, secretInCommandViolation, secretInSourceViolation, sweepResidualSecrets } from "./secret-command-guard"
 import { duplicateCapabilityViolation } from "./duplicate-capability-guard"
 import { gitChanges, gitState } from "./git-state"
 import { IntentLedger, intentInstruction } from "./intent-field"
 import { distillFact, factsForAutomaticRecall, recallBrief } from "./turn-memory"
-import { parseMemoryCommand, saveOwnerMemory } from "./owner-memory"
+import { parseMemoryCommand, saveOwnerMemory, USER_MEMORY_PROJECT, userOwnerNotes } from "./owner-memory"
+import { buildImportReview, IMPORT_AGENTS, readExport, readLocalSources, readPasted, saveImportedItems, scanLocalAgentFiles, type ExportVendor, type ImportAgent } from "./memory-import"
 import { SemanticMemory } from "./semantic-memory"
 import { isResumeIntent, pickPriorGoal, resumeAnnouncement, resumeBrief } from "./resume-intent"
 import { trimEpochHistory } from "./epoch-context"
@@ -176,7 +183,7 @@ import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./seman
 import { readPdf } from "./pdf-read"
 import { DOCX_MAX_BYTES, docxText } from "./docx-read"
 import { analyzeCv, jobKeywords, parseCvCommand, renderCvReport, type CvAnalysis, type CvCommand } from "./cv-analysis"
-import { folderInstructions, folderInstructionsLayer } from "./folder-instructions"
+import { folderInstructions, folderInstructionsLayer, rootInstructions, rootInstructionsLayer } from "./folder-instructions"
 import { diskEvidence, diskSnapshot, type GitRun } from "./disk-evidence"
 import { PlaybookMiner, type PlaybookCandidate } from "./playbook-miner"
 import { RecipeCollector, RecipeStore, describeRecipe, recipeBrief } from "./setup-recipes"
@@ -186,7 +193,8 @@ import { FrameQueue, createRemoteControl, mergeFrames, type RemoteControl } from
 import { CheckpointStore, restoreReportLine } from "./turn-checkpoint"
 import { FileMutationQueue, queueWaitLine } from "./file-mutation-queue"
 import { buildReviewPrompt, changesFromUnifiedDiff, judgeReview, parsePrRef, parseReviewFindings, PR_REVIEW_HEADER, renderReviewReport, REVIEW_LENSES, REVIEW_SYSTEM, reviewDiffText, type ReviewChange } from "./review-lane"
-import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"
+import { DESKTOP_DRIVE_BRIEF, exposedByIntent, exposureLine, familiesFor, familiesFromResult, isDesktopDriveTask, noteToolUse } from "./tool-exposure"
+import { applyWorkerDiff, snapshotWorkingTree } from "./parallel-base"
 import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./tool-availability"
 import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
 import { formatKeyless, KEYLESS_HOST, KEYLESS_SOURCE, keylessSearchUrl, parseKeylessResults } from "./mind/keyless-search"
@@ -197,7 +205,17 @@ import { commandUsedLine, expandCustomCommand, listCustomCommands } from "./cust
 import { attachmentText, parseTable, parseTableCommand, profileTable, queryTable, spreadsheetSheets } from "./data-table"
 import { SANDBOX_LINE, sandboxGrant, sandboxInvocation } from "./os-sandbox"
 import type { ControlledExecutionGrant } from "@abdo/tools"
-import { editsCode, isProjectTestRun, projectTestCommand, VERIFY_AFTER_EDIT_RUNS, verifyDemandLine, verifyGaveUpLine } from "./verify-after-edit"
+import { deployRoutesBrief } from "./deploy-routes"
+import { dockerfileSecretsViolation } from "./dockerfile-secrets-guard"
+import { globPatternInProject } from "./glob-pattern"
+import { secretStagingViolation } from "./git-secret-guard"
+import { majorUpgradeViolation } from "./major-upgrade-guard"
+import { toolCrashResult } from "./tool-crash"
+import { auditRoutesFromArgs, isDevHmrNoise } from "./audit-routes"
+import { uncommittedNote } from "./uncommitted-note"
+import { browserPortFor } from "./browser-port"
+import { DOTENV_MASK_NOTE, dotenvOverwriteViolation, dotenvShellViolation, isDotenvSecretFile, maskDotenv } from "./dotenv-mask"
+import { editsCode, isProjectTestRun, projectServerCommand, projectTestCommand, refusedLocalPort, VERIFY_AFTER_EDIT_RUNS, verifyDemandLine, verifyGaveUpLine, verifyServerLine } from "./verify-after-edit"
 import { acceptanceLine, acceptanceSatisfied, gateReceipts, gateShortfall, type GateTrack } from "./acceptance-receipt"
 import { confirmed as lessonConfirmed, failureOf, lessonBrief, lessonEventLine, lessonKey, lessonsOf, recordLesson } from "./lessons"
 import { railProfile, type RailProfile, type RailSetting } from "./rail-policy"
@@ -207,7 +225,7 @@ import { missingReceiptsLine, parseSuperAbdoReview, resolveSuperAbdo, superAbdoI
 import { projectInstructionsFor, validateProjectInstructions, type ProjectInstructions } from "./project-instructions"
 import { PluginInventory, catalogFor, describePlugins, metaOn, neutralPluginContext, pluginContext, resolvePlugin, resolvePlugins, validatePluginsPatch, type PluginName } from "./plugin-registry"
 import { INTAKE_REFUSALS, assistedIntake, classifyInboundSecret, editorArgv, intakeDesktopAbsent, intakeTimeoutMs, rotationWarning, suggestedHandle, vaultHandleRefusal, VAULT_HANDLE_RE } from "./secret-intake"
-import { resolveVaultScript, shippedVaultPresence, vaultEnvOverlay, vaultForget, vaultGet, vaultGuard, vaultList, vaultSet } from "./vault"
+import { resolveVaultScript, shippedVaultPresence, vaultEnvOverlay, vaultForget, vaultGet, vaultGuard, vaultHas, vaultList, vaultSet } from "./vault"
 import { createVaultStatusReporter } from "./vault-status"
 import { approvalAskedLine, approvalDecidedLine } from "./approval-ledger"
 import { locationsFromReceipt } from "./tool-locations"
@@ -228,8 +246,12 @@ import { detectStackForProject } from "./project-stacks"
 import { modelOutputViolation } from "./model-output-guard"
 import { excessiveMetadataDescription } from "./public-content-quality-guard"
 import { grepRegex } from "./grep-pattern"
-import { effectivePattern, parseGrepArgs, tokenizeArgs } from "./grep-args"
+import { effectivePattern, GREP_CONTEXT_MAX, parseGrepArgs, tokenizeArgs } from "./grep-args"
 import { connectReceipt, renderConnectors, resolveConnector } from "./connectors/agent-tools"
+import { connectorAuthHosts, connectorDiscoveryFetch, GOOGLE_API_HOSTS, httpsHost } from "./connectors/egress-hosts"
+import { chatSettingsBrief, parseChatSettingsCommand, renderChatSettings, settingsChangeUnasked } from "./chat-settings"
+import { referenceCloneBrief } from "./reference-clone"
+import { PLUGINS as PLUGIN_DESCRIPTORS, PLUGIN_NAMES as CHAT_PLUGIN_NAMES } from "./plugin-registry"
 
 installEgressGuard()
 
@@ -313,7 +335,7 @@ const googleSearchReady = (): boolean => {
   return presence === undefined || [...presence.values()].every(Boolean)
 }
 /**
- * القائمةُ الحيّة لنماذج مزوّدٍ موسومٍ `discoverModels` (إنفيديا: ~80 نموذجاً والبذرةُ أربعة — أمرُ المالك 2026-09-28).
+ * القائمةُ الحيّة لنماذج مزوّدٍ موسومٍ `discoverModels`.
  * تُقرأ عبر عامل رست بالمفتاح من الخزنة، وتُذكر عشر دقائق: فتحُ قائمة النماذج لا يطلق نداءً كلَّ مرّة، والفشلُ
  * (لا شبكة، 401، 503) يُبقي البذرةَ بلا ضجيج — البذرةُ ما يعمل بلا شبكة.
  */
@@ -1024,7 +1046,9 @@ const readThroughKernelV = async (file: string, range?: Readonly<{ from: number;
       lastLine = "error" in whole ? 0 : whole.total
     }
     // القصُّ بالأسطر لا بالأحرف — والبقيّةُ تُسمّى أمراً (clipReadBody).
-    const shown = clipReadBody(body, readBudget, firstLine, lastLine, file)
+    // 10-08: قيمُ ملفّات البيئة لا تدخل السياق (dotenv-mask.ts) — الأسماءُ تُرى والقيمُ محجوبة.
+    const dotenv = isDotenvSecretFile(file)
+    const shown = clipReadBody(dotenv ? maskDotenv(body) : body, readBudget, firstLine, lastLine, file)
     const orphanSheet = isRootLayout(file) ? orphanedStylesheet(PROJECT_DIR, file, text) : undefined
     const twApplyNote = tailwindApplyViolation(PROJECT_DIR, file, text)
     return okText(
@@ -1033,7 +1057,8 @@ const readThroughKernelV = async (file: string, range?: Readonly<{ from: number;
       `والأطوار السبعة في دفتر النواة (صفوفه الآن: ${ledgerRows() + 7}).\n` +
       `--- ${file} ---\n${shown}` +
       (orphanSheet === undefined ? "" : `\n\n⚠ ${orphanedStylesheetLine(orphanSheet, file)}`) +
-      (twApplyNote === undefined ? "" : `\n\n⚠ ${twApplyNote}`)
+      (twApplyNote === undefined ? "" : `\n\n⚠ ${twApplyNote}`) +
+      (dotenv ? `\n\n${DOTENV_MASK_NOTE}` : "")
     )
   } finally {
     await host.close()
@@ -1128,6 +1153,38 @@ const AGENT_CONTEXT_TOKENS = (() => {
   if (Number.isSafeInteger(configured) && configured >= 8_192 && configured <= 262_144) return configured
   return 65_536
 })()
+/**
+ * 10-10 (مقيس في مهمّة n8n على DeepSeek — نافذته مليون): بنافذة 65.5k قُصّ السياقُ في كلّ نداءٍ تقريباً («قُصّت N رسائل كبيرة») فأعاد النموذجُ
+ * قراءةَ ما فقده — نداءاتٌ أكثر ووقتٌ أطول. الإعدادُ `agentContextTokens` يغلب البيئةَ والافتراض (الحدودُ نفسُها)، ويُقرأ في كلّ نداء.
+ */
+const agentContextTokens = (): number => {
+  const saved = loadSettings().agentContextTokens
+  return typeof saved === "number" && Number.isSafeInteger(saved) && saved >= 8_192 && saved <= 262_144 ? saved : AGENT_CONTEXT_TOKENS
+}
+/**
+ * 10-11 — جهدُ تفكير الوكيل (‏`reasoning_effort` عند DeepSeek: low/high/max). مقيس: دورُ CRM ‏403 نداءً بنحو 16 ث لكلٍّ والتفكيرُ بجهده
+ * الافتراضيّ high؛ وإطفاؤه كلّيّاً أفسد الحلّ (m7 ‏239 نداءً بلا اكتمال). المتغيّرُ ABDO_REASONING_EFFORT يغلب الإعداد reasoningEffort.
+ */
+// مقيس 10-11 (الحَكَمُ نفسُه، DeepSeek V4 Flash): m7 ‏high 919 ث/574k ⇦ low 211 و506 ث/151k و266k؛ m8 ‏high 804 ث/436k ⇦ low 430 ث/172k —
+// والدرجةُ نفسُها (21/21، 27/27). فالافتراضُ low؛ و«high»/«max» تُختار صراحةً، و«default» يترك افتراضَ المزوّد.
+const agentReasoningEffort = (): "low" | "high" | "max" | undefined => {
+  const raw = process.env.ABDO_REASONING_EFFORT ?? loadSettings().reasoningEffort ?? "low"
+  return raw === "low" || raw === "high" || raw === "max" ? raw : undefined
+}
+/**
+ * 10-11 (مقيس على مهمّة CRM: 196 قراءةً لـ46 ملفّاً، 75 منها إعادةُ قراءةٍ بعد حدّ حقبةٍ والملفُّ لم يتغيّر): الحقبةُ تحمل قراءاتِها إلى التالية
+ * (حتى ~117 ألف حرف)، ثمّ يقصّ trimEpochHistory التاريخَ كلَّه إلى 48KB — ميزانيّةُ نموذج 9B — فتسقط المحمولاتُ ويعيد النموذجُ القراءة.
+ * الميزانيّةُ تتبع نافذةَ الوكيل (≈1.2 بايتٍ لكلّ توكن، والأرضيّةُ 48KB كما كانت)؛ ونافذةُ النموذج يحرسها قصُّ المضيف على حدة.
+ */
+const epochHistoryBudgetBytes = (): number => Math.max(48 * 1024, Math.round(agentContextTokens() * 1.2))
+/** 10-11 — سقفُ قراءات الوكيل الموجِّه المحمولة إلى الحقبة الأولى (أحرف). */
+const ORIENTATION_CARRY_CHARS = 60_000
+/**
+ * 10-11 (مقيس على CRM الرابع: 28 دقيقةً و~150 نداءً بعد اكتمال العمل) — حقلُ مفتاح API في صفحة اللوحة كلمةُ مرور، فالعقدُ يرفض ملأه آلياً
+ * (صحيح) ويقترح handoff؛ لكنّ exec بلا مستخدم، فسلّم الحقلَ لمن لا يوجد ثمّ دار النموذجُ على الالتفاف (hash، تبويبٌ جديد، بحثٌ عن Edge).
+ * في قشرة cli لا أحدَ يكتب: يُقال ذلك ويُوجَّه إلى الإثبات الممكن.
+ */
+const NO_OPERATOR_HANDOFF = "لا مستخدمَ في هذه الجلسة (exec بلا واجهة) يكتب حقلَ الاعتماد، والتسليمُ مستحيلٌ هنا. لا تلتفّ عليه (رابطٌ يحمل المفتاح، hash، تبويبٌ جديد، متصفّحٌ آخر): أثبت المسارَ نفسَه بطلبات HTTP أو اختبار، واذكر في الخلاصة أنّ إثباتَ المتصفّح يحتاج من يكتب الاعتماد."
 const CHAT_OUTPUT_RESERVE = 4_096
 const AGENT_OUTPUT_RESERVE = 16_384
 // Thinking-capable local 9B repairs repeatedly exhausted 4096 before emitting
@@ -1149,6 +1206,8 @@ interface AskHooks {
   readonly signal?: AbortSignal
   /** مقيس 09-17: ازدحامُ المزوّد كان صامتاً للمشغّل (stderr وحده) حتى يموت الدور — سطرُ حالةٍ لكلّ إعادةٍ وصعود. */
   readonly onModelNotice?: (text: string) => void
+  /** 10-09 — سقفُ إعادة المحاولة لنداءٍ مساعد (نموذج القرار): له بديلٌ عاملٌ فلا ينتظر سبعَ محاولات. */
+  readonly maxRetryAttempts?: number
   /** S1 (09-17) — إيصالُ طبقات النظام 🧾 (حجمُ كلّ طبقة)؛ الدورُ يبثّه مرّةً واحدة عند أوّل تركيب. */
   readonly onSystemComposed?: (receipt: string) => void
   /** البند 10 — تفكيكُ نافذة السياق؛ المستدعي يبثّه مرّةً في الدور. */
@@ -1184,6 +1243,13 @@ const INITIAL_MODEL = Providers.parseRef(DEFAULT_CHAT_MODEL)!
 let ASK_MODEL = INITIAL_MODEL.model
 // م9و — عائلاتُ الأدوات المفتوحة للدور الجاري (المتصفّح/سطح المكتب/التفويض): على مستوى الوحدة لأنّ ask (مستوى الوحدة) يرشّح بها.
 let turnFamilies = new Set<string>()
+// 10-11 — فرعُ كلِّ عاملٍ ⇦ لقطةُ حالة الأب التي تفرّع منها (parallel-base.ts): merge يطبّق فرقَه عنها على شجرة الأب.
+const parallelBases = new Map<string, string>()
+/** خطأُ مزوّدٍ يرفض الصور (نصُّ ask نفسِه بالعربيّة والإنجليزيّة). */
+const IMAGE_REFUSED = /لا يقبل الصور|no verified image input|does not support image|image input is not supported/iu
+const WORKER_HIDDEN_TOOLS: ReadonlySet<string> = new Set(["parallel", "merge", "team", "delegate", "handoff", "agents"])
+// 10-11 (مقيس على m11 بعاملَين: بنى الأبُ التطبيقَ واختبره ثمّ أطلق عاملَين يعيدانه) — يُسنَد في الدور: كتب الأبُ التسليمَ ومرّ بناؤه أو اختباره.
+let parentDeliverableProven: () => boolean = () => false
 // م9ز — معرِّفُ تثبيت الجلسة للمزوّد: بصمةُ معرِّف الجلسة (لا المعرِّفُ نفسُه ولا سرّ)، ثابتٌ داخل الجلسة ومختلفٌ بين جلستين؛ على مستوى الوحدة لأنّ ask() وحدويّ.
 let sessionAffinityId = ""
 // م11 — عدّادُ رفض التحرير لكلّ (دور، ملفّ): الضعيفُ يُنصح بإعادة الكتابة من الرفض الأوّل، والقويُّ من الثاني.
@@ -1361,8 +1427,14 @@ type Settings = {
   autoCompact?: boolean
   /** سقفُ إنفاق الدور بالتوكن الفعّال (0 = بلا سقف؛ الغيابُ = متغيّرُ البيئة ثمّ الافتراض 400k) — مقيس 09-13: مهمّةٌ «مشروع + صفحة + تحقّق» تُقطع عند 150k مرّتين. */
   turnTokenCap?: number
+  /** 10-09 — سقفُ أمان السحابة بالتوكن الفعّال للدفتر المشترك (الغيابُ = ABDO_CLOUD_TOKEN_CAP ثمّ الافتراض)؛ لا صفرَ «بلا سقف» — حارسُ إنفاق. */
+  cloudTokenCap?: number
   /** كم مرّةً يُجدَّد سقفُ الدور تلقائياً قبل التوقّف الصادق (0 = لا تجديد؛ الغيابُ = ABDO_TURN_RENEWALS أو الافتراض 2). */
   turnRenewals?: number
+  /** نافذةُ سياق الوكيل بالتوكنات (8192–262144) — تغلب ABDO_AGENT_CONTEXT_TOKENS؛ الغيابُ = البيئةُ ثمّ 65536. */
+  agentContextTokens?: number
+  /** 10-11 — جهدُ تفكير الوكيل عند DeepSeek: low/high/max (انظر agentReasoningEffort). */
+  reasoningEffort?: string
   /** إشعارُ نظامٍ حين يتوقّف الدور والنافذةُ ليست في المقدّمة (09-14) — الافتراض مفعَّل، ويُطفأ من الإعدادات. */
   turnNotifications?: boolean
   /** فحصُ وثيقة الإصدار عند التشغيل (نداءُ شبكةٍ إلى مستودع التوزيع) — مفعَّل، ويُطفأ من الإعدادات؛ Help ▸ التحقّق اليدويّ يبقى (09-14). */
@@ -1389,7 +1461,7 @@ const SECRETISH = /sk-[A-Za-z0-9]{12,}|Bearer\s|[A-Za-z0-9_-]{40,}/
 // غير معروف» (سطر التحقّق أدناه). فشلٌ صامتٌ مزدوج: المِرساةُ تتحرّك في الشاشة
 // ولا تنجو من إعادة التشغيل، والرفضُ يظهر إشعاراً لا يربطه المستخدمُ بالسحب.
 // **حارسٌ يُفحص بعائده يمرّ وهو ينسى حقلاً — الفحصُ الحاكم يقرأ الملفّ.**
-const SETTINGS_KEYS = new Set<keyof Settings>(["model", "chatModel", "agentModel", "modelRole", "mode", "theme", "project", "railPolicy", "routerGate", "gateModel", "decisionModel", "plugins", "language", "customProviders", "panelDocks", "mcpServers", "approvalTimeoutSeconds", "superAbdo", "projectInstructions", "computerUseEnabled", "desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnRenewals", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled", "semanticMemoryEnabled", "sensitiveMemoryEnabled", "projectRoots", "inferredMemoryEnabled", "modelLadder", "visionModel", "imageGenModel", "workMode", "priceTable", "sellPlan", "sessionAffinity"])
+const SETTINGS_KEYS = new Set<keyof Settings>(["agentContextTokens", "model", "chatModel", "agentModel", "modelRole", "mode", "theme", "project", "railPolicy", "routerGate", "gateModel", "decisionModel", "plugins", "language", "customProviders", "panelDocks", "mcpServers", "approvalTimeoutSeconds", "superAbdo", "projectInstructions", "computerUseEnabled", "desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "cloudTokenCap", "turnRenewals", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled", "semanticMemoryEnabled", "sensitiveMemoryEnabled", "projectRoots", "inferredMemoryEnabled", "modelLadder", "visionModel", "imageGenModel", "workMode", "priceTable", "sellPlan", "sessionAffinity"])
 
 const loadSettings = (): Settings => {
   try {
@@ -1398,6 +1470,9 @@ const loadSettings = (): Settings => {
     return {}
   }
 }
+
+// 10-09 — سقفُ أمان السحابة من الإعداد أوّلاً (ثمّ ABDO_CLOUD_TOKEN_CAP ثمّ الافتراض) — يُقرأ عند كلّ سؤالٍ للميزانية فيسري فوراً.
+useCloudCapSetting(() => loadSettings().cloudTokenCap)
 
 const saveSettings = (patch: Settings): Settings => {
   const loaded = loadSettings()
@@ -1499,7 +1574,9 @@ const validateSettingsPatch = (value: Record<string, unknown>): Settings | strin
   if (value.updateCheckEnabled !== undefined && typeof value.updateCheckEnabled !== "boolean") return "updateCheckEnabled يحتاج قيمة منطقية"
   if (value.remoteControlEnabled !== undefined && typeof value.remoteControlEnabled !== "boolean") return "remoteControlEnabled يحتاج قيمة منطقية"
   if (value.sessionAffinity !== undefined && typeof value.sessionAffinity !== "boolean") return "sessionAffinity يحتاج قيمة منطقية"
+  if (value.cloudTokenCap !== undefined && (typeof value.cloudTokenCap !== "number" || !Number.isSafeInteger(value.cloudTokenCap) || value.cloudTokenCap < 1_000_000 || value.cloudTokenCap > 100_000_000_000)) return "cloudTokenCap يحتاج عدداً صحيحاً بين 1000000 و100000000000 (سقفُ أمانٍ لا يُطفأ)"
   if (value.turnTokenCap !== undefined && (typeof value.turnTokenCap !== "number" || !Number.isSafeInteger(value.turnTokenCap) || value.turnTokenCap < 0 || (value.turnTokenCap !== 0 && value.turnTokenCap < 10_000) || value.turnTokenCap > 5_000_000)) return "turnTokenCap يحتاج عدداً صحيحاً: 0 (بلا سقف) أو بين 10000 و5000000"
+  if (value.agentContextTokens !== undefined && (typeof value.agentContextTokens !== "number" || !Number.isSafeInteger(value.agentContextTokens) || value.agentContextTokens < 8_192 || value.agentContextTokens > 262_144)) return "agentContextTokens يحتاج عدداً صحيحاً بين 8192 و262144"
   if (value.turnRenewals !== undefined && (typeof value.turnRenewals !== "number" || !Number.isSafeInteger(value.turnRenewals) || value.turnRenewals < 0 || value.turnRenewals > MAX_TURN_RENEWALS)) return `turnRenewals يحتاج عدداً صحيحاً بين 0 و${MAX_TURN_RENEWALS}`
   if (value.memorySearchEnabled !== undefined && typeof value.memorySearchEnabled !== "boolean") return "memorySearchEnabled يحتاج قيمة منطقية"
   if (value.semanticMemoryEnabled !== undefined && typeof value.semanticMemoryEnabled !== "boolean") return "semanticMemoryEnabled needs a boolean"
@@ -1618,7 +1695,8 @@ const pluginOnNow = (name: PluginName): boolean => {
 }
 
 // team/delegate تُحجبان عن النموذج («team غير موجودة») — خيارٌ في الإعدادات لا يعمل. اختيارُ وضعٍ يوازي قرارُ مالكٍ صريح بالتفويض.
-const delegationEnabled = (): boolean => pluginOnNow("delegation") || workProfile(loadSettings().workMode).parallelAgents >= 2
+// 10-11 (مقيس على m11 بعاملَين: عاملٌ نادى «delegate builder» — وكيلٌ داخل عامل) — العاملُ المتوازي وكيلٌ واحد ينفّذ مهمّتَه بنفسه.
+const delegationEnabled = (): boolean => process.env.ABDO_PARALLEL_WORKER !== "1" && (pluginOnNow("delegation") || workProfile(loadSettings().workMode).parallelAgents >= 2)
 
 // ذ5 — العدّادُ المحلي (plugins.usageMeter — الافتراض مفعَّل، قارئٌ واحد عند النداء): سطرٌ لكلّ نداءٍ
 // محلّيٍّ أو سحابيّ بما أعلنه المزوّد حرفاً وما حوسب به وزمنه، على قرص المستخدم وحده (ABDO_USAGE_METER).
@@ -1768,7 +1846,7 @@ const gateAsk = async (
       } catch {
         // فشل الدفتر على القرص لا يُسقط الدور ولا يخفي الإنفاق — العدّاد يُشحن خارج try.
       }
-      hooks.turnMeter?.charge(charged)
+      hooks.turnMeter?.charge(charged, cacheDiscountFor(prov.id))
     }
     return { ...interpretGateTurn(decoded, corpus), usage: { inputTokens: decoded.usage.inputTokens, outputTokens: decoded.usage.outputTokens } }
   } catch (error) {
@@ -1825,7 +1903,7 @@ const inferAsk = async (frame: SemanticFrame, selected: ModelSelection, hooks: A
     meterCall(prov, selected.model, "semantic.infer", startedAt, decoded.usage, charged)
     if (rustOwnedProvider) {
       try { recordCloudUsage({ provider: prov.id, model: selected.model, note: "semantic.infer", ...charged }) } catch { /* الدفتر على القرص لا يُسقط الدور */ }
-      hooks.turnMeter?.charge(charged)
+      hooks.turnMeter?.charge(charged, cacheDiscountFor(prov.id))
     }
     return interpretInferTurn(decoded, `${prov.id}/${selected.model}`)
   } catch {
@@ -1854,7 +1932,7 @@ const visionPointAsk = async (system: string, body: string, image: { readonly mi
   meterCall(prov, selected.model, "vision.point", startedAt, decoded.usage, charged)
   if (!prov.local) {
     try { recordCloudUsage({ provider: prov.id, model: selected.model, note: "vision.point", ...charged }) } catch { /* الدفترُ مساعِد */ }
-    hooks.turnMeter?.charge(charged)
+    hooks.turnMeter?.charge(charged, cacheDiscountFor(prov.id))
   }
   if (decoded.kind === "tools") throw Error("vision-tools-forbidden")
   return decoded.text
@@ -1877,7 +1955,7 @@ const memoryRankAsk = async (system: string, body: string, selected: ModelSelect
   meterCall(prov,selected.model,'memory.semantic',startedAt,decoded.usage,charged)
   if(!prov.local){
     try{recordCloudUsage({provider:prov.id,model:selected.model,note:'memory.semantic',...charged})}catch{}
-    hooks.turnMeter?.charge(charged)
+    hooks.turnMeter?.charge(charged, cacheDiscountFor(prov.id))
   }
   if(decoded.kind==='tools')throw Error('memory-tools-forbidden')
   return decoded.text
@@ -1889,7 +1967,7 @@ const memoryRankAsk = async (system: string, body: string, selected: ModelSelect
  * الازدحامُ يزول في دقائق لا ثوانٍ، والمشغّلُ يرى كلَّ إعادةٍ سطراً (onModelNotice) لا صمتاً.
  */
 const MODEL_RETRY_FAST = process.env.ABDO_MODEL_RETRY_FAST === "1" // للاختبارات الحيّة وحدها: محاولتان بمهلةٍ قصيرة
-const MODEL_RETRY_ATTEMPTS = MODEL_RETRY_FAST ? 2 : 7
+const MODEL_RETRY_LIMIT = MODEL_RETRY_FAST ? 2 : 7
 // مهلةٌ مسطّحة للاختبارات الحيّة وحدها (ABDO_MODEL_RETRY_BACKOFF_MS): تُقاس **سبعُ** المحاولات في ثوانٍ بدل دقيقتين،
 // فيبقى عددُ المحاولات هو العقدَ المفحوص لا زمنُ الانتظار. لا أثرَ لها في الإنتاج (المتغيّرُ غائب).
 const MODEL_RETRY_BACKOFF_OVERRIDE_MS = Number(process.env.ABDO_MODEL_RETRY_BACKOFF_MS)
@@ -1898,7 +1976,8 @@ const MODEL_RETRY_BACKOFF_MS: readonly number[] = Number.isFinite(MODEL_RETRY_BA
  * يعيد النداءَ عند العابر فقط (تصنيفُ البوّابة `bounded-backoff`: 5xx/429/408، وانقطاعٌ قبل أيّ بايت حين `retryTransport`)؛
  * ما بدأ بثُّه لا يُعاد، والمُلغى لا يُعاد، والردُّ غيرُ العابر (4xx) يعود كما هو ليحكم عليه المنادي. كلُّ إعادةٍ تُكتب إلى stderr.
  */
-async function requestWithBoundedRetry(providerId: string, attempt: (n: number) => Promise<Response>, options: { readonly retryTransport: boolean; readonly signal?: AbortSignal; readonly onRetry?: (line: string) => void }): Promise<Response> {
+async function requestWithBoundedRetry(providerId: string, attempt: (n: number) => Promise<Response>, options: { readonly retryTransport: boolean; readonly signal?: AbortSignal; readonly onRetry?: (line: string) => void; readonly attempts?: number }): Promise<Response> {
+  const MODEL_RETRY_ATTEMPTS = options.attempts ?? MODEL_RETRY_LIMIT
   for (let n = 1; ; n += 1) {
     let response: Response
     try { response = await attempt(n) } catch (error) {
@@ -1959,7 +2038,7 @@ const ask = async (
     const modelGone = error instanceof ModelRequestFailure && error.failure.kind === "invalid-request" && (error.failure.status === 404 || error.failure.status === 410)
     const climbable = error instanceof ModelRequestFailure && (error.failure.retry === "bounded-backoff" || error.failure.kind === "quota-exhausted" || modelGone || (onClimbedRung && error.failure.kind === "credential"))
     if (!(error instanceof ModelRequestFailure) || !climbable || hooks.signal?.aborted === true) throw error
-    // سلّمُ المالك إن ضُبط؛ وإلا سلّمٌ تلقائيّ من البدائل المتاحة بمفتاح، الأقدرُ أوّلاً، بلا ما سقط في هذا الدور (أمر المالك 2026-09-28).
+    // سلّمُ المالك إن ضُبط؛ وإلا سلّمٌ تلقائيّ من البدائل المتاحة بمفتاح، الأقدرُ أوّلاً، بلا ما سقط في هذا الدور.
     const owner = ownerLadder()
     const ladder = owner.length > 0 ? owner : fallbackLadder(sel.ref, new Set([...spentRefs(outageSpent), ...(outageRoute === undefined ? [] : [outageRoute.from])]), { keyKnown: providerKeyKnown, parseRef: (ref) => Providers.parseRef(ref) })
     const evidence = { kind: "provider_unavailable" as const, detail: `${error.provider}: ${error.failure.reason}${error.failure.status === undefined ? "" : ` (HTTP ${error.failure.status})`}`, attemptId: `outage:${sel.ref}` }
@@ -1971,6 +2050,35 @@ const ask = async (
     return ask(question, hooks, history, selected, onNativeReply)
   }
 }
+
+/**
+ * 10-09 (مقيس على m7 مقابل OpenCode): نموذجُ القرار (nano-omni بالمفتاح الثاني) ردّ 503/502 خمسَ مرّات، فانتظر المحكّمُ الدلاليّ
+ * 145 ثانيةً من 234 بعد أن أنهى النموذجُ العاملُ عملَه. نموذجُ القرار مساعدٌ له بديلٌ عامل: محاولتان بلا صعود سلّم، ثمّ يحكّم
+ * النموذجُ المختارُ نفسُه بسطرٍ يقال للمشغّل. ما ليس عطلَ مزوّد (رفضُ سقف، مقاطعة) يعود كما هو.
+ */
+const DECISION_RETRY_ATTEMPTS = 2
+const askDecision = async (question: string, hooks: AskHooks, history: readonly ChatMessage[], selected: ModelSelection, judge: ModelSelection = resolveDecisionModel(selected)): Promise<string> => {
+  if (judge.ref === selected.ref) return ask(question, hooks, history, selected)
+  try { return await askOnce(question, { ...hooks, maxRetryAttempts: DECISION_RETRY_ATTEMPTS }, history, judge) }
+  catch (error) {
+    if (!(error instanceof ModelRequestFailure) || hooks.signal?.aborted === true) throw error
+    hooks.onModelNotice?.(`⏳ نموذجُ القرار ${judge.ref} لا يجيب (${error.failure.reason}) — يحكّم النموذجُ العامل ${selected.ref}`)
+    return ask(question, hooks, history, selected)
+  }
+}
+
+/**
+ * 10-09 — مهاراتُ التشغيل الأساسيّة (plugins.opsSkills): حزمةُ abdo-ops المضمَّنة بجوار المحرّك، تُعلَن وتُحمَّل بلا تثبيت.
+ * ما ثبّته المستخدمُ من الامتدادات بالمرجع نفسِه يُعلَن مرّةً واحدة (من المسار المحلّيّ).
+ */
+const coreSkillsRoot = (): string | undefined => bundledRoot([process.env.ABDO_BUNDLED_EXTENSIONS, join(ROOT, "extensions", "bundled"), join(ROOT, "..", "..", "..", "extensions", "bundled")])
+const coreSkillsOn = (): readonly SkillListing[] => {
+  if (!pluginOnNow("opsSkills")) return []
+  const installed = new Set(localSkillsCatalogue(SETTINGS_FILE).map((skill) => skill.ref))
+  return coreSkillsCatalogue(coreSkillsRoot()).filter((skill) => !installed.has(skill.ref))
+}
+const coreSkillFor = (ref: string): string | undefined =>
+  CORE_SKILL_PACKAGES.includes(ref.split("/")[0] ?? "") && pluginOnNow("opsSkills") ? coreSkillBody(coreSkillsRoot(), ref) : undefined
 
 const askOnce = async (
   question: string,
@@ -1984,7 +2092,7 @@ const askOnce = async (
   const planningOnly = process.env.ABDO_AGENT_PHASE === "planning"
   // 09-16 — خطّةٌ مكتوبةٌ لم يعتمدها المستخدم ما زالت تخطيطاً: الاعتمادُ بـplan-approve مربوطٌ ببصمتها.
   const planningPhase = hooks.conversationMode==='chat' ? false : planningOnly || !sprintPlanReady(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1") || !planApproved(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1")
-  const nativeTools = onNativeReply !== undefined && usesNativeToolProtocol(selected.provider, selected.model, process.env.ABDO_AGENT_PROTOCOL)
+  const nativeTools = onNativeReply !== undefined && usesNativeToolProtocol(selected.provider, selected.model, process.env.ABDO_AGENT_PROTOCOL, pluginOnNow("nativeTools"))
 
   // Public builds contain no company or project-control index. Context comes
   // only from the selected project's explicit tool results.
@@ -2003,6 +2111,9 @@ const askOnce = async (
   let toolDefinitions: HarnessToolDefinition[] = Tools.TOOLS
     .filter((tool) => (projectSelected || ["project-create","project-template","templates","project-locate","project-open"].includes(tool.name)) && tool.agentCallable && planningToolAllowed(tool.name, planningPhase) && (cloudModel(selected.provider) || tool.cloudOnly !== true))
     .filter((tool) => exposedByIntent(tool.name, turnFamilies))
+    // 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.141: العاملان ناديا «parallel <<<» — مهمّتُهما من الأب تحمل كلمةَ parallel فتُفتح العائلة).
+    // العاملُ وكيلٌ واحد: لا تُعرض عليه أدواتُ التقسيم والتفويض مهما حمل نصُّ مهمّته.
+    .filter((tool) => process.env.ABDO_PARALLEL_WORKER !== "1" || !WORKER_HIDDEN_TOOLS.has(tool.name))
     .filter((tool) => withinAllowlist(tool.name) && (tool.name !== DELEGATE_TOOL || (delegationOn && allowlist === undefined)) && (tool.name !== TEAM_TOOL || (delegationOn && (allowlist === undefined || allowlist.includes(TEAM_TOOL)) && workProfile(loadSettings().workMode).parallelAgents >= 2)))
     // البند 12 — أداةٌ شرطُها غائبٌ لا تُعلَن (plugins.toolAvailability)؛ المُوزِّعُ يبقى يرفضها باسمها إن سُمّيت.
     .filter((tool) => !toolAvailabilityOn || unavailableBecause(tool.name, toolFacts) === undefined)
@@ -2068,7 +2179,7 @@ const askOnce = async (
   // الهجرةُ بايتاً بايت: المسمارُ الذهبيّ في test/prompt-composer.test.ts يقارن الناتجَ بما كان هنا حرفيّاً.
   const composeInput: ComposeInput = { mode: nativeTools ? "native" : "text", planningPhase, coaching: rails.coaching, intentField: hooks.intentField === true, advertised: advertisedNames, policy, sprintPlan: { required: sprintPlanRequired, ready: sprintPlanRequired && sprintPlanReady(PROJECT_DIR, true), approved: sprintPlanRequired && planApproved(PROJECT_DIR, true) } }
   const projectInstructionBlock = hooks.conversationMode==='chat' ? '' : projectInstructionsFor(hooks.projectInstructions === undefined ? loadSettings().projectInstructions : hooks.projectInstructions, PROJECT_DIR)
-  const skillBlock = hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' ? localSkillInstructions(SETTINGS_FILE, hooks.localSkillRequest ?? question) : ""
+  const skillBlock = hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' ? localSkillInstructions(SETTINGS_FILE, hooks.localSkillRequest ?? question, coreSkillFor) : ""
   // إعلانُ المهارات المفعَّلة (أسماءٌ وأوصافٌ لا أجساد) كي يحمّل النموذجُ ما يناسب بأداة skill — كما يعرف كلودُ مهاراتِه.
   // 🔴 **ما لا يُعرض لا يُطلَب.** `skill save` يقطّر منذ 09-16 إلى `.abdo/skills/`، ولم يكن
   // شيءٌ يعيد ذكرَها للنموذج — فالحلقةُ مفتوحة: نكتب ولا نعود. تُذكر هنا بمرجعها ووصفها.
@@ -2076,7 +2187,7 @@ const askOnce = async (
   const projectSkillsAdvert = projectSkillList.length === 0 ? "" :
     "\nمهاراتٌ قطّرها هذا المشروع (حمّل ما يناسب المهمّة بـskill <مرجع>):\n" +
     projectSkillList.slice(0, 12).map((s) => "- " + s.ref + (s.description.length > 0 ? " — " + s.description.slice(0, 110) : "")).join("\n")
-  const skillsAdvert = (hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' && !planningPhase ? localSkillsBrief(SETTINGS_FILE) : "") + (hooks.conversationMode === "chat" || hooks.reviewSystem !== undefined ? "" : planBrief() + (process.env.ABDO_PARALLEL_WORKER === "1" ? "" : sprintBrief(PROJECT_DIR))) + projectSkillsAdvert
+  const skillsAdvert = (hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' && !planningPhase ? localSkillsBrief(SETTINGS_FILE) + coreSkillsBrief(coreSkillsOn()) : "") + (hooks.conversationMode === "chat" || hooks.reviewSystem !== undefined ? "" : planBrief() + (process.env.ABDO_PARALLEL_WORKER === "1" ? "" : sprintBrief(PROJECT_DIR))) + projectSkillsAdvert + (hooks.conversationMode === "chat" || hooks.reviewSystem !== undefined ? "" : deployRoutesBrief(turnFamilies) + chatSettingsBrief(turnFamilies) + referenceCloneBrief(`${question}\n${String(history.find((m) => m.role === "user")?.content ?? "").slice(0, 6000)}`))
   const preferenceLanguage=loadSettings().language||'en';
   const replyLanguage=/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u.test(preferenceLanguage)?preferenceLanguage:'en';
   const languageInstruction='\nPreferred response language: '+replyLanguage+'. Use this language unless the user explicitly requests another. Do not translate file paths or code.\n';
@@ -2099,7 +2210,7 @@ const askOnce = async (
     ? superAbdoInstruction(hooks.superAbdo ?? resolveSuperAbdo(loadSettings().superAbdo)) : "")))
 
   // التاريخ يُشذَّب من الأقدم حتى تدخل الميزانية — الذاكرة خدمةٌ لا حقّ
-  const contextTokens = selected.lane === "agent" ? AGENT_CONTEXT_TOKENS : CHAT_CONTEXT_TOKENS
+  const contextTokens = selected.lane === "agent" ? agentContextTokens() : CHAT_CONTEXT_TOKENS
   const outputReserve = selected.lane === "agent" ? AGENT_OUTPUT_RESERVE : CHAT_OUTPUT_RESERVE
   const inputBudgetTokens = contextTokens - outputReserve
   const tokensOf = (text: string) => Math.ceil(estimateTokens(text) * ARABIC_UNDERCOUNT)
@@ -2183,13 +2294,34 @@ const askOnce = async (
     maxOutputTokens: selected.lane === "agent" ? AGENT_EPOCH_OUTPUT_TOKENS : outputReserve,
     ...(selected.lane === "agent"
       ? !planningPhase
-        ? { temperature: 0.6, topP: 0.95, topK: 20, think: !nativeTools }
+        ? { temperature: 0.6, topP: 0.95, topK: 20, think: !nativeTools, ...(agentReasoningEffort() === undefined ? {} : { reasoningEffort: agentReasoningEffort() }) }
         : { temperature: 0.2, topP: 0.9, topK: 20, think: false }
       : { temperature: 0, think: false }),
   })
   const { url, headers, body } = request
+  // البند 27 (هيرمس) — ربطُ السرّ بمضيفه: يُسأل قبل خروج الطلب بمقبض المزوّد وعنوانه؛ والمطفأُ يمحو الروابط (طريقُ إعادة الربط).
+  if (!prov.local && prov.vaultKey !== undefined) {
+    const bindingsFile = join(STATE_ROOT, "secret-hosts.json")
+    if (pluginOnNow("secretHostBinding")) {
+      const bound = secretHostVerdict(bindingsFile, prov.vaultKey, url)
+      if (!bound.ok) throw Error(bound.message)
+      if (bound.bound === "new") hooks.onModelNotice?.(`🔗 ربطُ السرّ: ${prov.vaultKey} ⇦ ${bound.host} (أوّلُ طلب)`)
+    } else clearSecretHostBindings(bindingsFile)
+  }
   if(Buffer.byteLength(body)>1_048_576)throw Error('The conversation and attachments exceed the request size limit. Start a new conversation or use smaller files.')
   const legalToolNames = new Map(request.toolBindings.map((binding) => [binding.exposedName, binding.legalName]))
+  // 10-10 — نداءاتٌ كتبها النموذجُ نصّاً بصيغة DeepSeek (<tool_calls><invoke …>) تُحوَّل إلى نداءٍ منظّم يمرّ بفحص nativeToolReply نفسِه
+  // (text-tool-calls.ts) — في الردّ الكامل والمبثوث معاً. تحت البروتوكول النصّيّ (deepseek عليه) الأسماءُ أسماءُ الكتالوج والناتجُ سطرُ «نفّذ:».
+  const salvageTextCall = async (text: string): Promise<string | undefined> => {
+    if (hooks.conversationMode === 'chat') return undefined
+    const salvaged = (await import("./text-tool-calls")).salvageTextToolCalls(text, nativeTools && hooks.intentField === true)
+    if (salvaged === undefined) return undefined
+    const names = nativeTools ? legalToolNames : new Map(Tools.TOOLS.filter((tool) => tool.agentCallable).map((tool) => [tool.name, tool.name]))
+    const reply = nativeToolReply({ kind: "tools", text: salvaged.text, calls: salvaged.calls, finishReason: "tool_calls", truncated: false, usage: {} }, names, nativeTools && hooks.intentField === true)
+    if (typeof reply === "string") return reply
+    if (nativeTools) onNativeReply?.(reply)
+    return `نفّذ: ${reply.command}`
+  }
   // م11 — «ذ» المكسورة (U+FFFD) في علامة الأمر تُشفى قبل تطبيع الأسماء (مقيس 09-14 على NIM).
   const normalizeToolNames = (text: string): string => text.replace(/^(\s*)نفّ?\uFFFD\s*:/gmu, "$1نفّذ:").replace(
     /^(\s*نفّ?ذ\s*:\s*)(\S+)/gmu,
@@ -2233,7 +2365,7 @@ const askOnce = async (
       //
       // فالمهلةُ تُبنى على الميزانيّة: أرضيّةٌ ثابتة + سقفُ الإخراج × ضِعفَي المقيس. والأرضيّةُ
       // تحفظ الغرضَ الأصليّ (تعليقٌ بلا بايت يُكتشف مبكراً، مقيس 09-14 على NIM).
-      const attemptTimeoutMs = n < MODEL_RETRY_ATTEMPTS ? Math.min(timeoutMs, earlyAttemptBudgetMs(requestOutputCap)) : timeoutMs
+      const attemptTimeoutMs = n < (hooks.maxRetryAttempts ?? MODEL_RETRY_LIMIT) ? Math.min(timeoutMs, earlyAttemptBudgetMs(requestOutputCap)) : timeoutMs
       const result = await REACH.model({ provider: prov.id, url, body, timeoutMs: attemptTimeoutMs }, hooks.signal)
       return new Response(result.body, { status: result.status, headers: { "content-type": "application/json" } })
     }
@@ -2250,7 +2382,7 @@ const askOnce = async (
     }
   }
   try {
-    response = await requestWithBoundedRetry(prov.id, attemptOnce, { retryTransport: rustOwnedProvider, signal: hooks.signal, ...(hooks.onModelNotice === undefined ? {} : { onRetry: hooks.onModelNotice }) })
+    response = await requestWithBoundedRetry(prov.id, attemptOnce, { retryTransport: rustOwnedProvider, signal: hooks.signal, ...(hooks.onModelNotice === undefined ? {} : { onRetry: hooks.onModelNotice }), ...(hooks.maxRetryAttempts === undefined ? {} : { attempts: hooks.maxRetryAttempts }) })
   } catch (error) {
     // Never turn a failed request into final assistant prose.
     throw modelRequestFailure(prov.label, prov.local, { error })
@@ -2302,10 +2434,12 @@ const askOnce = async (
         ledgerNote = " تعذر تسجيل الثمن في الدفتر: " + String(error).slice(0, 80) + " "
       }
       // التوكنز أُنفقت فعلاً — يُحاسَب الدور ولو فشل الدفتر على القرص (خارج try عمداً).
-      hooks.turnMeter?.charge(charged)
+      hooks.turnMeter?.charge(charged, cacheDiscountFor(prov.id))
     }
     const incomplete = modelOutputViolation(decoded.finishReason, false, "text" in decoded && typeof decoded.text === "string" ? decoded.text : "")
     if (incomplete !== undefined) {if(hooks.conversationMode==='chat')throw Error(incomplete);return incomplete}
+    const salvagedCall = decoded.kind !== "tools" ? await salvageTextCall(decoded.text) : undefined
+    if (salvagedCall !== undefined) return salvagedCall.startsWith("نفّذ:") ? `${salvagedCall}\n${measured({ prompt_eval_count: decoded.usage.inputTokens, eval_count: decoded.usage.outputTokens })}` : salvagedCall
     if (decoded.kind === "tools") {
       if(hooks.conversationMode==='chat')throw Error('Chat mode does not execute model tool calls. Switch to Code for project actions.')
       if (nativeTools) {
@@ -2405,6 +2539,8 @@ const askOnce = async (
   const incomplete = modelOutputViolation(finishReason, false, partial)
   if (incomplete !== undefined) {if(hooks.conversationMode==='chat')throw Error(incomplete);return incomplete}
   const cleanAnswer=normalizeToolNames(partial.replace(/<think>[\s\S]*?<\/think>/g, "").trim())
+  const streamedCall = await salvageTextCall(cleanAnswer)
+  if (streamedCall !== undefined) return streamedCall.startsWith("نفّذ:") ? `${streamedCall}\n${measured(tail)}` : streamedCall
   if(hooks.conversationMode==='chat'&&(!cleanAnswer||finishReason==='tool_calls'||finishReason==='function_call'))throw Error('The model did not return a conversation answer. Chat mode does not execute tools.')
   return hooks.conversationMode==='chat' ? cleanAnswer : `${cleanAnswer}\n${measured(tail)}`
 }
@@ -2515,7 +2651,7 @@ const runServeShell = async (): Promise<void> => {
   }
   // كتالوج 10.4: هارنسٌ واحد لكل دليل حالة — التراكب كسر تسلسل الدفتر حيّاً.
   //
-  // ⚠ العطلُ المقيس على جهاز المالك (2026-09-04): هذان السطران كانا يكتبان
+  // ⚠ العطلُ المقيس على جهاز المستخدم (2026-09-04): هذان السطران كانا يكتبان
   // بـ`console.log` **قبل تعريف `emit`** — كتابةٌ خامٌ غيرُ مؤطَّرة. وسطحُ
   // المكتب يشغّل المحرّك بـ`ABDO_FRAMED_STDIO=1`، فقارئُ الإطارات يقرأ أوّل
   // أربعة بايتات **طولاً** فيحصل على قيمةٍ لا معنى لها ويستسلم ويُعلن
@@ -2591,9 +2727,50 @@ const runServeShell = async (): Promise<void> => {
   const turnBodies = new Map([...admissions].map(([id, turn]) => [id, turn.body]))
   // ذاكرة المحادثة (D-wave «نفس الخصائص»): آخر الأدوار تُمرَّر للنموذج ضمن
   // الميزانية — «ماذا سألتك للتو؟» عند مستخدمٍ حقيقيّ كانت بلا جواب.
-  // محادثاتٌ في الخلفية (أمر المالك 2026-09-28): لكلّ جلسةٍ تاريخُها، والدورُ الجاري يمسك تاريخَ جلسته وقتَ القبول
+  // محادثاتٌ في الخلفية: لكلّ جلسةٍ تاريخُها، والدورُ الجاري يمسك تاريخَ جلسته وقتَ القبول
   // (turnConversation/turnSession) فلا يمحوه فتحُ محادثةٍ جديدة ولا استعادةُ أخرى — كما في كلود وشات جي بي تي.
   const conversations = new Map<string, ChatMessage[]>()
+  // 10-10 — دورُ دردشةٍ بجانب مهمّةٍ جارية: قبولٌ في الدفتر بجلسته، جوابٌ مبثوث، تمامٌ — بلا أدوات وبلا لمس حالة الدور الجاري (running،
+  // currentGoalText، أدوات الدور). المقاطعةُ باسمه عبر إطار interrupt المعتاد.
+  const sideChats = new Map<string, AbortController>()
+  const runSideChat = async (turn: { id: string; body: string }, attachmentNames: readonly string[], notice: string): Promise<void> => {
+    const session = currentSession
+    try {
+      if (!currentSessionPersisted) {
+        await serveJournal.openSession(session, "chat")
+        sessionModes.set(session, "chat")
+        sessionOrder.push(session)
+        currentSessionPersisted = true
+      }
+      const attached = resolveAttachments(SETTINGS_FILE, session, [...attachmentNames])
+      const admission = await serveJournal.admit({ turnId: turn.id, body: turn.body, sessionId: session, attachments: [...attachmentNames] })
+      admissions.set(turn.id, { seq: admission.seq, body: turn.body, session, attachments: [...attachmentNames] })
+      emit({ kind: "admission", ...admission, sessionId: session, mode: "chat" })
+      turnBodies.set(turn.id, turn.body)
+      sessionOf.set(turn.id, session)
+      const controller = new AbortController()
+      sideChats.set(turn.id, controller)
+      const selection = selectTurnModel(turn.body, "chat", attached.images.length > 0)
+      emit({ kind: "model-route", turnId: turn.id, lane: "chat", ref: selection.ref })
+      const history = conversationFor(session)
+      const answer = await ask(notice + turn.body, {
+        conversationMode: "chat", attachments: attached, toolAllowlist: [], signal: controller.signal, localSkillRequest: turn.body,
+        onDelta: (text) => emit({ kind: "delta", turnId: turn.id, text }),
+        onModelNotice: (text) => { void emitEvent(turn.id, text).catch(() => undefined) },
+      } as AskHooks, history, selection)
+      if (controller.signal.aborted) throw new DOMException("Chat interrupted", "AbortError")
+      history.push({ role: "user", content: turn.body + attached.text, ...(attached.images.length ? { images: attached.images } : {}) }, { role: "assistant", content: answer })
+      for (const part of answer.split("\n")) await emitEvent(turn.id, part)
+      await serveJournal.complete(turn.id)
+      doneTurns.add(turn.id)
+      emit({ kind: "done", turnId: turn.id, rerun: false, outcome: "completed", contextLeft: lastContextLeft })
+    } catch (error) {
+      const why = error instanceof DOMException && error.name === "AbortError" ? "قوطعت الدردشة بيد المشغّل" : String((error as Error)?.message ?? error).slice(0, 300)
+      try { if (admissions.has(turn.id)) await serveJournal.fail(turn.id, why) } catch { /* الدفترُ حكمٌ لا شرط */ }
+      failedTurns.set(turn.id, why)
+      emit({ kind: "refused", turnId: turn.id, why })
+    } finally { sideChats.delete(turn.id) }
+  }
   const conversationFor = (id: string): ChatMessage[] => { let history = conversations.get(id); if (history === undefined) { history = []; conversations.set(id, history) } return history }
   let conversation: ChatMessage[] = []
   /** الهدفُ الفعليّ للدور الجاري — يقرؤه حارسُ المانيفست ليعرف الكومةَ المطلوبة (Vite/Next/Tailwind). */
@@ -2607,7 +2784,7 @@ const runServeShell = async (): Promise<void> => {
     const tokensOfMsg = (m: { content: string; toolCalls?: unknown; images?: readonly unknown[] }) => Math.ceil(estimateTokens(m.content + JSON.stringify(m.toolCalls ?? [])) * ARABIC_UNDERCOUNT) + (m.images?.length ?? 0) * 4096
     // بلا خلاصةٍ موثَّقة لا ضغطَ آليّاً: القصُّ القديم أصدقُ من «خلاصة» فارغة تحلّ محلّ الذاكرة.
     if (!manual && (loadSettings().autoCompact === false || summary.trim().length === 0)) { while (conversation.length > 12) conversation.splice(0, 2); return false }
-    if (!manual && !shouldCompact(conversation, tokensOfMsg, AGENT_CONTEXT_TOKENS - AGENT_OUTPUT_RESERVE)) return false
+    if (!manual && !shouldCompact(conversation, tokensOfMsg, agentContextTokens() - AGENT_OUTPUT_RESERVE)) return false
     const result = compactConversation(conversation, summary, DEFAULT_KEEP_RECENT, tokensOfMsg)
     if (result.dropped === 0) return false
     conversation.splice(0, conversation.length, ...result.messages)
@@ -2619,8 +2796,9 @@ const runServeShell = async (): Promise<void> => {
   const sessionOf = new Map([...admissions].map(([id, turn]) => [id, turn.session]))
   /** One frame for the Memory panel: explicit notes, inferred (unconfirmed) corrections, and the conflicts between them. */
   const memoryNotesFrame = () => {
-    const facts = durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts.filter((f) => f.kind === "project_fact")
-    const row = (f: (typeof facts)[number], prefix: string) => ({ id: f.id, key: f.key.slice(prefix.length), value: f.value, scope: f.sessionId === undefined ? "project" : "session", createdAt: f.createdAt, ...memorySource(f) })
+    // ملاحظاتُ «كلّ المشاريع» (التخصيصات المستوردة) أوّلاً ثمّ ملاحظاتُ المشروع — الصفحةُ تعرض المالكَ كلَّه وتنسى منه.
+    const facts = [...userOwnerNotes(durableMemory), ...durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts.filter((f) => f.kind === "project_fact")]
+    const row = (f: (typeof facts)[number], prefix: string) => ({ id: f.id, key: f.key.slice(prefix.length), value: f.value, scope: f.projectId === USER_MEMORY_PROJECT ? "user" : f.sessionId === undefined ? "project" : "session", createdAt: f.createdAt, ...memorySource(f) })
     return {
       kind: "memory-notes",
       facts: facts.filter((f) => f.key.startsWith("owner-note:")).slice(-200).map((f) => row(f, "owner-note:")),
@@ -2920,13 +3098,15 @@ const runServeShell = async (): Promise<void> => {
       return `📁 ${dir}\n${entries.join("\n")}${entries.length >= CAP ? `\n⋯ (أوّل ${CAP})` : ""}`
     }
     if (word === "glob") {
-      const pattern = rest[0]
-      if (!pattern) return "glob يحتاج نمطاً"
+      // 10-08 (مقيس في بروفات النشر): `glob .env*` و`glob C:\…\hello-deploy\.env*` عادا «لا مطابقة» و.env موجود — Bun.Glob يُخفي الملفّاتِ
+      // النقطيّة افتراضاً ولا يفهم المسارَ المطلق ولا الشرطةَ العكسيّة؛ فكتب النموذجُ .env جديداً فوق مفاتيح المستخدم.
+      const glob = globPatternInProject(rest.join(" "), PROJECT_DIR)
+      if ("error" in glob) return glob.error
+      const pattern = glob.pattern
       const hits: string[] = []
-      const glob = new Bun.Glob(pattern)
       try {
-        for await (const p of glob.scan({ cwd: PROJECT_DIR, onlyFiles: true })) {
-          if (p.includes("node_modules") || p.includes(".git")) continue
+        for await (const p of new Bun.Glob(pattern).scan({ cwd: PROJECT_DIR, onlyFiles: true, dot: glob.dot })) {
+          if (/(?:^|[\\/])(?:node_modules|\.git)(?:[\\/]|$)/u.test(p)) continue
           hits.push(p)
           if (hits.length >= CAP) break
         }
@@ -2975,10 +3155,10 @@ const runServeShell = async (): Promise<void> => {
             if (!re.test(lines[i]!)) continue
             perFile.set(p, (perFile.get(p) ?? 0) + 1)
             if (flags.files || flags.count) { if (flags.files) break; continue }
-            for (let k = Math.max(0, i - flags.context); k <= Math.min(lines.length - 1, i + flags.context) && hits.length < CAP; k += 1) {
+            for (let k = Math.max(0, i - g.before); k <= Math.min(lines.length - 1, i + g.after) && hits.length < CAP; k += 1) {
               if (emitted.has(k)) continue
               emitted.add(k)
-              hits.push(`${p}${k === i ? ":" : "-"}${k + 1}${k === i ? ": " : "- "}${lines[k]!.trim().slice(0, 120)}`)
+              hits.push(`${p}${k === i ? ":" : "-"}${k + 1}${k === i ? ": " : "- "}${(isDotenvSecretFile(p) ? maskDotenv(lines[k]!) : lines[k]!).trim().slice(0, 120)}`)
             }
           }
         } catch { /* ثنائيّ أو ممنوع — يُتخطّى */ }
@@ -2986,6 +3166,7 @@ const runServeShell = async (): Promise<void> => {
       }
       }
       const argNote = (missing.length > 0 ? `\nℹ غير موجود: ${missing.join("، ")}` : "") + (g.ignored.length > 0 ? `\nℹ تُجوهل (لا يُدعم هنا): ${g.ignored.join(" ")}` : "")
+        + (g.contextAsked !== undefined ? `\nℹ السياقُ ${g.contextAsked} سطراً فوق سقف ${GREP_CONTEXT_MAX} — عُرض ${GREP_CONTEXT_MAX}؛ لما بعده: read <ملفّ> <من> <إلى>.` : "")
       if (flags.files) { const files = [...perFile.keys()].slice(0, CAP); return (files.length ? `${files.length} ملفّاً:\n${files.join("\n")}` : "لا مطابقة") + argNote }
       if (flags.count) { const rows = [...perFile.entries()].slice(0, CAP).map(([f, n]) => `${f}: ${n}`); const total = [...perFile.values()].reduce((a, b) => a + b, 0); return (rows.length ? `${total} مطابقة في ${rows.length} ملفّاً:\n${rows.join("\n")}` : "لا مطابقة") + argNote }
       const note = compiled.translated ? "\nℹ `\\|` قُرئت «أو» كما في grep — والأنبوبُ الحرفيّ `[|]`." : ""
@@ -3138,7 +3319,7 @@ const runServeShell = async (): Promise<void> => {
     if (nativeCall !== undefined) {
       const args = nativeCall.input as Record<string, string>
       target = args.path!
-      if (word === "write") after = args.content!
+      if (word === "write") after = (await import("./engine-echo")).stripEngineEcho(args.content!).text
       else {
         const checked0 = brokerPath(target)
         if (!checked0.ok) return refused(checked0.why)
@@ -3167,6 +3348,8 @@ const runServeShell = async (): Promise<void> => {
       target = rest.slice(0, cut).trim()
       if (target.startsWith(`${SHRINK_FLAG} `)) { shrinkIntended = true; target = target.slice(SHRINK_FLAG.length).trim() }
       after = rest.slice(cut + marker[0].length).replace(/^\r?\n/, "")
+      // 10-10 — سطرُ متابعة المحرّك منسوخاً في آخر الملفّ يُقطع (engine-echo.ts): نصُّ المحرّك لا ينتمي إلى ملفّ المستخدم.
+      after = (await import("./engine-echo")).stripEngineEcho(after).text
       const trimmedAfter = after.trim()
       if (trimmedAfter.length >= 2 &&
           ((trimmedAfter.startsWith("\"") && trimmedAfter.endsWith("\"")) ||
@@ -3185,6 +3368,9 @@ const runServeShell = async (): Promise<void> => {
       const bodyText = rest.slice(marker.index + marker[0].length).replace(/^\r?\n/, "")
       const hunks = bodyText.split(/\r?\n@@[ \t]*(?:\r?\n|$)/u).map((h) => h.replace(/\r?\n$/u, "")).filter((h) => h.trim().length > 0)
       if (hunks.length === 0) return invalid("medit بلا حزم — أضف حزمةً واحدةً على الأقل")
+      // 10-08: مثالُ الكتالوج منسوخاً أو ملفٌّ كاملٌ بلا «=>» — يُسمّى قبل أيّ تطبيق.
+      const meditHint = heredocEditHint("medit", rest)
+      if (meditHint !== undefined) return invalid(meditHint)
       const checked0 = brokerPath(target)
       if (!checked0.ok) return refused(checked0.why)
       if (!existsSync(checked0.abs)) return invalid(`الملفّ غير موجود: ${target}`)
@@ -3316,6 +3502,12 @@ const runServeShell = async (): Promise<void> => {
     if (orphanSheet !== undefined) {
       return refused(`رُفض: ${orphanedStylesheetLine(orphanSheet, normalizedTarget)} — لم يُكتب شيء.`)
     }
+    // 10-08: كتابةُ ملفّ بيئةٍ موجودٍ تُسقط مفاتيحه (قيمُها أسرارٌ لا تُستعاد) أو تكتب القيمَ المحجوبة نفسَها — تُرفض قبل الكتابة.
+    const envOverwrite = dotenvOverwriteViolation(resolve(PROJECT_DIR, normalizedTarget), after)
+    if (envOverwrite !== undefined) return refused(`رُفض: ${envOverwrite} — لم يُكتب شيء.`)
+    // 10-08: Dockerfile ينسخ المشروعَ كلَّه وفيه .env بلا .dockerignore يستبعده ⇦ المفاتيحُ في الصورة — يُرفض قبل الكتابة.
+    const dockerSecrets = dockerfileSecretsViolation(PROJECT_DIR, normalizedTarget, after)
+    if (dockerSecrets !== undefined) return refused(`رُفض: ${dockerSecrets} — لم يُكتب شيء.`)
     const invalidCss = await cssSourceViolation(identityWrite)
     // 10-02 — صياغةٌ صحيحة ويرفضها Tailwind 4: @apply لصنفٍ عاديّ ⇦ كلُّ صفحةٍ 500 (فأُسقط import globals.css لإخفائها).
     const twApply = invalidCss === undefined ? tailwindApplyViolation(PROJECT_DIR, normalizedTarget, after) : undefined
@@ -3455,6 +3647,7 @@ const runServeShell = async (): Promise<void> => {
     // هـ2 — تفويضٌ متوازٍ لمهامّ محدّدة: سقفُ التوازي من وضع العمل؛ كلُّ طفلٍ بوكيله وسقفه عبر hooks.childAgent
     // (لا المتغيّر العالميّ الذي لا يحتمل طفلين)، والبوّابةُ والنمطُ والعدّادُ مشتركة كما في delegate.
     const work = workProfile(loadSettings().workMode)
+    if (process.env.ABDO_PARALLEL_WORKER === "1") return denied("رُفض team: أنت عاملٌ متوازٍ — العاملُ وكيلٌ واحد ينفّذ مهمّتَه هنا بنفسه، لا يفوّض.", "tool_not_permitted")
     if (!delegationEnabled()) return denied("رُفض team: التفويض معطَّل (plugins.delegation) — فعّله من الإعدادات أو اختر وضع عملٍ يوازي.", "tool_not_permitted")
     if (work.parallelAgents < 2) return denied(`رُفض team: وضعُ العمل «${work.label}» لا يوازي — بدّله إلى «أقوى+» أو «أقصى» من الإعدادات، أو استعمل delegate لمهمّةٍ واحدة.`, "tool_not_permitted")
     if (delegationDepth >= MAX_DELEGATION_DEPTH) return denied(`رُفض team: بلغ سقفَ عمق التفويض ${MAX_DELEGATION_DEPTH} — الحفيد لا يفوّض.`, "tool_not_permitted")
@@ -3562,7 +3755,20 @@ const runServeShell = async (): Promise<void> => {
   }
 
   const dispatchToolV = async (word: string, body: string, turnId: string, hooks: AskHooks, nativeCall?: NativeAgentCall): Promise<DispatchResultV> => {
-    const result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)
+    // 10-08 (مقيس على مهمّة الموقع): أداةٌ تتعطّل (scroll ⇦ «Browser control command timed out») فشلُ أداةٍ لا موتُ الدور — tool-crash.ts.
+    // 10-08 (مقيس بـgpt-6.1-sol): «audit --help» شغّل تدقيقاً كاملاً على 40 صفحة — طلبُ المساعدة يُجاب بصيغة الأداة ولا ينفّذ شيئاً.
+    const helpOnly = /^\S+\s+(?:--help|-h|help|\/\?)\s*$/iu.test(body.trim())
+    const helpSpec = helpOnly ? Tools.tool(word) : undefined
+    if (helpSpec !== undefined) return okText(`${helpSpec.name}: ${helpSpec.summary}\nالصيغة: ${helpSpec.usage}`)
+    let result: DispatchResultV
+    try {
+      result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)
+    } catch (error) {
+      const crash = toolCrashResult(word, error)
+      if (crash === undefined) throw error
+      void emitEvent(turnId, crash.event)
+      return { output: crash.output, verdict: crash.verdict }
+    }
     // ما قرأه الوكيلُ من ملفٍّ آمرٍ نيّةُ المهمّة كذلك: تُفتح عائلاتُه فيرى أدواتِها في
     // النداء التالي. وبلا هذا تبقى قدرةٌ حاضرةٌ غيرَ معروضة، وما لا يُعرض لا يُطلَب.
     const widened = familiesFromResult(word, body, result.output, turnFamilies)
@@ -3575,6 +3781,8 @@ const runServeShell = async (): Promise<void> => {
     return { ...result, output: guarded.text }
   }
 
+  // 10-10 — لحظةُ أوّل أداةٍ في كلّ دور: «كُتبت الخطّةُ في هذا الدور» = بصمةُ وقت ABDO-SPRINTS.md بعدها (plan-review-hold.ts).
+  const turnFirstToolAt = new Map<string, number>()
   const dispatchToolRaw = async (word: string, body: string, turnId: string, hooks: AskHooks, nativeCall?: NativeAgentCall): Promise<DispatchResultV> => {
     if (Tools.tool(word)?.name === "recall" && loadSettings().memorySearchEnabled === false) {
       return denied("رُفض البحث في الذاكرة: البحث والمرجعية معطّلان في الإعدادات", "policy_denied")
@@ -3591,15 +3799,26 @@ const runServeShell = async (): Promise<void> => {
     if (!projectSelected && !["project-create","project-template","templates","project-locate","project-open"].includes(word)) return denied("No project selected. Use project-create <absolute path> before project tools.", "policy_denied")
     const planningPhase = process.env.ABDO_AGENT_PHASE === "planning" || !sprintPlanReady(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1") || !planApproved(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1")
     if (!planningToolAllowed(Tools.tool(word)?.name ?? word, planningPhase)) return denied("رُفضت الأداة: مرحلة التخطيط تسمح بقراءة ملفات المشروع وكتابة الخطة والتسليم وطلب اعتمادها (plan-approve) فقط", "policy_denied")
+    // 10-10 — حجزُ مراجعة الخطّة: المستخدمُ طلب في رسالة هذا الدور التوقّفَ للمراجعة (أو استنساخَ موقع) وكُتبت ABDO-SPRINTS.md في الدور ⇒
+    // قراءةٌ ومرجعٌ وملفّاتُ الخطّة وحدها حتى رسالته التالية (مقيس: «أتوقّف للمراجعة» ثمّ npm install وnpm run build في الدور نفسِه).
+    if (!turnFirstToolAt.has(turnId)) turnFirstToolAt.set(turnId, Date.now() - 1_000)
+    if (asksPlanReview(turnBodies.get(turnId) ?? "")) {
+      const planFile = join(PROJECT_DIR, "ABDO-SPRINTS.md")
+      const planWrittenThisTurn = existsSync(planFile) && statSync(planFile).mtimeMs >= turnFirstToolAt.get(turnId)!
+      const held = planWrittenThisTurn ? planHoldRefusal(Tools.tool(word)?.name ?? word, writeTargetOf(word, body, nativeCall)) : undefined
+      if (held !== undefined) return denied(held, "policy_denied")
+    }
     // 09-30 — هدفٌ يحظر التعديل («لا تعدّل أيّ ملفّ») يُحترم هنا عند المُوزِّع الواحد: قيس على المثبَّت 4.0.94 أنّ النموذج قرأه
     // ثمّ نفّذ `npm update next …` فاستبدل الاعتماديات كلَّها. الحظرُ المقيَّد والاستثناءُ لا يُطلقانه (goal-no-edit.ts).
-    const noEditRefusal = noEditGoalRefusal(currentGoalText, Tools.tool(word)?.name ?? word, body.trim())
+    // 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.144): «لا تعدّل الملفات الأخرى» في مهمّة العامل (حدُّ جزئه) قُرئ حظراً شاملاً فرُفضت كلُّ كتاباته
+    // حتى STUCK، وبنى الأبُ الخادمَ بنفسه. مهمّةُ العامل كتابةٌ بالبناء — حارسُ «لا تعدّل» لنصّ المستخدم لا لتقسيم الأب.
+    const noEditRefusal = process.env.ABDO_PARALLEL_WORKER === "1" ? undefined : noEditGoalRefusal(currentGoalText, Tools.tool(word)?.name ?? word, body.trim())
     if (noEditRefusal !== undefined) return denied(noEditRefusal, "policy_denied")
     const rest0 = body.trim().slice(word.length).trim()
     // T12: أداةٌ خارجيّة — نفس البوابة، وصنفُها من إعلانها (المجهول command)
     const ext = externalTool(word)
     if (ext !== undefined) {
-      // 09-29 (بلاغُ المالك: «نوافذ في متصفّحي»): أدواتُ إضافة المتصفّح (chrome.*) تعمل في تبويب المستخدم الحقيقيّ — لا تُستدعى
+      // 09-29: أدواتُ إضافة المتصفّح (chrome.*) تعمل في تبويب المستخدم الحقيقيّ — لا تُستدعى
       // إلا حين يختار المستخدمُ «browser extension»؛ مع المتصفّح المملوك الطريقُ open/page/shot ولوحُ التطبيق.
       const chromeBridgeId = (loadSettings().mcpServers ?? []).find((s) => s.command.includes("mcp-chrome-bridge"))?.id
       if (chromeBridgeId !== undefined && word.startsWith(`${chromeBridgeId}.`) && (loadSettings().browserBackend ?? "owned") !== "extension") {
@@ -3726,7 +3945,7 @@ const runServeShell = async (): Promise<void> => {
       }
       case "exec": {
         // ذ9ب — logs/stop للتشغيلات الخلفيّة (قراءةٌ وإيقافُ ما بدأته الجلسة)، وrun --bg بعد البوّابة والحرّاس نفسِها.
-        if (spec.name === "logs") { const [id, n] = rest.split(/\s+/); const managedLogs = id !== undefined && /^\d+$/u.test(id) ? (turnServers.logsByPid(Number(id)) ?? devServers.logsByPid(Number(id))) : undefined; if (managedLogs !== undefined) return okText(managedLogs); return id ? okText(backgroundLogs(id, Math.min(400, Math.max(1, Number.parseInt(n ?? "60", 10) || 60)))) : invalid("الصيغة: logs <معرّف> [عدد الأسطر]") }
+        if (spec.name === "logs") { const [id, n] = rest.split(/\s+/); const managedLogs = id !== undefined && /^\d+$/u.test(id) ? (turnServers.logsByPid(Number(id)) ?? devServers.logsByPid(Number(id))) : undefined; if (managedLogs !== undefined) return okText(managedLogs); return id ? okText(await backgroundLogsAwaitingNew(id, Math.min(400, Math.max(1, Number.parseInt(n ?? "60", 10) || 60)))) : invalid("الصيغة: logs <معرّف> [عدد الأسطر]") }
         if (spec.name === "recipe") {
           // وصفاتُ الإعداد المتعلَّمة: قائمةٌ، أو وصفةٌ بخطواتها ومسارِ سكربتها، أو نسيان — قراءةٌ بلا بوّابة؛ التشغيلُ يبقى عبر run ببوّابته.
           const [verb, ...more] = rest.trim().split(/\s+/u)
@@ -3738,6 +3957,9 @@ const runServeShell = async (): Promise<void> => {
         if (spec.name === "parallel") {
           // 09-29 (فكرةُ Verdent): عمّالٌ متوازون، كلٌّ محرّكٌ كامل في worktree وفرعٍ خاصّ (exec --worktree) — لا تزاحمَ كتابات،
           // والدمجُ قرارٌ لاحق بـmerge. الإعداداتُ نفسُها (النموذج والمفاتيح)، والنمطُ نمطُ الإعدادات؛ الموافقاتُ تُرفض آليّاً في العامل.
+          // 10-11 — عاملٌ متوازٍ لا يفرّخ عمّالاً (كان ممكناً: الإظهارُ وحده يُحجب، والأداةُ تُستدعى باسمها) — شجرةُ عملٍ داخل شجرة عمل تتضاعف بلا سقف.
+          if (process.env.ABDO_PARALLEL_WORKER === "1") return invalid("أنت عاملٌ متوازٍ في شجرة عمل — لا تُطلق عمّالاً آخرين؛ نفّذ مهمّتك هنا مباشرةً.")
+          if (parentDeliverableProven()) return invalid("رُفض parallel: التسليمُ مكتوبٌ بعملك في هذا الدور ويمرّ بناؤه أو اختباره — العمّالُ سيعيدون ما تمّ. أكمل ما بقي مباشرةً؛ التقسيمُ قبل البناء لا بعده.")
           const tasks = parseParallelTasks(body)
           if (typeof tasks === "string") return invalid(tasks)
           const top = Bun.spawnSync(["git", "-C", PROJECT_DIR, "rev-parse", "--show-toplevel"], { stdout: "pipe", stderr: "pipe" })
@@ -3745,14 +3967,24 @@ const runServeShell = async (): Promise<void> => {
           const { runExecInWorktree } = await import("./exec-mode")
           // شجراتُ عملٍ يتيمة من دورٍ قُطع أو قُتل أبوه تُقلَّم أوّلاً — لا تتراكم.
           Bun.spawnSync(["git", "-C", PROJECT_DIR, "worktree", "prune"], { stdout: "pipe", stderr: "pipe" })
+          // 10-11 — العمّالُ يتفرّعون من حالة الأب الحاليّة (لقطةٌ لا تمسّ فرعَه ولا فهرسَه) لا من HEAD: كانوا لا يرون السقالةَ غيرَ المودَعة فيبدؤون من الصفر.
+          // 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.141): الأبُ كتب package.json ولم يثبّته، فوُصل للعمّال node_modules فارغ — فلم يبنِ
+          // أيٌّ منهما ولم يختبر، وتاها بين مثبّتاتٍ وصناديق حتى المهلة. الاعتمادياتُ المعلنةُ تُثبَّت مرّةً في الأب قبل العمّال (تصلهم موصولة).
+          const preInstall = installCommandFor(PROJECT_DIR)
+          if (preInstall !== undefined) {
+            await emitEvent(turnId, `📦 الاعتمادياتُ معلنةٌ ولم تُثبَّت — تثبّتها النواةُ («${preInstall}») قبل العمّال، فتصلهم موصولةً بدل أن يتيه كلٌّ بلا node_modules.`)
+            const installed = await dispatchToolV("run", `run ${preInstall}`, turnId, hooks)
+            if (!exitZero(installed.output, installed.verdict)) return invalid(`تعذّر تثبيتُ الاعتماديات قبل العمّال («${preInstall}»):\n${installed.output.slice(-800)}\nأصلح package.json ثمّ أعد parallel.`)
+          }
+          const parallelBase = snapshotWorkingTree(new TextDecoder().decode(top.stdout).trim())
           const workerMode = ((): "read-only" | "auto" | "full-access" => { const m = loadSettings().mode; return m === "read-only" || m === "full-access" ? m : "auto" })()
           await emitEvent(turnId, `🧵 ${tasks.length} عمّالٍ متوازين في شجرات عملٍ معزولة (النمط ${workerMode}) — كلٌّ محرّكٌ كامل على فرعه`)
           const outcomes = await Promise.all(tasks.map(async (task, i) => {
             const s = await runExecInWorktree(
-              { task: workerTask(task), project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true },
+              { task: workerTask(task), project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true, ...(parallelBase === undefined ? {} : { baseRev: parallelBase }) },
               selfEngineArgv(),
               // 09-30: العاملُ يعرف أنّه عامل (لا خطّةَ سبرنتات ولا إغلاق) ومنفذُه في عشرته الخاصّة.
-              { ...process.env, ABDO_CODE_SETTINGS: SETTINGS_FILE, ABDO_PARALLEL_WORKER: "1", ABDO_WORKER_PORT_OFFSET: String(workerPortOffset(i)) },
+              { ...process.env, ABDO_CODE_SETTINGS: SETTINGS_FILE, ABDO_PARALLEL_WORKER: "1", ABDO_PARALLEL_SHARE: String(tasks.length), ABDO_WORKER_PORT_OFFSET: String(workerPortOffset(i)) },
               (line) => { void emitEvent(turnId, `🧵 [${i + 1}] ${line.slice(0, 200)}`) },
             )
             return {
@@ -3762,12 +3994,24 @@ const runServeShell = async (): Promise<void> => {
               answer: s.answer, ...(s.reason === undefined ? {} : { reason: s.reason }), ...(s.gates === undefined ? {} : { gates: s.gates }),
             }
           }))
-          return okText(renderParallelReport(outcomes))
+          if (parallelBase !== undefined) for (const o of outcomes) if ("branch" in o && o.branch !== undefined) parallelBases.set(o.branch, parallelBase)
+          return okText(renderParallelReport(outcomes) + (parallelBase === undefined ? "" : "\nتفرّع العمّالُ من حالتك الحاليّة غيرِ المودَعة: «merge <الفرع>» يطبّق فرقَ كلِّ عاملٍ على شجرتك بلا إيداع، ثمّ ابنِ واختبر مرّةً بعد آخر دمج."))
         }
         if (spec.name === "merge") {
           const branch = rest.trim()
           const refusal = mergeBranchRefusal(branch)
           if (refusal !== undefined) return invalid(refusal)
+          const snapshotBase = parallelBases.get(branch)
+          if (snapshotBase !== undefined) {
+            const topDir = new TextDecoder().decode(Bun.spawnSync(["git", "-C", PROJECT_DIR, "rev-parse", "--show-toplevel"], { stdout: "pipe", stderr: "pipe" }).stdout).trim()
+            const applied = applyWorkerDiff(topDir, snapshotBase, branch)
+            if (applied.ok) {
+              parallelBases.delete(branch)
+              Bun.spawnSync(["git", "-C", PROJECT_DIR, "branch", "-q", "-D", branch], { stdout: "pipe", stderr: "pipe" })
+              return okText(`✓ طُبّق فرقُ ${branch} على شجرتك (بلا إيداع).\n${applied.stat.slice(0, 1500)}\nادمج الفرعَ التالي، ثمّ ابنِ واختبر.`)
+            }
+            return { output: `طُبّق من ${branch} ما انطبق، وتعارض في: ${applied.rejected.join("، ") || "—"} — بجانب كلِّ ملفٍّ منها .rej بالقطع التي لم تنطبق: اقرأه وادمجه في الملفّ يدويّاً ثمّ احذف .rej.\n${applied.detail}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: applied.detail.slice(0, 160) } }
+          }
           const dirty = Bun.spawnSync(["git", "-C", PROJECT_DIR, "status", "--porcelain"], { stdout: "pipe", stderr: "pipe" })
           if (new TextDecoder().decode(dirty.stdout).trim().length > 0) return invalid("merge يحتاج شجرةً نظيفة: أودع أو ألغِ التغييرات الحاليّة أوّلاً.")
           const merged = Bun.spawnSync(["git", "-C", PROJECT_DIR, "merge", "--no-ff", "--no-edit", branch], { stdout: "pipe", stderr: "pipe" })
@@ -3948,7 +4192,7 @@ const runServeShell = async (): Promise<void> => {
         // ن7 — desk point <وصف>: على واجهةٍ بلا شجرة يسأل نموذجَ الرؤية عن إحداثيّات عنصرٍ مسمّى في لقطة النافذة المربوطة
         // (قراءةٌ بلا بوّابة؛ اللقطةُ تخرج إلى نموذج الرؤية الذي ضبطه المستخدم وحده)، ولا ينقر: النقرُ فعلُ النموذج التالي بالبوّابة.
         if (/^point(?:\s|$)/u.test(rest.trim())) {
-          const { POINT_USAGE, parsePointReply, pointBody, pointSystem, pointReceipt, shotDigest } = await import("./look-and-point")
+          const { POINT_USAGE, parseDims, parsePointReply, pointBody, pointSystem, pointReceipt, scalePoint, shotDigest } = await import("./look-and-point")
           const description = rest.trim().replace(/^point\s*/u, "").replace(/^["'«»]+|["'«»]+$/gu, "").trim()
           if (description.length === 0) return invalid(POINT_USAGE)
           if (desktopBound === undefined) return invalid(NEEDS_FOCUS)
@@ -3956,19 +4200,25 @@ const runServeShell = async (): Promise<void> => {
           if (!route.reaches) return invalid(`desk point يحتاج نموذجَ رؤية: ${route.why} — اضبط «نموذج الرؤية» في الإعدادات، أو استعمل desk ui إن كانت للنافذة شجرة.`)
           const shot = await runDesktop({ kind: "shot", scope: "auto" }, { shotsDir: join(STATE_ROOT, "desktop-shots"), bound: desktopBound })
           if (!shot.ok || shot.shot === undefined) return invalid(`تعذّرت لقطةُ النافذة: ${shot.text.slice(0, 160)}`)
-          let data = ""
-          try { data = readFileSync(shot.shot.path).toString("base64") } catch { return invalid("تعذّرت قراءةُ اللقطة من القرص") }
-          if (!shotFitsModel(data)) return invalid(`اللقطةُ أكبر من سقف صورة النموذج (${MAX_IMAGE_BASE64} حرفاً) — صغّر النافذة أو استعمل desk ui.`)
+          let rawShot = ""
+          try { rawShot = readFileSync(shot.shot.path).toString("base64") } catch { return invalid("تعذّرت قراءةُ اللقطة من القرص") }
+          // 10-09 — تُصغَّر بسلّم image-file قبل نموذج الرؤية؛ يجيب بإحداثيّات الصورة المصغَّرة وتُعاد إلى النافذة أدناه.
+          const fitted = await prepareImageFile(shot.shot.path, MAX_IMAGE_BASE64)
+          if (!fitted.ok) return invalid(`تعذّر تجهيزُ اللقطة لنموذج الرؤية: ${fitted.why} — استعمل desk ui إن كانت للنافذة شجرة.`)
+          const data = fitted.data
           const width = desktopBound.right - desktopBound.left, height = desktopBound.bottom - desktopBound.top
+          const seen = parseDims(fitted.scaled) ?? { width, height }
           const sel = route.via === "vision" ? selectionOf(route.ref, "agent") : selectTurnModel(description, undefined, true)
           if (sel === undefined) return invalid(`نموذجُ الرؤية «${route.ref}» غيرُ قابلٍ للحلّ من الكتالوج`)
           emit({ kind: "model-route", turnId, lane: sel.lane, ref: sel.ref, vision: true })
           let reply = ""
-          try { reply = await visionPointAsk(pointSystem(), pointBody(description, width, height), { mime: "image/png", data }, Object.freeze({ ...sel, vision: true as const }), hooks, hooks.signal ?? new AbortController().signal) }
+          try { reply = await visionPointAsk(pointSystem(), pointBody(description, seen.width, seen.height), { mime: fitted.mime, data }, Object.freeze({ ...sel, vision: true as const }), hooks, hooks.signal ?? new AbortController().signal) }
           catch (error) { return invalid(`نموذجُ الرؤية لم يُجب: ${String((error as Error).message ?? error).slice(0, 120)} — لا تُعد المحاولة: اقرأ الشجرةَ بـ«desk ui» واضغط العنصرَ بمرجعه بـ«desk press uN» أو بإحداثيّاته بـ«desk click x y»؛ الشجرةُ لا تحتاج رؤيةً ولا تسقط بازدحام المزوّد.`) }
-          const verdict = parsePointReply(reply, width, height)
-          if (!verdict.ok) { desktopPointed = undefined; return invalid(verdict.why) }
-          desktopPointed = { x: verdict.x, y: verdict.y, label: verdict.label, digest: shotDigest(data) }
+          const parsed = parsePointReply(reply, seen.width, seen.height)
+          if (!parsed.ok) { desktopPointed = undefined; return invalid(parsed.why) }
+          const verdict = { ...parsed, ...scalePoint(parsed.x, parsed.y, seen, { width, height }) }
+          // البصمةُ من اللقطة الخامّ كما تُحسب بصمةُ لقطة التحقّق بعد النقر — وإلا بدت كلُّ نقرةٍ «غيّرت شيئاً».
+          desktopPointed = { x: verdict.x, y: verdict.y, label: verdict.label, digest: shotDigest(rawShot) }
           return okText(pointReceipt(verdict, desktopBound.title))
         }
         // ن4 — desk wait <نصّ> [ث]: انتظارُ نافذةٍ بعنوانها أو عنصرٍ باسمه في النافذة المربوطة (قراءةٌ بلا بوّابة).
@@ -4041,7 +4291,8 @@ const runServeShell = async (): Promise<void> => {
         // — تركيزُ المشغّل بنفسه تسميةٌ صريحة: النافذةُ تُوثَّق للأدوار التالية. تركيزُ النموذج داخل دورٍ لا يوثّق (نصُّ المهمّة يبقى الحَكَم).
         if (action.kind === "focus" && result.bound !== undefined && desktopTaskText.split("\n")[0]?.trim() === `desk ${rest.trim()}`) desktopTrustedHwnds.add(result.bound.hwnd)
         if (action.kind === "windows" && result.windows !== undefined) { const known = new Set(desktopKnownHwnds ?? []); for (const w of result.windows) { desktopPidByHwnd.set(w.hwnd, w.pid); if (desktopKnownHwnds !== undefined && !known.has(w.hwnd)) desktopTrustedHwnds.add(w.hwnd) } }
-        if (action.kind === "ui" && result.elements !== undefined) desktopUi = { depth: action.depth, elements: result.elements }
+        // 10-12 — العمقُ الذي قُرئت به الشجرةُ فعلاً (نافذةُ Chromium تُقرأ بالعمق الكامل) لا ما طلبه النموذج — وإلا انزاحت المراجع.
+        if (action.kind === "ui" && result.elements !== undefined) desktopUi = { depth: result.uiDepth ?? action.depth, elements: result.elements }
         // S7/S8 — ما قيس مع النتيجة يُحفظ للدور: عمليّةُ النافذة (مفتاحُ اللاياوت)، إطارُها، وآخرُ لقطةٍ لها على القرص.
         if (result.measure !== undefined && result.measure.process.length > 0) desktopBoundProcess = result.measure.process
         if (result.frame !== undefined) desktopFrame = result.frame
@@ -4089,19 +4340,24 @@ const runServeShell = async (): Promise<void> => {
             if (verify.ok && verify.shot !== undefined) return okText(`${result.text}\n${afterClickLine(pointed.digest, shotDigest(readFileSync(verify.shot.path).toString("base64")))}`)
           } catch { /* لقطةُ التحقّق مساعِدة؛ النقرةُ نفسُها رُويت بحكمها */ }
         }
+        let scaledLine = ""
         if (result.ok && result.shot !== undefined) {
           try {
-            const data = readFileSync(result.shot.path).toString("base64")
+            const raw = readFileSync(result.shot.path).toString("base64")
+            // 10-09 — اللقطةُ تُصغَّر بسلّم image-file فتصل النموذجَ دائماً (كانت تسقط صامتةً فوق السقف)، ويُقال المقياس في الإيصال.
+            const fitted = shotRoute(loadSettings()).reaches ? await prepareImageFile(result.shot.path, MAX_IMAGE_BASE64) : undefined
+            const data = fitted?.ok === true ? fitted.data : raw
+            if (fitted?.ok === true) scaledLine = (await import("./look-and-point")).scaledShotLine(fitted.source, fitted.scaled)
             // النطاقُ يُقال في الرابط: نافذةٌ مركَّزةٌ وحدها أم سطحُ المكتب كلُّه — فما يصل نموذجَ الرؤية يُسمّى بما هو.
             const shotUrl = result.shot.scope === "window" ? "desktop://window" : "desktop://screen"
-            if (shellKind !== undefined) emit({ kind: "browser-shot", data, url: shotUrl })
+            if (shellKind !== undefined) emit({ kind: "browser-shot", data: raw, url: shotUrl })
             const visionRef = loadSettings().visionModel
             // لقطةُ سطح المكتب PNG من القرص: فوق سقف البوّابة لا تُعلَّق (وإلا رُفض النداءُ كلُّه «invalid image content»).
-            pendingShot = shotRoute(loadSettings()).reaches && shotFitsModel(data) ? { data, url: shotUrl, mime: "image/png" } : undefined
+            pendingShot = fitted?.ok === true ? { data, url: shotUrl, mime: fitted.mime } : shotRoute(loadSettings()).reaches && shotFitsModel(raw) ? { data: raw, url: shotUrl, mime: "image/png" } : undefined
           } catch { /* اللقطةُ على القرص تكفي؛ العرضُ مساعِد */ }
         }
         // ب1 — الإيصالُ يسمّي القناة (مرّةً عند عدّ النوافذ لا في كلّ فعل).
-        return result.ok ? okText(action.kind === "windows" ? `${result.text}\n(القناة: ${backend.label})` : `${result.text}${restoredLine}${unchangedLine}`) : invalid(result.text)
+        return result.ok ? okText(action.kind === "windows" ? `${result.text}\n(القناة: ${backend.label})` : `${result.text}${restoredLine}${unchangedLine}${scaledLine}`) : invalid(result.text)
       }
       case "framed": {
         const framedBody = `${spec.name} ${rest}`.trim()
@@ -4118,6 +4374,22 @@ const runServeShell = async (): Promise<void> => {
           // والاعتمادُ يُربط ببصمة الخطّة فيسقط إن تغيّرت. رفضُ البوّابة يبقي الدورَ في التخطيط.
           const ok = await gate(turnId, "edit", "اعتماد خطّة السبرنتات ABDO-SPRINTS.md قبل كتابة كود المنتج", "ABDO-SPRINTS.md")
           if (!ok) return denied(`رُفض plan-approve — الاعتماد لم يُمنح في نمط ${currentMode}؛ الخطّة تبقى في مرحلة التخطيط.`, "policy_denied")
+        }
+        if (spec.name === "remember") {
+          // 10-09 — اقتراحُ ذاكرةٍ من الوكيل: يُعرض للموافقة **دائماً** (ولو في الوصول الكامل) لأنّ «لا يحفظ تفضيلاً إلا أمرٌ صريح» —
+          // والنقرةُ هي الأمرُ الصريح. ما يشبه اعتماداً يرفضه saveOwnerMemory نفسُه، والمصدرُ يُسجَّل «اقتراحَ الوكيل» لا «قولَ المستخدم».
+          const m = /^([^:\n]{1,120}?)\s*::\s*([\s\S]{1,8000})$/u.exec(rest.trim())
+          if (m === null) return invalid("الصيغة: remember <عنوان> :: <ما يُحفظ> — سطرُ العنوان حتى 120 حرفاً، والنصُّ حتى 8000.")
+          const title = m[1]!.trim(), text = m[2]!.trim()
+          if (currentMemory === undefined) return invalid("ذاكرةُ المشروع غيرُ متاحة في هذا المسار.")
+          const ok = await gate(turnId, "edit", `حفظٌ في ذاكرة المشروع الدائمة (يقترحه الوكيل): «${title}» — ${text.slice(0, 240)}`, "remember", { always: true })
+          if (!ok) return denied(`لم يُحفظ «${title}» — الحفظُ في الذاكرة قرارُ المستخدم وحده.`, "policy_denied")
+          try {
+            saveOwnerMemory(currentMemory, { projectId: resolve(PROJECT_DIR), title, text, allowSensitive: false, source: `agent-proposal:${turnId}` })
+            return okText(`حُفظ في ذاكرة المشروع «${title}» بموافقة المستخدم — يُسترجع في الأدوار القادمة، ويُنسى بـ«/forget ${title}».`)
+          } catch (error) {
+            return invalid(`لم يُحفظ «${title}»: ${String((error as Error).message ?? error).slice(0, 200)}`)
+          }
         }
         if (spec.name === "skill" && /^save(?:\s|$)/u.test(rest.trim())) {
           // أ5 — التقطيرُ يكتب ملفّاً في المشروع (.abdo/skills/): كتابةٌ تمرّ ببوّابة الموافقة كأيّ كتابة.
@@ -4177,6 +4449,23 @@ const runServeShell = async (): Promise<void> => {
         return unknownTool(`لا محوّل مربوطاً باسم ${spec.name}`)
       }
       case "net": {
+        if (spec.name === "secrets") {
+          // 10-08 — أسرارُ المشروع (project-secrets.ts): القيمُ إلى الخزنة، والأسماءُ وحدها إلى القرص والإيصال.
+          const ps = await import("./project-secrets")
+          const head = tokenizeArgs(rest)
+          const sub = head[0] ?? "list"
+          if (sub === "list") return okText(await ps.listSecrets(PROJECT_DIR, async (h) => (await vaultHas(h, process.env)) === true))
+          if (sub === "import") {
+            if (head[1] === undefined) return invalid(`الصيغة: ${spec.usage}`)
+            if (!await gate(turnId, spec.effect, `حفظُ مفاتيح «${head[1]}» في الخزنة باسم المشروع (القيمُ لا تُعرض ولا تُسجَّل)`)) return denied("رُفض حفظُ الأسرار: لم يُوافَق.", "policy_denied")
+            const r = await ps.importSecrets(PROJECT_DIR, head[1], {
+              get: async (handle: string) => { const v = await vaultGet(handle, process.env); return "value" in v ? v.value : undefined },
+              set: async (handle: string, value: string) => "ok" in (await vaultSet(handle, value, process.env)),
+            })
+            return r.ok ? okText(r.text) : invalid(r.text)
+          }
+          return invalid(`أمرٌ فرعيٌّ مجهول «${sub}» — الصيغة: ${spec.usage}`)
+        }
         if (spec.name === "server" || spec.name === "deploy") {
           // 10-02 — خوادمُ المستخدم والنشر (servers/remote.ts يملك إنشاءَ العمليّات): الملفُّ بلا أسرار، والمفتاحُ في الخزنة، وكلُّ لمسةٍ للخادم بموافقة.
           if (!pluginOnNow("remoteDeploy")) return denied(`رُفض ${spec.name}: الخوادمُ والنشر مطفأة (plugins.remoteDeploy) — فعّلها من الإعدادات.`, "tool_not_permitted")
@@ -4200,8 +4489,16 @@ const runServeShell = async (): Promise<void> => {
               const r = await remoteMod.rollback(STATE_ROOT, profile, flag("--start"), vault, deps)
               return r.ok ? okText(r.text) : invalid(r.text)
             }
-            const options = { ...(flag("--build") ? { build: flag("--build")! } : {}), ...(flag("--start") ? { start: flag("--start")! } : {}), ...(flag("--check") ? { check: flag("--check")! } : {}) }
-            if (!await gate(turnId, spec.effect, `نشرُ المشروع على «${profile.name}» (${profile.user}@${profile.host}:${profile.path})${options.build ? ` ثمّ $ ${options.build}` : ""}${options.start ? ` ثمّ $ ${options.start}` : ""}`)) return denied("رُفض النشر: لم يُوافَق.", "policy_denied")
+            // 10-08: --env يكتب .env الإصدار من الخزنة (secrets import) — النصُّ يُبنى هنا ولا يُطبع، ومفتاحٌ غائب يوقف النشر باسمه.
+            let envOption: { env?: string; envKeys?: readonly string[] } = {}
+            if (head.includes("--env")) {
+              const built = await (await import("./project-secrets")).envFromVault(PROJECT_DIR, vault)
+              if ("error" in built) return invalid(built.error)
+              if (built.missing.length > 0) return invalid(`مفاتيحُ غائبةٌ عن الخزنة: ${built.missing.join("، ")} — أعد secrets import <ملفّ>.`)
+              envOption = { env: built.text, envKeys: built.keys }
+            }
+            const options = { ...(flag("--build") ? { build: flag("--build")! } : {}), ...(flag("--start") ? { start: flag("--start")! } : {}), ...(flag("--check") ? { check: flag("--check")! } : {}), ...envOption }
+            if (!await gate(turnId, spec.effect, `نشرُ المشروع على «${profile.name}» (${profile.user}@${profile.host}:${profile.path})${envOption.envKeys ? ` مع .env من الخزنة (${envOption.envKeys.length} مفاتيح)` : ""}${options.build ? ` ثمّ $ ${options.build}` : ""}${options.start ? ` ثمّ $ ${options.start}` : ""}`)) return denied("رُفض النشر: لم يُوافَق.", "policy_denied")
             const checkUrl = async (url: string) => (await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(20_000) })).status
             const result = await remoteMod.deploy(STATE_ROOT, PROJECT_DIR, profile, options, vault, deps, checkUrl)
             const text = remoteMod.renderDeploy(profile, result)
@@ -4211,7 +4508,25 @@ const runServeShell = async (): Promise<void> => {
           if (sub === "list") return okText(remoteMod.renderProfiles(remoteMod.listProfiles(STATE_ROOT)))
           if (sub === "add") {
             if (head[1] === undefined || head[2] === undefined) return invalid(`الصيغة: ${spec.usage}`)
-            const r = await remoteMod.addServer(STATE_ROOT, { name: head[1], target: head[2], ...(flag("--path") ? { path: flag("--path")! } : {}), ...(flag("--key-file") ? { keyFile: flag("--key-file")! } : {}) }, vault, deps)
+            const r = await remoteMod.addServer(STATE_ROOT, { name: head[1], target: head[2], ...(flag("--path") ? { path: flag("--path")! } : {}), ...(flag("--key-file") ? { keyFile: resolve(PROJECT_DIR, flag("--key-file")!) } : {}) }, vault, deps)
+            return r.ok ? okText(r.text) : invalid(r.text)
+          }
+          // 10-09: خادمٌ تجريبيّ محلّيّ جاهز في نداءٍ واحد (servers/sandbox.ts) — بدل أن تبنيه كلُّ مهمّةٍ بيدها ساعاتٍ.
+          if (sub === "sandbox") {
+            const sandboxMod = await import("./servers/sandbox")
+            if (head[1] === undefined) return invalid("الصيغة: server sandbox <اسم> [--app-port 3000] [--remove]")
+            if (head.includes("--remove")) return okText(await sandboxMod.removeSandbox(STATE_ROOT, head[1], vault, deps))
+            if (!await gate(turnId, spec.effect, `خادمٌ تجريبيّ محلّيّ «${head[1]}»: حاويةُ Docker مقيّدةٌ بـ127.0.0.1 ومفتاحٌ في الخزنة`)) return denied("رُفض إنشاءُ الخادم التجريبيّ: لم يُوافَق.", "policy_denied")
+            const appPortFlag = Number.parseInt(flag("--app-port") ?? "", 10)
+            const freePort = (from: number): number | undefined => {
+              const taken = listeningPorts()
+              for (let p = from; p < from + 200; p += 1) {
+                if (taken.has(p)) continue
+                try { const s = Bun.listen({ hostname: "127.0.0.1", port: p, socket: { data() { /* فحص */ } } }); s.stop(true); return p } catch { /* مشغول */ }
+              }
+              return undefined
+            }
+            const r = await sandboxMod.createSandbox(STATE_ROOT, head[1], vault, deps, { freePort, ...(Number.isFinite(appPortFlag) && appPortFlag > 0 ? { appPort: appPortFlag } : {}) })
             return r.ok ? okText(r.text) : invalid(r.text)
           }
           const profile = profileOf(head[1])
@@ -4327,7 +4642,7 @@ const runServeShell = async (): Promise<void> => {
             try { reported = (JSON.parse(replyBody) as { usage?: typeof reported }).usage ?? {} } catch { /* الجسدُ يُقرأ صورةً بعد قليل */ }
             const charged = chargeableUsage({ inputTokens: reported.prompt_tokens ?? reported.input_tokens, outputTokens: reported.completion_tokens ?? reported.output_tokens }, imageEstimate, imageOutputCap, pluginOnNow("cacheAccounting"))
             try { recordCloudUsage({ provider: prov.id, model: imageModel, note: "image.generate", ...charged }) } catch { /* الدفترُ مساعِد */ }
-            hooks.turnMeter?.charge(charged)
+            hooks.turnMeter?.charge(charged, cacheDiscountFor(prov.id))
           }
           const found = extractImage(replyBody)
           if ("error" in found) return { output: `تعذّر توليدُ الصورة (${ref}): ${found.error}`, verdict: { ok: false, reason: "tool_failed", denied: false, detail: "image_not_in_reply" } }
@@ -4404,6 +4719,8 @@ const runServeShell = async (): Promise<void> => {
         // مقيسٌ 2026-09-13: متصفّحٌ مملوك أُغلق من خارج المحرّك (قُتل/أُغلق بيد المستخدم) يترك `surface` بقناةٍ ميّتة،
         // فأوّلُ أداةٍ في الدور التالي ترمي «القناة مغلقة» ويسقط الدورُ كلُّه. القناةُ الميّتة تُنسى، و`open`/`ui` تُعاد
         // مرّةً واحدة على سطحٍ جديد؛ وغيرُهما يُقال له أنّ الاتصال انقطع بدل أن يموت الدور.
+        // 10-10 — «page save»: مرجعُ التصميم ملفّاتٌ في المشروع (يحتاج hooks للكتابة عبر السياسة) — قبل المسار العامّ للسطح.
+        if (spec.name === "page" && /^save\b/u.test(rest.trim())) return surfaced(await runPageSave(rest.trim().slice(4).trim(), turnId, hooks))
         try {
           const liveSurface = surface
           const out = await runSurfaceTool(spec.name, rest, turnId)
@@ -4427,6 +4744,11 @@ const runServeShell = async (): Promise<void> => {
           if (!/القناة مغلقة|channel is closed/u.test(message)) throw cause
           surface = undefined; surfaceRefs = []; surfaceGeneration += 1
           if (spec.name === "open" || spec.name === "ui") return surfaced(await runSurfaceTool("ui", rest, turnId))
+          // 10-08 (مقيس): audit على قناةٍ ميّتة قال «أعد open» فأعاد النموذجُ audit بعد open فحُسب مكرَّراً وانتهى الدور. الأدواتُ التي
+          // تفتح صفحاتِها بنفسها (خادمُ المشروع المُدار) تُعاد مرّةً على سطحٍ جديد؛ وما يعتمد على مراجع الصفحة القديمة (tap/fill…) يُقال له.
+          if (["audit", "shot", "compare", "seo"].includes(spec.name)) {
+            try { return surfaced(`(انقطع المتصفّح فأُعيد إطلاقُه)\n${await runSurfaceTool(spec.name, rest, turnId)}`) } catch { /* ثانيةٌ ميّتة: يُقال كما كان */ }
+          }
           return invalid("انقطع اتصالُ متصفّح الوكيل (أُغلق أو قُتل خارج المحرّك) — أعد open <الرابط> ليُوصل من جديد.")
         }
       }
@@ -4624,6 +4946,7 @@ const runServeShell = async (): Promise<void> => {
         // **هذا المُوزِّع نفسه** فيقف على البوّابة نفسها بالنمط نفسه، ويُحاسَب
         // في عدّاد إنفاق الدور نفسه ودفتر السحابة نفسه. ما يملكه وحده: حِقبُه
         // وإيصالاتُه ودفترُ وعيه وأثرُه.
+        if (process.env.ABDO_PARALLEL_WORKER === "1") return denied("رُفض delegate: أنت عاملٌ متوازٍ — العاملُ وكيلٌ واحد ينفّذ مهمّتَه هنا بنفسه، لا يفوّض.", "tool_not_permitted")
         if (!delegationEnabled()) {
           return denied("رُفض delegate: التفويض معطَّل (plugins.delegation) — فعّله من الإعدادات إن أردته.", "tool_not_permitted")
         }
@@ -4989,13 +5312,15 @@ const runServeShell = async (): Promise<void> => {
 
   /** عينُ الوكيل (09-29): نداءٌ واحد لنموذج الرؤية المنفصل بنظامٍ بلا أدوات ومعيارٍ ثابت؛ undefined = تعذّر أو جوابٌ ليس وصفاً
    * (فيُسلَك المسارُ القديم: اللقطةُ إلى النداء التالي). في نطاق الخدمة لأنّ لقطةَ الخطأ التلقائيّة خارج runSurfaceTool تستعمله أيضاً. */
+  const VISION_DESCRIBE_MS = Math.max(10_000, Number(process.env.ABDO_VISION_DESCRIBE_MS) || 90_000)
   const describeShots = async (images: readonly { mime: "image/png" | "image/jpeg"; data: string }[], ref: string, url: string, bytes: number, tiles: number, turnId: string): Promise<string | undefined> => {
     const sel = selectionOf(ref, "agent")
     if (sel === undefined) return undefined
     try {
       await emitEvent(turnId, `👁 نموذجُ الرؤية ${ref} يصف اللقطة${tiles > 1 ? ` (${tiles} بلاطات)` : ""}…`)
       const eyeGoal = sprintFocusText.length > 0 ? `${currentGoalText} — السبرنت الجاري: ${sprintFocusText.slice(0, 400)}` : currentGoalText
-      const reply = await ask(visionRubric(eyeGoal, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, attachments: { descriptions: [], text: "", images: images.map((i) => ({ mime: i.mime, data: i.data })) } }, [], Object.freeze({ ...sel, vision: true as const }))
+      // 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.143): نداءُ نموذج الرؤية علق 600 ثانية بلا سقف ثمّ سقط الدورُ كلُّه. الوصفُ مساعدةٌ لا شرط: 90 ثانية.
+      const reply = await withDeadline(ask(visionRubric(eyeGoal, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, signal: AbortSignal.timeout(VISION_DESCRIBE_MS), attachments: { descriptions: [], text: "", images: images.map((i) => ({ mime: i.mime, data: i.data })) } }, [], Object.freeze({ ...sel, vision: true as const })), VISION_DESCRIBE_MS, "نموذجُ الرؤية")
       const text = typeof reply === "string" ? reply : String(reply)
       if (!visionReportUsable(text)) { await emitEvent(turnId, `👁 نموذجُ الرؤية لم يُعطِ وصفاً صالحاً (${text.replace(/\s+/gu, " ").slice(0, 80)}) — تُرسَل اللقطةُ إلى النداء التالي كما كان.`); return undefined }
       return renderVisionReport(ref, text, { bytes, url, tiles })
@@ -5005,8 +5330,75 @@ const runServeShell = async (): Promise<void> => {
     }
   }
 
+  /**
+   * 10-10 .
+   * `page save [مجلد]` يفعل ذلك حرفاً بنداء DevTools نفسِه (DOM.getOuterHTML لعقدة <html>) ويحفظ معه أوراقَ الأنماط والسكربتات وملخّصاً
+   * في المشروع — ملفّاتٍ يقرؤها النموذجُ بالقطعة (read) لا نصّاً يملأ السياق. الإيصالُ ملخّصٌ بالمسارات والأحجام.
+   */
+  const runPageSave = async (dirArg: string, turnId: string, hooks: AskHooks): Promise<string> => {
+    if (surface === undefined) return "لا صفحةَ مفتوحة — افتح المرجع أوّلاً: open <رابط> ثمّ page save"
+    const { Surface } = await import("./mind/surface")
+    const verdict = Surface.judge({ generation: surfaceGeneration }, { kind: "read_text" })
+    if (!verdict.ok) return "العقد رفض: " + verdict.why
+    const owned = surface as { copyDocument?: () => Promise<import("@abdo/browser").CdpDocumentCopy> }
+    if (typeof owned.copyDocument !== "function") return "page save يعمل على المتصفّح المملوك (browser owned) — بدّل الخلفيّة ثمّ أعد المحاولة"
+    const copy = await owned.copyDocument()
+    // المجلّدُ والملفّاتُ والإيصالُ من reference-save.ts — البابُ نفسُه لإضافة المتصفّح (chrome.save).
+    const { referenceDir, referenceFiles, referenceReceipt } = await import("./reference-save")
+    const placed = referenceDir(dirArg, copy.url)
+    if (!placed.ok) return placed.why
+    const dir = placed.dir
+    const files = referenceFiles(copy, dir, "DevTools Copy element on <html> (DOM.getOuterHTML) + stylesheet and script texts")
+    // 10-10 (مقيس في مهمّة n8n): الكتابةُ عبر أداة write ملفّاً ملفّاً حملت المحتوى والفرقَ في إطارٍ واحد للواجهة — صفحةُ n8n.io/integrations
+    // (HTML ‏2.1M حرف) أسقطت الأداةَ «declared frame length 2159689 exceeds maximum 1048576»، وملأت المحادثةَ بفروق meta.json. المرجعُ ملفّاتٌ
+    // تُكتب تحت .abdo/reference وحدها: سياسةُ المسار نفسُها (brokerPath) لكلّ ملفّ، وموافقةٌ واحدة للدفعة، ثمّ القرصُ مباشرةً — بلا فرقٍ ولا سقف إطار.
+    void hooks
+    const referenceRoot = resolve(PROJECT_DIR, ".abdo", "reference")
+    const written: string[] = [], refused: string[] = []
+    const toWrite: { path: string; abs: string; content: string }[] = []
+    for (const f of files) {
+      const checked = brokerPath(f.path)
+      if (!checked.ok) { refused.push(`${f.path}: ${checked.why}`); continue }
+      const abs = resolve(checked.abs)
+      if (abs !== referenceRoot && !abs.startsWith(referenceRoot + sep)) { refused.push(`${f.path}: خارج .abdo/reference`); continue }
+      toWrite.push({ path: f.path, abs, content: f.content })
+    }
+    if (toWrite.length > 0 && !await gate(turnId, "edit", `page save: ${toWrite.length} ملفّاً تحت ${dir}/`)) return "رُفض الحفظ — لم تُمنح الموافقة."
+    for (const f of toWrite) {
+      try { mkdirSync(dirname(f.abs), { recursive: true }); writeFileSync(f.abs, f.content, "utf8"); written.push(`${f.path} (${f.content.length} حرفاً)`) }
+      catch (error) { refused.push(`${f.path}: ${String((error as Error).message ?? error).slice(0, 120)}`) }
+    }
+    return referenceReceipt(copy, dir, written, refused)
+  }
+
   const runSurfaceTool = async (name: string, rest: string, turnId: string): Promise<string> => {
     const { Surface } = await import("./mind/surface")
+
+    // 10-10 عبدو كود يغيّر إعداداته وفق أوامر المستخدم في المحادثة. الرقعةُ تمرّ بمدقّق «حفظ وتطبيق» نفسِه، والتغييرُ
+    // يمرّ ببوّابة الموافقة بنمط الجلسة، ومفاتيحُ الأمان مرفوضةٌ بالاسم (chat-settings.ts). يسري من الدور القادم كأيّ حفظ.
+    if (name === "settings") {
+      const current = loadSettings()
+      const command = parseChatSettingsCommand(rest, SETTINGS_KEYS as ReadonlySet<string>, CHAT_PLUGIN_NAMES, current.plugins as Record<string, unknown> | undefined)
+      if (command.kind === "error") return command.why
+      if (command.kind === "show") {
+        const plugins = PLUGIN_DESCRIPTORS.map((d) => ({ name: d.name, label: d.label, on: pluginOnNow(d.name) }))
+        return renderChatSettings(current as Record<string, unknown>, SETTINGS_KEYS as ReadonlySet<string>, plugins, command.key)
+      }
+      // 10-10 — التغييرُ أمرُ المستخدم لا رغبةُ النموذج: القيمةُ في رسالته بنصّها، والتشغيلُ/الإطفاء بفعلٍ صريح (settingsChangeUnasked).
+      // «اكمل» يواصل أمراً قيل في دورٍ سابق: يُقبل ما ورد في آخر رسائل المستخدم (6) لا في رسالة هذا الدور وحدها — والقيمةُ التي لم يكتبها أحدٌ تبقى مرفوضة.
+      const recentAsks = [turnBodies.get(turnId) ?? "", ...[...turnBodies.values()].slice(-6)].join("\n")
+      const unasked = settingsChangeUnasked(recentAsks, command.patch as Record<string, unknown>, "plugins" in command.patch)
+      if (unasked !== undefined) return `رُفض التغيير: ${unasked}.`
+      const patch = validateSettingsPatch(command.patch)
+      if (typeof patch === "string") return `رُفض التغيير: ${patch}`
+      if (!await gate(turnId, "edit", `تغييرُ إعدادات عبدو كود: ${command.describe}`)) return "رُفض التغيير — لم تُمنح الموافقة."
+      let next: Settings
+      try { next = saveSettings(patch) } catch (error) { return `تعذّر حفظ الإعدادات: ${String((error as Error).message ?? error).slice(0, 160)}` }
+      const primaryModel = next.chatModel ?? next.model
+      if (typeof primaryModel === "string") { const parsed = Providers.parseRef(primaryModel); if (parsed) { ASK_PROVIDER = parsed.provider; ASK_MODEL = parsed.model } }
+      emit({ kind: "settings", settings: next, ...pluginFrameFields(next) })
+      return `✓ حُفظ في الإعدادات: ${command.describe} — يسري من الدور القادم، والواجهةُ حُدِّثت الآن.`
+    }
 
     // S6 — history/sessions: القراءةُ بلا سطح؛ الحفظُ والاستعادةُ بالمتصفّح المملوك وحده (تبويبُ المستخدم عبر الإضافة ليس ملفَّنا).
     if (name === "history") {
@@ -5254,7 +5646,8 @@ const runServeShell = async (): Promise<void> => {
       }
       const edge = EDGE_EXECUTABLES.find((p) => existsSync(p))
       if (edge === undefined) return "متصفّح Edge غير موجود بمساره المعروف — استعمل surface <منفذ> على متصفّحٍ فتحتَه بنفسك"
-      const port = 9333
+      // 10-08: منفذُ التحكّم مشتقٌّ من دليل حالة هذا المحرّك (browser-port.ts) — 9333 الثابتُ جعل محرّكَي مشروعين يتقاسمان متصفّحاً واحداً.
+      const port = browserPortFor(STATE_ROOT)
       // S6 — ملفٌّ دائم تحت دليل حالة المحرّك (لا مؤقّتٌ ولا شجرةُ المنتَج): الدخولُ يبقى بعد إعادة التشغيل.
       const profile = join(STATE_ROOT, PROFILE_DIR)
       // 🔴 **منفذٌ مشغولٌ سؤالٌ لا حكم.** كان انشغالُ منفذ التحكّم رفضاً نهائيّاً — وشاغلُه
@@ -5485,7 +5878,7 @@ const runServeShell = async (): Promise<void> => {
       surfaceLoadedAt = Date.now()
       await paneShot()
       const note = await landed(rest)
-      // بلاغُ المالك 2026-09-28: بعد الفتح يُقرأ ما يراه المتصفّحُ نفسُه (بلا رؤية): أخطاءُ طرفيّة الصفحة تُلحق بالإيصال
+      // 2026-09-28: بعد الفتح يُقرأ ما يراه المتصفّحُ نفسُه (بلا رؤية): أخطاءُ طرفيّة الصفحة تُلحق بالإيصال
       // فوراً — البياناتُ بعد الأداة — فيُصلحها النموذجُ قبل أن يعلن «تمّ» بدل أن يظنّ الصفحةَ سليمةً لأنّها فُتحت.
       await Bun.sleep(350)
       const consoleAfterOpen = surface.consoleTail(40).filter((m) => m.level === "error" || m.level === "warning" || m.level === "warn")
@@ -5660,7 +6053,10 @@ const runServeShell = async (): Promise<void> => {
       const managedPort = turnServers.snapshot().find((s) => s.alive)?.port ?? devServers.snapshot().find((s) => s.alive)?.port
       if (managedPort === undefined) return "audit يحتاج خادماً مُداراً يعمل لهذا المشروع — ابنِ (npm run build) ثمّ run --bg npm run start (أو run --bg npm run dev) ثمّ audit [/مسار …]"
       const base = `http://127.0.0.1:${managedPort}`
-      let routes = rest.split(/\s+/u).filter((t) => t.startsWith("/"))
+      // 10-08: رابطٌ محلّيٌّ على منفذ الخادم المُدار مسارُه (audit-routes.ts) — كان يسقط بصمت فتُدقَّق كلُّ صفحات البناء.
+      const parsedRoutes = auditRoutesFromArgs(rest.split(/\s+/u).filter((t) => t.length > 0 && !/^\d[\d,]*$/u.test(t)), managedPort)
+      if (parsedRoutes.refused.length > 0 && parsedRoutes.routes.length === 0) return `رُفض audit: ${parsedRoutes.refused.join("؛ ")} — اكتب المسارَ وحده (audit / /models) فيُقاس على خادم المشروع المُدار ${base}.`
+      let routes = parsedRoutes.routes
       if (routes.length === 0) {
         try { routes = routesFromManifest(JSON.parse(readFileSync(join(PROJECT_DIR, ".next", "app-path-routes-manifest.json"), "utf-8"))) } catch { routes = ["/"] }
       }
@@ -5688,8 +6084,10 @@ const runServeShell = async (): Promise<void> => {
             const net = browser.networkTail(300).filter((r) => r.at >= t0)
             const doc = net.find((r) => r.type === "Document" && r.status !== undefined)
             // 10-01: رسالةُ طرفيّةٍ متعدّدةُ الأسطر (ZodError بـJSON منسَّق) ملأت تقريرَ audit بـ41 سطراً بلا فئة — سطرٌ واحد لكلّ خطأ.
-            const consoleErrors = browser.consoleTail(100).filter((c) => c.at >= t0 && /error/iu.test(c.level)).map((c) => c.text.replace(/\s+/gu, " ").trim().slice(0, 160))
-            const failedRequests = net.filter((r) => r.url.startsWith(base) && ((r.status !== undefined && r.status >= 400) || r.failure !== undefined)).map((r) => `${r.status ?? r.failure} ${r.url.slice(base.length)}`)
+            // 10-08 (مقيس بـgpt-6.1-sol): «failed-requests: 200 /?_rsc=…» — جلبُ Next المسبق ألغاه المتصفّحُ عند تبديل العرض فعُدّ فشلاً، و«WebSocket …/_next/hmr»
+            // ضجيجُ خادم التطوير — سبعةُ «أخطاء» ليست من الصفحة. الإلغاءُ (canceled) ليس فشلَ خادم، ومقبسُ HMR ليس خطأَ صفحة؛ والـ4xx/5xx وفشلُ الاتّصال تبقى.
+            const consoleErrors = browser.consoleTail(100).filter((c) => c.at >= t0 && /error/iu.test(c.level) && !isDevHmrNoise(c.text)).map((c) => c.text.replace(/\s+/gu, " ").trim().slice(0, 160))
+            const failedRequests = net.filter((r) => r.url.startsWith(base) && ((r.status !== undefined && r.status >= 400) || (r.failure !== undefined && r.failure !== "canceled"))).map((r) => `${r.status ?? r.failure} ${r.url.slice(base.length)}`)
             // الطلباتُ التي لا تتوقّف: عرضٌ واحدٌ لكلّ صفحة يكفي (أكبرُها) — نافذةُ سكونٍ بعد الاستقرار، بلا HMR.
             let runaway = 0
             if (width === widths[widths.length - 1]) {
@@ -5710,6 +6108,8 @@ const runServeShell = async (): Promise<void> => {
               overflow: (m.overflow ?? null) as never, inlineDvh: m.inlineDvh === true, textLength: Number(m.textLength ?? 0),
               h1Count: Number(m.h1Count ?? 0), imgNoAlt: Number(m.imgNoAlt ?? 0),
               unnamedControls: list(m.unnamedControls), unlabeledFields: list(m.unlabeledFields), overlaps: list(m.overlaps),
+              // 10-09: الحقلان الجديدان يُمرَّران هنا — فحصٌ سقطت حقولُه في cli مرّ أخضرَ من قبل (درسُ Tailwind 4).
+              controlSpills: list(m.controlSpills), truncatedTexts: list(m.truncatedTexts),
               // 10-02 — مقيس: القياسُ أعاد الحقولَ الثلاثة وهذه القائمةُ أسقطتها فلم يُحمِّر unstyled صفحةً بلا أنماط (4 قواعد، 52/52 رابطاً أزرق).
               ...(typeof m.styleRules === "number" ? { styleRules: m.styleRules, linkCount: Number(m.linkCount ?? 0), uaLinks: Number(m.uaLinks ?? 0) } : {}),
             }, { path: route, width }))
@@ -5798,6 +6198,9 @@ const runServeShell = async (): Promise<void> => {
       if (pendingShot !== undefined && route.reaches && route.via === "vision") {
         const described = await describeShots([{ mime, data }], route.ref, surfaceUrl, bytes, 1, turnId)
         if (described !== undefined) { pendingShot = undefined; return reloadNote + described + where }
+        // 10-11 (مقيس: الوصفُ سقط فأُرفقت اللقطةُ بنداء deepseek الذي لا يقبل الصور فسقط الدورُ كلُّه). نموذجُ الحارة لا يرى — فلا تُرفق؛ تُقرأ الصفحةُ نصّاً.
+        pendingShot = undefined
+        return `${reloadNote}التُقطت لقطةُ الشاشة (${bytes} بايت) وحُفظت، لكنّ نموذجَ الرؤية تعذّر — ونموذجُك لا يقبل الصور فلا تُرفق به. اقرأ الصفحةَ نصّاً بـpage (أو look) وتابع.${where}`
       }
       if (route.reaches && pendingShot === undefined) return `التُقطت لقطةُ الشاشة (${bytes} بايت) — وصلت اللوحةَ لكنّها فوق سقف الصورة (${MAX_IMAGE_BASE64} حرفاً) حتى بعد القصّ، فلا تصل النموذج.${where}`
       return reloadNote + (route.reaches
@@ -5854,6 +6257,7 @@ const runServeShell = async (): Promise<void> => {
       // المستخدم أن يكتب بيده ثم يخبره — كلمةُ المرور والبطاقةُ والرمزُ لا تمرّ بالوكيل ولا بالسجلّ أبداً.
       const verdict = Surface.judge({ generation: surfaceGeneration }, { kind: "handoff", ref, generation: surfaceGeneration })
       if (!verdict.ok) return `العقد رفض: ${verdict.why}`
+      if (shellKind === "cli") return `لم أسلّم الحقل: ${NO_OPERATOR_HANDOFF}`
       const focused = await surface.focusRef(ref)
       await paneShot()
       if (!focused) return `تعذّر تركيزُ «${node.name || node.role}» — اقرأ الصفحة بـpage وأعد المحاولة`
@@ -5879,10 +6283,10 @@ const runServeShell = async (): Promise<void> => {
         { kind: "type", ref, generation: surfaceGeneration, text, field: `${node.name} ${node.role}`, ...(node.sensitive === true ? { sensitive: true } : {}) },
       )
       // ب5 — الرفضُ يدلّ على الطريق الصادق: التسليمُ للمستخدم لا الالتفاف.
-      if (!verdict.ok) return `العقد رفض: ${verdict.why} — استعمل handoff ${ref} ليكتبه المستخدم بيده.`
+      if (!verdict.ok) return `العقد رفض: ${verdict.why} — ${shellKind === "cli" ? NO_OPERATOR_HANDOFF : `استعمل handoff ${ref} ليكتبه المستخدم بيده.`}`
       const spot = await locateChecked()
       if ("why" in spot) return `لم أكتب: ${spot.why}`
-      if (spot.at.sensitive) return `لم أكتب: «${node.name || node.role}» حقلُ اعتمادٍ بنوعه — استعمل handoff ${ref} ليكتبه المستخدم بيده.`
+      if (spot.at.sensitive) return `لم أكتب: «${node.name || node.role}» حقلُ اعتمادٍ بنوعه — ${shellKind === "cli" ? NO_OPERATOR_HANDOFF : `استعمل handoff ${ref} ليكتبه المستخدم بيده.`}`
       const ok = await gate(turnId, "outside-workspace", `كتابةٌ في «${node.name || node.role}»`)
       if (!ok) return `رُفضت الكتابة — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`
       const still = await locateChecked()
@@ -5992,8 +6396,14 @@ const runServeShell = async (): Promise<void> => {
     const callRepair = powershellCallOperatorRepair(cmd)
     if (callRepair !== undefined) { await emitEvent(turnId, `🔧 ${callRepair.note}`); cmd = callRepair.command }
     // 09-30: سلسلةُ && (أو || واحدة) خارج الاقتباس تُترجم حتميّاً بدل رفضها — كلُّ رفضٍ كان نداءَ نموذجٍ كاملاً لإعادة الصياغة.
+    // 10-08: `docker exec <حاوية> A && B` تُلفّ sh -c '…' — الحاويةُ هي المقصودة لا هذا الجهاز.
+    const execRepair = dockerExecChainRepair(cmd)
+    if (execRepair !== undefined) { await emitEvent(turnId, `🔧 ${execRepair.note}`); cmd = execRepair.command }
     const chainRepair = powershellChainRepair(cmd)
     if (chainRepair !== undefined) { await emitEvent(turnId, `🔧 ${chainRepair.note}`); cmd = chainRepair.command }
+    // 10-09: curl ⇦ curl.exe، ls -la ⇦ Get-ChildItem -Force، /dev/null ⇦ $null، mkdir -p ⇦ New-Item — تُترجم وتُعلَن بدل رفضٍ يكلّف نداءً.
+    const linuxRepair = linuxismRepair(cmd)
+    if (linuxRepair !== undefined) { await emitEvent(turnId, `🔧 ${linuxRepair.note}`); cmd = linuxRepair.command }
     // 10-01: مسارُ [id] (مجلّدُ Next.js الديناميكيّ) نمطُ بدلٍ في PowerShell — يُحذف/يُفحص بـ-LiteralPath لا بصمتٍ لا يفعل شيئاً.
     const literalRepair = powershellLiteralPathRepair(cmd)
     if (literalRepair !== undefined) { await emitEvent(turnId, `🔧 ${literalRepair.note}`); cmd = literalRepair.command }
@@ -6047,6 +6457,42 @@ const runServeShell = async (): Promise<void> => {
     // كتالوج 6.1: curl/wget المستعارتان المشوّهتان في PowerShell.
     const brokenAlias = violationAcrossVariants(cmd, brokenAliasViolation)
     if (brokenAlias !== undefined) return refused(brokenAlias)
+    // 10-08: قالبُ Go غيرُ مقتبس (`--format {{.Names}}`) كتلةُ سكربت في PowerShell — يُعاد الأمرُ مقتبساً.
+    const template = unquotedTemplateViolation(cmd)
+    if (template !== undefined) return refused(template)
+    // 10-08: && بعد ssh/wsl/docker… لم يُصلَح ⇦ يُردّ بالصيغة المقتبسة بدل خطأ المحلّل.
+    const remoteChain = remoteChainViolation(cmd)
+    if (remoteChain !== undefined) return refused(remoteChain)
+    // 10-08: عرضُ ملفّ بيئةٍ بالصدفة يُردّ إلى read (محجوب) وsecrets import.
+    // 10-08 (مقيس في بروفة النشر): `run server add test-server root@…` ⇦ PowerShell «server is not recognized» — أداةُ عبدو كود لُفّت بـrun.
+    // اسمُ أداةٍ للمحرّك لا برنامجَ بهذا الاسم على الجهاز ⇦ تُسمّى الأداةُ وصيغتُها (git وأمثالُها برامجُ حقيقيّة فتمرّ).
+    const runWord = cmd.trim().split(/\s+/u, 1)[0] ?? ""
+    const engineTool = /^[a-z][a-z-]*$/u.test(runWord) ? Tools.tool(runWord) : undefined
+    if (engineTool !== undefined && engineTool.name !== "run" && Bun.which(runWord) === null) {
+      return refused(`«${runWord}» أداةٌ من أدوات عبدو كود لا أمرُ صدفة — اكتبها مباشرةً بلا run: ${cmd.trim().slice(0, 160)}`)
+    }
+    const dotenvShow = dotenvShellViolation(cmd)
+    if (dotenvShow !== undefined) return refused(dotenvShow)
+    // 10-08: git push نشرٌ إلى خارج الجهاز (قد يكون main نشراً للإنتاج أو مستودعاً عامّاً) — يُسأل عنه دائماً، ولو في نمط الوصول الكامل،
+    // كما يُسأل عن pr-create. رفضُه يعود سبباً صريحاً لا خطأً.
+    if (/(?:^|[;&|]\s*)git\s+(?:-C\s+\S+\s+)?push\b/iu.test(cmd)) {
+      if (!await gate(turnId, "network", `دفعٌ إلى remote (نشرٌ إلى خارج هذا الجهاز): ${cmd.trim().slice(0, 200)}`, "git-push", { always: true })) return refused("رُفض git push: الدفعُ إلى remote يحتاج موافقةَ المستخدم ولم تُعطَ — أودِع محلّيّاً واذكر في الإيصال أنّ الدفع ينتظره.")
+    }
+    // 10-08: ترقيةٌ كبرى لاعتماديّةٍ قائمة (next 14⇦16) تُرفض بالبديل الآمن ما لم تُعلَّل «# major-upgrade: …».
+    const major = majorUpgradeViolation(cmd, (() => { try { return readFileSync(join(PROJECT_DIR, "package.json"), "utf8") } catch { return undefined } })())
+    if (major !== undefined) return refused(major)
+    // 10-08: git add يُدرج ملفَّ أسرارٍ غيرَ مستبعَد (.env.bak-…) ⇦ يُرفض قبل أن يدخل السجلّ.
+    if (/\bgit\b[^;&|]*\badd\b/iu.test(cmd)) {
+      const st = Bun.spawnSync(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: PROJECT_DIR, stdout: "pipe", stderr: "ignore", stdin: "ignore", timeout: 20_000 })
+      const staging = st.exitCode === 0 ? secretStagingViolation(cmd, st.stdout.toString()) : undefined
+      if (staging !== undefined) return refused(staging)
+    }
+    // 10-08: حاويةٌ محلّيّة تُنشر على 127.0.0.1 وحدها.
+    const publish = dockerPublishViolation(cmd)
+    if (publish !== undefined) return refused(publish)
+    // 10-08: صدى جملةٍ بـrun كلامٌ لا أداة — يُردّ إلى النصّ.
+    const narration = narrationEchoViolation(cmd)
+    if (narration !== undefined) return refused(narration)
     // كتالوج 8.14/الحذف الهدّام/جلب-ونفّذ: صيغ صدفةٍ خاطئة أو خطرة.
     const dangerous = violationAcrossVariants(cmd, dangerousShellViolation)
     if (dangerous !== undefined) return refused(dangerous)
@@ -6242,10 +6688,16 @@ const runServeShell = async (): Promise<void> => {
   const checkpoints = new CheckpointStore(join(STATE_ROOT, "checkpoints"))
   let remote: RemoteControl | undefined
   const remoteQueue = new FrameQueue<unknown>()
-  const emit = (frame: object) => {
-    if (framedStdio) process.stdout.write(encodeLocalJsonFrame(frame))
+  // 10-10 — إطارٌ فوق سقف القناة (أرشيفُ جلسةٍ طويلة 1.09MB) أسقط المحرّكَ عند الإقلاع وفي كلّ إحياء: يُقصّ أو يُستبدل (frame-fit.ts)، ولا يرمي أبداً.
+  const emit = (raw: object) => {
+    const frame = fitFrame(raw as Record<string, unknown>, DEFAULT_MAX_FRAME_BYTES - 64)
+    if (frame !== raw) process.stderr.write(`frame-fit: «${String((raw as { kind?: unknown }).kind ?? "?")}» ${frame.kind === "refused" ? "dropped" : "trimmed"} to fit the shell channel\n`)
+    if (framedStdio) {
+      try { process.stdout.write(encodeLocalJsonFrame(frame)) }
+      catch (error) { process.stderr.write(`frame-fit: could not encode «${String(frame.kind ?? "?")}»: ${String(error).slice(0, 160)}\n`) }
+    }
     else console.log(JSON.stringify(frame))
-    remote?.broadcast(frame as Record<string, unknown>)
+    remote?.broadcast(frame)
   }
   const remoteStatusFrame = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({ kind: "remote-control", ...(remote?.status() ?? { status: "off" }), ...extra })
   const syncRemoteControl = async (enabled: boolean): Promise<void> => {
@@ -6565,7 +7017,7 @@ const runServeShell = async (): Promise<void> => {
       if (input.category !== undefined && category === undefined) { emit({ kind: "refused", why: "صنفُ الذاكرة: profile أو topic أو area أو person" }); continue }
       const title = typeof input.title === "string" ? input.title.trim() : ""
       const text = typeof input.text === "string" ? input.text.trim() : ""
-      const scope = input.scope === "session" ? "session" : "project"
+      const scope = input.scope === "session" ? "session" : input.scope === "user" ? "user" : "project"
       if (input.sensitive === true && loadSettings().sensitiveMemoryEnabled !== true) {
         emit({ kind: "refused", why: "حفظ الموضوع الحساس معطّل في إعدادات الذاكرة" })
         continue
@@ -6576,7 +7028,7 @@ const runServeShell = async (): Promise<void> => {
       }
       const source = `owner-note:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
       let fact
-      try { fact = saveOwnerMemory(durableMemory, { projectId: resolve(PROJECT_DIR), ...(scope === "session" ? { sessionId: currentSession } : {}), title, text, sensitive: input.sensitive === true, allowSensitive: loadSettings().sensitiveMemoryEnabled === true, source, ...(category === undefined ? {} : { category }) }) }
+      try { fact = saveOwnerMemory(durableMemory, { projectId: scope === "user" ? USER_MEMORY_PROJECT : resolve(PROJECT_DIR), ...(scope === "session" ? { sessionId: currentSession } : {}), title, text, sensitive: input.sensitive === true, allowSensitive: loadSettings().sensitiveMemoryEnabled === true, source, ...(category === undefined ? {} : { category }) }) }
       catch (error) { emit({kind:"refused",why:(error as Error).message}); continue }
       emit({ kind: "memory-saved", id: fact.id, title, scope })
       emit(memoryNotesFrame())
@@ -6588,7 +7040,7 @@ const runServeShell = async (): Promise<void> => {
         continue
       }
       const id = (frame as { id?: unknown }).id
-      const owned = typeof id === "string" && durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts.some((fact) => fact.id === id && fact.kind === "project_fact" && (fact.key.startsWith("owner-note:") || fact.key.startsWith("inferred:")))
+      const owned = typeof id === "string" && [...userOwnerNotes(durableMemory), ...durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: currentSession, now: Date.now() }).facts].some((fact) => fact.id === id && fact.kind === "project_fact" && (fact.key.startsWith("owner-note:") || fact.key.startsWith("inferred:")))
       if (!owned) {
         emit({ kind: "refused", why: "ملاحظة الذاكرة المطلوبة غير موجودة في هذا المشروع" })
         continue
@@ -6596,6 +7048,44 @@ const runServeShell = async (): Promise<void> => {
       durableMemory.invalidate(id)
       emit({ kind: "memory-forgotten", id })
       emit(memoryNotesFrame())
+      continue
+    }
+    // 10-10 — استيرادُ الذاكرة والتخصيصات (memory-import.ts): الفحصُ يسرد بلا محتوى، والمعاينةُ تقرأ وتحجب وتزيل التكرار
+    // **ولا تكتب**، والحفظُ وحده يكتب — بعد نقرة المراجعة، إلى ملاحظات المالك نفسِها (saveOwnerMemory)، لا إلى مخزنٍ ثانٍ.
+    if (frame.kind === "memory-import-scan" || frame.kind === "memory-import-preview") {
+      const input = frame as { source?: unknown; paths?: unknown; path?: unknown; vendor?: unknown; text?: unknown; from?: unknown; maskEmails?: unknown }
+      const roots = loadSettings().projectRoots
+      const scanInput = { home: homedir(), projectRoots: Array.isArray(roots) ? roots : [], ...(projectSelected ? { selectedProject: PROJECT_DIR } : {}) }
+      try {
+        if (frame.kind === "memory-import-scan") {
+          emit({ kind: "memory-import-sources", sources: scanLocalAgentFiles(scanInput) })
+          continue
+        }
+        const read = input.source === "local"
+          ? readLocalSources(Array.isArray(input.paths) ? input.paths.filter((path): path is string => typeof path === "string") : [], scanLocalAgentFiles(scanInput), scanInput.home)
+          : input.source === "export"
+            ? readExport(String(input.path), input.vendor as ExportVendor)
+            : readPasted(String(input.text ?? ""), (IMPORT_AGENTS as readonly string[]).includes(String(input.from)) ? input.from as ImportAgent : "other")
+        emit({ kind: "memory-import-review", source: input.source, ...buildImportReview(read.raw, read.found, { maskEmails: input.maskEmails !== false }) })
+      } catch (error) { emit({ kind: "refused", why: `استيراد الذاكرة: ${(error as Error).message.slice(0, 240)}` }) }
+      continue
+    }
+    if (frame.kind === "memory-import-save") {
+      if (running !== undefined) {
+        emit({ kind: "refused", why: "انتظر انتهاء الدور قبل تعديل الذاكرة" })
+        continue
+      }
+      const input = frame as { items?: unknown; scope?: unknown; maskEmails?: unknown }
+      const scope = input.scope === "project" ? "project" : "user"
+      if (scope === "project" && !projectSelected) {
+        emit({ kind: "refused", why: "استيراد الذاكرة: لا مشروعَ مختار — احفظ بنطاق «كلّ المشاريع» أو افتح مشروعاً" })
+        continue
+      }
+      try {
+        const outcome = saveImportedItems(durableMemory, input.items, { projectId: scope === "user" ? USER_MEMORY_PROJECT : resolve(PROJECT_DIR), allowSensitive: loadSettings().sensitiveMemoryEnabled === true, maskEmails: input.maskEmails !== false })
+        emit({ kind: "memory-import-saved", scope, saved: outcome.saved, skipped: outcome.skipped })
+        emit(memoryNotesFrame())
+      } catch (error) { emit({ kind: "refused", why: `استيراد الذاكرة: ${(error as Error).message.slice(0, 240)}` }) }
       continue
     }
     if (frame.kind === "session-new") {
@@ -6611,6 +7101,18 @@ const runServeShell = async (): Promise<void> => {
       currentSessionPersisted = false
       conversation = conversationFor(currentSession)
       emit({ kind: "session", id: currentSession, conversationMode:currentConversationMode })
+      continue
+    }
+    if (frame.kind === "session-keep") {
+      // 10-09 — مقيس حيّاً على 4.0.114: رسالةٌ انتظرت في محادثةٍ جديدة (والدورُ يعمل في أخرى) ضاعت عند الرجوع إليها —
+      // المحادثةُ بلا دورٍ ليست في السجلّ فرُفض recall («غير موجودة في السجل»). تُحفظ الآن في السجلّ عند أوّل رسالةٍ منتظِرة.
+      if (!currentSessionPersisted) {
+        await serveJournal.openSession(currentSession,currentConversationMode)
+        sessionModes.set(currentSession,currentConversationMode)
+        sessionOrder.push(currentSession)
+        currentSessionPersisted = true
+      }
+      emit({ kind: "session-kept", id: currentSession })
       continue
     }
     if (frame.kind === "recall") {
@@ -6797,7 +7299,8 @@ const runServeShell = async (): Promise<void> => {
       }
       if (tools.length === 0) {
         session.close()
-        emit({ kind: "refused", why: `المزوّد ${id} لم يُعلن أدواتٍ داخل المهلة — لم يُوصَل` })
+        const failure = (session as { handshakeFailure?: string }).handshakeFailure
+        emit({ kind: "refused", why: failure !== undefined ? `المزوّد ${id} رفض الاتّصال — ${failure.slice(0, 500)}` : `المزوّد ${id} لم يُعلن أدواتٍ داخل المهلة — لم يُوصَل` })
         continue
       }
       externals.set(id, session)
@@ -7009,6 +7512,8 @@ const runServeShell = async (): Promise<void> => {
     if (frame.kind === "interrupt") {
       // المقاطعة بيد المشغّل: تقطع الجاري باسمه، وغير الجاري رفضٌ مسمّى
       const target = (frame as { turnId?: string }).turnId
+      const side = typeof target === "string" ? sideChats.get(target) : undefined
+      if (side !== undefined) { side.abort(); emit({ kind: "interrupted", turnId: target }); continue }
       if (running !== undefined && running.turnId === target) {
         // موافقةٌ معلّقة في دورٍ قوطع تُحسم **رفضاً دائماً**، لا خلف مفتاح:
         // تركُها كان يترك وعدَ `gate()` بلا حلّ، فيبقى الإرسال منتظراً يداً
@@ -7196,6 +7701,12 @@ const runServeShell = async (): Promise<void> => {
       continue
     }
     if (running !== undefined) {
+      // 10-10 رسالةُ الدردشة (بلا أدوات ولا ملفّات مشروع) كانت تنتظر
+      // انتهاءَ مهمّة كودٍ في جلسةٍ أخرى ساعة. لا تمسّ حالةَ الدور الجاري، فتُجاب بجانبه (runSideChat) — والكودُ ما زال «واحدٌ في الطريق».
+      if (currentConversationMode === "chat" && (submittedOptions.conversationMode ?? "chat") === "chat") {
+        void runSideChat(turn, turnAttachments, secretNotice)
+        continue
+      }
       // دفاعُ المحرّك عن «واحدٍ في الطريق» — دورٌ ثانٍ بمعرّفٍ جديد أثناء
       // الطيران يُرفض قبل القبول، فلا يُسجَّل قبولٌ لن يُنفَّذ.
       emit({ kind: "refused", why: `الدور ${running.turnId} ما يزال في الطريق — واحدٌ في الطريق` })
@@ -7204,7 +7715,7 @@ const runServeShell = async (): Promise<void> => {
     if(submittedOptions.conversationMode!==undefined&&submittedOptions.conversationMode!==currentConversationMode){emit({kind:'refused',turnId:turn.id,why:'Conversation mode is fixed for this session. Start a new conversation to switch modes.'});continue}
     let attached:ResolvedAttachments
     try{attached=resolveAttachments(SETTINGS_FILE,currentSession,turnAttachments)}catch(error){emit({kind:'refused',turnId:turn.id,why:(error as Error).message});continue}
-    // 09-14 (مقيس من لقطة المالك): صورةٌ مرفقة فوق سقف البوّابة كانت تُميت الدور «invalid image content» — تُسقط باسمها ويمضي الدور بالنصّ؛ القشرةُ تصغّر اللقطاتِ قبل الإرفاق وهذا حزامُ الأمان.
+    // 09-14: صورةٌ مرفقة فوق سقف البوّابة كانت تُميت الدور «invalid image content» — تُسقط باسمها ويمضي الدور بالنصّ؛ القشرةُ تصغّر اللقطاتِ قبل الإرفاق وهذا حزامُ الأمان.
     {
       const oversized = attached.images.filter((image) => image.data.length > MAX_IMAGE_BASE64)
       if (oversized.length > 0) {
@@ -7284,10 +7795,12 @@ const runServeShell = async (): Promise<void> => {
     // 09-30 (مقيس): المراجِعُ المستقلّ حكم على «اكمل» وحدَها فقرأ نصَّ السبرنت مقلوباً («الصفحةُ لا تزال تعرض الكتالوج ولا تُظهر الخطأ
     // المطلوب»). حين يكون الدورُ استئنافاً على خطّة سبرنتات، هدفُ الحكّام (المراجعة، المحكّم، التفنيد) هو متابعةُ الخطّة بحالها الآن.
     const judgeGoal = (): string => sprintFocusText.length > 0 || (isResumeIntent(turn.body) && existsSync(join(PROJECT_DIR, "ABDO-SPRINTS.md")))
-      ? `${effectiveGoal}\n\nالمطلوبُ في هذا الدور: متابعةُ خطّة ABDO-SPRINTS.md — السبرنتاتُ التي كانت مفتوحةً عند بدئه، كلٌّ ببوّابته ودليله:\n${sprintsDue || "—"}\nما أُغلق قبل هذا الدور أُثبت في جلساتٍ سابقة (دليلُه في سطر «الأدلة») فلا يُطالَب بدليله هنا. حالُ الخطّة الآن (✓ مكتمل، ○ مفتوح):\n${sprintShow(PROJECT_DIR)}`
+      ? `${effectiveGoal}\n\nالمطلوبُ في هذا الدور: متابعةُ خطّة ABDO-SPRINTS.md — السبرنتاتُ التي كانت مفتوحةً عند بدئه، كلٌّ ببنوده وبوّابته ودليله:\n${sprintsDue || "—"}\nاحكم على بنود كلّ سبرنتٍ وبوّابته المكتوبة أعلاه وحدها — لا تستنبط متطلّباتٍ من كلمات العنوان («البحث» في «SEO والبحث» محرّكاتُ البحث كما تقول البنود).\nما أُغلق قبل هذا الدور أُثبت في جلساتٍ سابقة (دليلُه في سطر «الأدلة») فلا يُطالَب بدليله هنا. حالُ الخطّة الآن (✓ مكتمل، ○ مفتوح):\n${sprintShow(PROJECT_DIR)}`
       : effectiveGoal
     // 09-30: ومعه خلاصةُ الخطّة (فيها NEXT_ACTION من ABDO-HANDOFF.md) — «نفّذهما بالتوازي بوكيلين» في التسليم تفتح عائلةَ التفويض.
     turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\n${sprintFocusText}\n${sprintBrief(PROJECT_DIR)}` : effectiveGoal, turnFamilies)
+    // 10-11 — وضعُ الفريق يفتح عائلةَ التفويض هنا، قبل سطر «🧰 أدوات معروضة» (كان يُطبع قبلها فيقول 76/91 بلا تفويض وهي معروضة).
+    // 10-11: «الوضعُ الافتراضيّ عاملٌ واحد ما لم يذكر العميلُ أن يعمل أكثر من عامل» — عائلةُ التفويض تفتحها كلماتُ الطلب وحدها (familiesFor).
     // د2 — المحرّك الدلاليّ (plugins.semanticFrame): إطارٌ حتميّ للطلب قبل أوّل نداء —
     // لغةٌ ولهجةٌ وفعلٌ وهدف — وسطرُ إيصالٍ 🧭، وعثورٌ حتميّ على المجلّد المطلوب بالاسم
     // المنطوق يُحقن في الحقبة الأولى كي يبدأ النموذجُ من الحقيقة لا من التخمين (سلّم
@@ -7306,9 +7819,15 @@ const runServeShell = async (): Promise<void> => {
       const frame = semanticFrame(turn.body)
       turnIntent = frame.intent
       // الاسمُ الجديد: ما يلي «باسم/اسمه/named» أوّلاً (مقيس 09-13: هدفُ الإطار التقط «خدماتنا» — اسمَ صفحةٍ مقتبساً — لا اسمَ المشروع)، وإلا هدفُ الإطار حين يكون نوعُه مشروعاً.
-      const namedProject = /(?:باسم|بإسم|بأسم|اسمه|اسمها|named|called)\s*[«"'“]?\s*([\p{L}\p{N}][\p{L}\p{N}_.-]{0,79})/u.exec(turn.body)?.[1]
+      const namedRaw = /(?:باسم|بإسم|بأسم|اسمه|اسمها|named|called)\s*[«"'“]?\s*([\p{L}\p{N}][\p{L}\p{N}_.-]{0,79})/u.exec(turn.body)?.[1]
+      // 10-10 (مقيس في مقارنة CRM): «… than the ones named here.» التقط «here.» اسمَ مشروعٍ جديد فحُجب البناءُ والأنواعُ كلَّ الدور.
+      // كلمةٌ عاديّة بعد named/called ليست اسماً، ورسالةٌ تسمّي مسارَ المشروع المختار تشير إليه لا إلى مشروعٍ جديد.
+      const namedProject = namedRaw !== undefined && /^(?:here|there|below|above|this|that|these|those|it|them|after|before|later|earlier|as|so|in|on|by|for|the|a|an|هنا|هناك|أدناه|أعلاه)\.?$/iu.test(namedRaw) ? undefined : namedRaw
+      const bodyNamesCurrentProject = projectSelected && turn.body.toLowerCase().replace(/\\/gu, "/").includes(resolve(PROJECT_DIR).toLowerCase().replace(/\\/gu, "/"))
       const wantedProject = namedProject ?? (frame.intent.kind === "project" ? frame.intent.target : undefined)
-      if (projectSelected && frame.intent.action === "create" && frame.intent.kind === "project" && wantedProject !== undefined) {
+      // 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.141: «عامل الواجهة» قُرئ اسمَ مشروعٍ جديد فحُبست كتاباتُ العامل وأوامرُه 18 مرّةً حتى STUCK).
+      // شجرةُ العامل هي مشروعُه بالبناء — مهمّتُه لا تطلب مشروعاً آخر.
+      if (!parallelWorker && projectSelected && !bodyNamesCurrentProject && frame.intent.action === "create" && frame.intent.kind === "project" && wantedProject !== undefined) {
         const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")
         const wanted = norm(wantedProject), current = norm(resolve(PROJECT_DIR).split(/[\\/]/u).pop() ?? "")
         if (wanted.length > 0 && !current.includes(wanted) && !wanted.includes(current)) { newProjectPending = wantedProject; await emitEvent(turn.id, `🧭 طُلب مشروعٌ جديد باسم «${wantedProject}» والمختارُ «${resolve(PROJECT_DIR).split(/[\\/]/u).pop()}» — الكتابةُ في المختار محبوسة حتى project-create`) }
@@ -7390,7 +7909,9 @@ const runServeShell = async (): Promise<void> => {
     // السقفُ من الإعدادات أوّلاً (0 = بلا سقف)، ثمّ متغيّرُ البيئة، ثمّ الافتراضُ 400k — لا يعود جهازُ العميل بلا سقفٍ ولا يبقى سقفُ المطوّر خفيّاً.
     const turnCapSetting = loadSettings().turnTokenCap
     const turnCap = turnBudgetOn ? (typeof turnCapSetting === "number" ? (turnCapSetting === 0 ? undefined : turnCapSetting) : (turnTokenCap() ?? DEFAULT_TURN_TOKEN_CAP)) : undefined
-    const turnMeter = turnCap === undefined ? undefined : new TurnSpendMeter(turnCap)
+    // 10-11 — سقفُ العامل حصّتُه: سقفُ الدور ÷ عددِ العمّال (والتجديداتُ كما هي)، فمجموعُهم سقفُ عاملٍ واحد.
+    const workerShare = parallelWorker ? Math.max(1, Math.min(8, Number(process.env.ABDO_PARALLEL_SHARE) || 1)) : 1
+    const turnMeter = turnCap === undefined ? undefined : new TurnSpendMeter(typeof turnCap === "number" ? Math.max(20_000, Math.floor(turnCap / workerShare)) : turnCap)
     // تجديدُ السقف تلقائياً (09-28): مهمّةٌ كبيرة بلا كاشٍ عند المزوّد تُنهك 400k في ~20 نداءً وتقف قبل إصلاح آخر فشل.
     // السقفُ حارسُ المال لا حارسُ الإنجاز: يُجدَّد بعددٍ محدود (الإعداد ثمّ المتغيّر ثمّ 2) ما دامت المهمّة لم تكتمل،
     // ويُعلَن كلُّ تجديدٍ بسطره؛ وسقفُ السحابة العام فوقه لا يُرفع.
@@ -7411,7 +7932,20 @@ const runServeShell = async (): Promise<void> => {
     // المُوجِّه، ولا دفتر، ولا سطر 🎯، ولا درسٌ يُكتب في الذاكرة الدائمة.
     const intentOn = plugins.read("intentField", "turn")
     // هـ2 — الوضعُ يفعّل التحقّقَ والمراجعةَ المستقلّة في «أقوى» فما فوق ولا يطفئ ما فعّله المستخدم.
-    const workAtTurn = workProfile(loadSettings().workMode)
+    // 10-11 (مقيس على m11 بعاملَين: كلٌّ 20–25 د بموجِّهٍ على Pro ومراجعةٍ مستقلّة وبوّابة بناءٍ على نصف مشروع) — العاملُ عاملٌ واحد بسيط.
+    const workAtTurn = workProfile(parallelWorker ? "basic" : loadSettings().workMode)
+    // 10-11 (مقيس على m11 بوضع «أقوى+»: «فريقٌ متوازٍ حتى 4» أُعلن ثمّ عُرضت 76/91 أداة بلا عائلة التفويض — team/parallel لا تُعرض إلا بكلمة
+    // «فريق/وكيل» في الطلب، فلم يُستدعَ وكيلٌ واحد). الوضعُ الذي يعد بفريقٍ يُظهر أدواتِه ويقول متى تُستعمل؛ والقرارُ للنموذج بحسب استقلال الأجزاء.
+    // 10-11: عددٌ يسمّيه العميلُ يُشغّل العمّالَ في أيّ وضع — كان «أقوى» يتجاهل «بعاملين» لأنّ توازيه 0.
+    // والعمّالُ يستهلكون كعاملٍ واحد (حصّةُ السقف، بلا موجِّهٍ ولا مراجعة) — 523c4c5d.
+    const namedWorkers = !parallelWorker && delegationDepth === 0 ? requestedWorkers(effectiveGoal) : undefined
+    const teamMode = ((workAtTurn.parallelAgents >= 2 && delegationEnabled()) || namedWorkers !== undefined) && modeAtTurn !== 'chat' && delegationDepth === 0 && !parallelWorker && turnFamilies.has("delegation")
+    const askedWorkers = teamMode ? namedWorkers : undefined
+    const teamBrief = teamMode && askedWorkers !== undefined
+      ? `\n[طلب العميلُ ${askedWorkers} عمّالاً متوازين. قسّم قبل أن تبني: اكتب أوّلاً المشتركَ وحده (package.json بسكربتاته واعتمادياته، الإعدادات، عقدُ الواجهة البرمجيّة: المسارات والحقول والمنافذ) — العمّالُ يرونه — ثمّ «parallel <<<» بـ${askedWorkers} أسطر، جزءٌ لكلّ عامل بلا ملفّاتٍ مشتركة، وكلُّ سطرٍ يحمل ما يلزم عاملَه من العقد ليعمل وحده. لا تبنِ جزءاً بنفسك ثمّ تفوّضه. بعد عودتهم: «merge <الفرع>» لكلّ فرع، ثمّ البناء والاختبار مرّةً واحدة وأصلح الربط.]\n`
+      : teamMode
+      ? `\n[وضعُ العمل «${workAtTurn.label}» يتيح وكلاءَ متوازين حتى ${workAtTurn.parallelAgents}. إن انقسمت المهمّةُ إلى أجزاءٍ مستقلّةٍ لا تتشارك ملفّات (مثل الخادم والواجهة والاختبارات) فلا تنفّذها تتابعاً: «parallel <<<» ثمّ سطرٌ لكلّ جزء (كلٌّ بمحرّكٍ في شجرة عملٍ وفرعٍ خاصّ — يحتاج مستودع git)، ثمّ «merge <الفرع>» لكلّ فرعٍ مع بناءٍ واختبارٍ بعد كلّ دمج؛ و«team <<<» للقراءة والتحليل المتوازي. والمهمّةُ الصغيرة المترابطة تُنفَّذ مباشرةً بلا تفويض.]\n`
+      : ""
     const superAbdoUser = resolveSuperAbdo(loadSettings().superAbdo)
     const superAbdo = superAbdoUnderWorkMode(superAbdoUser, workAtTurn)
     const projectInstructions = loadSettings().projectInstructions
@@ -7734,7 +8268,8 @@ const runServeShell = async (): Promise<void> => {
       if (admission.notice !== undefined) await emitEvent(turn.id, `⚠ ${admission.notice}${customProviderRefusals.length > 0 ? ` — المزوّدون المخصّصون غيرُ مسجّلين: ${customProviderRefusals.join("؛ ")}` : ""}`)
       if (admission.selected !== undefined && admission.selected !== selectedModel.ref) selectedModel = selectionOf(admission.selected, selectedModel.lane) ?? selectedModel
       const visionAdmitted = admission.vision !== undefined
-      const ladder = ownerRungs.filter((rung) => admission.ladder.includes(rung.ref))
+      // 10-11 — العاملُ لا يصعد إلى درجةٍ أغلى (كان يصعد إلى Pro على بناءٍ ليس له).
+      const ladder = parallelWorker ? [] : ownerRungs.filter((rung) => admission.ladder.includes(rung.ref))
       let ladderState: LadderState = Object.freeze({ ref: selectedModel.ref, spentAttempts: Object.freeze([]) })
       emit({ kind: "model-route", turnId: turn.id, lane: selectedModel.lane, ref: selectedModel.ref, ...(selectedModel.vision ? { vision: true } : {}) })
 
@@ -7757,7 +8292,7 @@ const runServeShell = async (): Promise<void> => {
         else {
           const gateRecall = await (async () => {
             try {
-              const facts = factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession)
+              const facts = factsForAutomaticRecall([...userOwnerNotes(durableMemory), ...durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts], memorySearchEnabled, turnSession)
               const result = await semanticMemory.recall({facts,query:effectiveGoal,scope:JSON.stringify([resolve(PROJECT_DIR),turnSession,memorySearchEnabled]),route:turnSelection.ref+'@'+Providers.provider(turnSelection.provider)?.baseUrl,enabled:settingsAtTurn.semanticMemoryEnabled!==false,allowSensitive:settingsAtTurn.sensitiveMemoryEnabled===true,signal:controller.signal,rank:(system,body,signal)=>memoryRankAsk(system,body,turnSelection,hooks,signal)})
               emit({kind:'memory-recall',turnId:turn.id,method:result.method,candidates:result.candidates,selected:result.selected})
               return result.brief + conflictsBrief(detectMemoryConflicts(withoutSensitive(facts, settingsAtTurn.sensitiveMemoryEnabled === true)))
@@ -7876,6 +8411,8 @@ const runServeShell = async (): Promise<void> => {
       // دليلُ المتصفّح لا يُطلب حين المتصفّحُ موقوفٌ أو التحكّمُ مطفأ (مراجعة 09-14: كان يجعل الدورَ غيرَ قابلٍ للإقفال).
       const browserAvailable = loadSettings().computerUseEnabled !== false && (loadSettings().browserBackend ?? "owned") !== "off"
       const projectOrientation = projectAwarenessOn && projectSelected ? projectOrientationBrief(turnProjectDir, railsAtTurn.orientationProse) : ''
+      // 10-09 — تعليماتُ جذر المشروع (AGENTS.md/ABDO.md/CLAUDE.md) في أوّل طلبٍ من كلّ دور، مستقلّةً عن مفتاح الوعي: هي قواعدُ المشروع لا ذاكرتُنا عنه.
+      const rootInstructionsBrief = projectSelected ? rootInstructionsLayer(rootInstructions(turnProjectDir)) : ""
       const projectAwareness = !projectAwarenessOn ? "" : (() => {
         try {
           const file = join(turnProjectDir, AWARENESS_FILE)
@@ -7900,7 +8437,8 @@ const runServeShell = async (): Promise<void> => {
       const priorRecall = await (async () => {
         if (!rails.factRecall) return ""
         try {
-          const facts = factsForAutomaticRecall(durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts, memorySearchEnabled, turnSession)
+          // ملاحظاتُ «كلّ المشاريع» (التخصيصاتُ المستوردة) تدخل المسارَ نفسَه قبل حقائق المشروع — memory-import.ts.
+          const facts = factsForAutomaticRecall([...userOwnerNotes(durableMemory), ...durableMemory.query({ projectId: resolve(PROJECT_DIR), sessionId: turnSession, now: Date.now() }).facts], memorySearchEnabled, turnSession)
           const result = await semanticMemory.recall({facts,query:effectiveGoal,scope:JSON.stringify([resolve(PROJECT_DIR),turnSession,memorySearchEnabled]),route:turnSelection.ref+'@'+Providers.provider(turnSelection.provider)?.baseUrl,enabled:settingsAtTurn.semanticMemoryEnabled!==false,allowSensitive:settingsAtTurn.sensitiveMemoryEnabled===true,signal:controller.signal,rank:(system,body,signal)=>memoryRankAsk(system,body,turnSelection,hooks,signal)})
           emit({kind:'memory-recall',turnId:turn.id,method:result.method,candidates:result.candidates,selected:result.selected})
           return result.brief + conflictsBrief(detectMemoryConflicts(withoutSensitive(facts, settingsAtTurn.sensitiveMemoryEnabled === true)))
@@ -7916,14 +8454,23 @@ const runServeShell = async (): Promise<void> => {
       if (storedWorkMode !== undefined && !isWorkMode(storedWorkMode)) {
         await emitEvent(turn.id, `⚠ وضعُ عملٍ غير معروف في الإعدادات «${String(storedWorkMode).slice(0, 24)}» — يُعمل بالأساسيّ.`)
       }
-      if (workAtTurn.mode !== "basic" && !planningOnly && selectedModel.lane === "agent" && delegationDepth === 0) {
+      // 10-10 (مقيس في مهمّة n8n): على «اكمل» قرأ الوكيلُ الموجِّه 9 أدواتٍ في 81 ث كلَّ دور، ثمّ أعاد الوكيلُ نفسُه القراءة — والسبرنتُ المفتوح
+      // معروفٌ ويُحقن في المدخل (SPRINT_STATE). الاستئنافُ على سبرنتٍ معروف لا يحتاج قراءةً تمهيديّة ثانية.
+      const resumeOnKnownSprint = isResumeIntent(turn.body) && sprintFocusText.length > 0
+      if (resumeOnKnownSprint && workAtTurn.mode !== "basic" && !planningOnly && selectedModel.lane === "agent" && delegationDepth === 0) {
+        await emitEvent(turn.id, "🧭 استئنافٌ على سبرنتٍ مفتوح معروف — بلا وكيلٍ موجِّه؛ حالةُ السبرنتات والسبرنتُ المفتوح في المدخل.")
+      }
+      if (!resumeOnKnownSprint && workAtTurn.mode !== "basic" && !planningOnly && selectedModel.lane === "agent" && delegationDepth === 0) {
         // سطرُ الوضع يقول ما سيجري **وما غيّره الوضعُ فوق إعداد المالك**: تحقّقٌ فُعّل، وتفويضٌ معطَّلٌ يمنع الموجِّهَ والفريق.
         const delegationOnNow = delegationEnabled()
         const forcedReview = workAtTurn.independentReview && !superAbdoUser.enabled
         await emitEvent(turn.id, `🧭 ${describeWorkProfile(workAtTurn)}`
           + (forcedReview ? " التحقّقُ والمراجعةُ المستقلّة فعّلهما هذا الوضعُ فوق إعدادك (Super Abdo مطفأٌ عندك)." : "")
           + (delegationOnNow ? "" : " ⚠ التفويض معطَّل (plugins.delegation): لا وكيلَ موجِّه ولا فريق في هذا الدور."))
-        const orientAgent = workAtTurn.orientationAgent && delegationOnNow ? findAgent(agentCatalogue(), "orient") : undefined
+        // 10-11 — جُرّب إسقاطُ الموجِّه لمجلّد README وحده (يوفّر ~52 ث) وقيس أسوأ: m11 بالموجِّه 592 ث/58 نداء، وبلا موجِّه 744 ث/134 ثمّ 1277 ث/218 —
+        // خطّةُ الموجِّه (Pro) هي ما يُبقي النموذجَ الأرخص على المسار. فيبقى الموجِّه.
+        // 10-12 — طلبُ تحكّمٍ بالكمبيوتر لا مشروعَ يُقرأ فيه: بلا موجِّه (قرأ مجلّداً فارغاً ثمّ قلّده النموذجُ بتقريرٍ رُفض).
+        const orientAgent = workAtTurn.orientationAgent && delegationOnNow && !isDesktopDriveTask(turn.body) ? findAgent(agentCatalogue(), "orient") : undefined
         if (orientAgent !== undefined) {
           const orientHooks: AskHooks = { ...hooks, childAgent: orientAgent }
           // هـ4 — «أوّلاً نموذجٌ قويّ يقرأ المشروع»: أعلى درجةٍ في سلّم المالك (الأخيرةُ الأقدر بالعقد) إن حُلّت، وإلا نموذجُ الدور.
@@ -7949,15 +8496,18 @@ const runServeShell = async (): Promise<void> => {
             const answer = report.answer.trim()
             const seconds = Math.round((Date.now() - orientStarted) / 1000)
             const structured = report.stop === "complete" && answer.includes("[ORIENTATION]")
+            // 10-11 — قراءاتُ الموجِّه الحقيقيّة تدخل الحقبةَ الأولى محمولةً، كتب خلاصةً أم لم يكتب (كانت تُهمل فتُعاد القراءة نفسُها).
+            const orientationReads = report.reads.length === 0 ? "" : `\n[قراءاتُ الوكيل الموجِّه — إيصالاتُ أدواتٍ حقيقيّة من هذا الدور؛ لا تُعِد قراءةَ ملفٍّ منها إلا إن عدّلته]\n${carriedReads(report.reads, ORIENTATION_CARRY_CHARS)}\n`
             if (structured && report.commands.length === 0) {
               // خلاصةٌ بلا تشغيل أداةٍ واحدة تخمينٌ لا قراءة — تُهمل ويُقال، فحقنُها يضع اختلاقاً بجوار القياس.
               await emitEvent(turn.id, `🧭 الوكيلُ الموجِّه كتب خلاصةً بلا تشغيل أداةٍ واحدة (${seconds} ث) — تُهمل: قراءةٌ بلا إيصالٍ تخمين.`)
             } else if (structured) {
               // تُوسم بمن كتبها: نصُّ نموذجٍ بجوار [CURRENT_PROJECT_OBSERVATIONS] المقيسة كان يُقرأ كأنّه قياس.
-              orientationBrief = `\n[وكيلُ التوجيه — نصٌّ كتبه نموذجٌ بعد ${report.commands.length} أداةً؛ قراءةٌ مساعِدة لا قياسٌ حاكم: ما لا إيصالَ له لا يُبنى عليه]\n${answer}\n`
+              orientationBrief = `\n[وكيلُ التوجيه — نصٌّ كتبه نموذجٌ بعد ${report.commands.length} أداةً؛ قراءةٌ مساعِدة لا قياسٌ حاكم: ما لا إيصالَ له لا يُبنى عليه]\n${answer}\n${orientationReads}`
               await emitEvent(turn.id, `🧭 الوكيلُ الموجِّه أنهى القراءة (${report.commands.length} أداة، ${report.epochs} حقبة، ${seconds} ث) — خلاصتُه تدخل الحقبة الأولى موسومةً بكاتبها.`)
             } else {
-              await emitEvent(turn.id, `🧭 الوكيلُ الموجِّه لم يخرج بخلاصةٍ مهيكلة (${report.stop}، ${report.commands.length} أداة، ${seconds} ث) — يُتابَع بلا خلاصة.`)
+              orientationBrief = orientationReads
+              await emitEvent(turn.id, `🧭 الوكيلُ الموجِّه لم يخرج بخلاصةٍ مهيكلة (${report.stop}، ${report.commands.length} أداة، ${seconds} ث) — يُتابَع بلا خلاصة${report.reads.length > 0 ? `، وقراءاتُه (${report.reads.length}) تدخل الحقبة الأولى محمولةً` : ""}.`)
             }
           } catch (error) {
             await emitEvent(turn.id, `🧭 الوكيلُ الموجِّه تعثّر: ${String((error as Error).message ?? error).slice(0, 120)} — يُتابَع بلا خلاصة.`)
@@ -7966,17 +8516,21 @@ const runServeShell = async (): Promise<void> => {
       }
       // بوابات القبول تُشتقّ من الهدف الفعليّ: هدف الدور السابق عند الاستئناف، وإلا نصّ الدور.
       // د7 (مقيس 09-15): «أنشئ ملفّاً» كانت تُشعل بوّابةَ البناء فتطلب npm run build في مشروعٍ بلا سكربت build ويضيفه النموذج — كلماتُ الإنشاء ليست بناءً.
-      const requiresBuild = !planningOnly && goalRequiresBuild(effectiveGoal)
+      // 10-11 — العاملُ يبني نصفَ مشروع: بوّاباتُ المشروع كلّه (بناء، أنواع، اختبارات، تدقيق) تحرّكه ليضيف ما ليس له (مقيس: عاملُ الخادم أضاف واجهةً
+      // ليمرّ vite build ثمّ تراجع) وتصعد به إلى Pro. يتحقّق من جزئه بنفسه، والبوّاباتُ كلُّها عند الأب بعد الدمج.
+      const requiresBuild = !planningOnly && !parallelWorker && goalRequiresBuild(effectiveGoal)
       // بوّابتا npm تنطبقان حين يعرّف package.json السكربتَ فعلاً؛ حزمةٌ بلا build/typecheck = «لا ينطبق» لا «أضِف سكربتاً لإرضائي».
       const packageHasScript = (name: string): boolean => { try { const pkg = JSON.parse(readFileSync(join(PROJECT_DIR, "package.json"), "utf8")) as { scripts?: Record<string, unknown> }; return typeof pkg.scripts?.[name] === "string" } catch { return false } }
-      const requiresTypecheck = !planningOnly && goalRequiresTypecheck(effectiveGoal)
+      const requiresTypecheck = !planningOnly && !parallelWorker && goalRequiresTypecheck(effectiveGoal)
       // next.js أو رمز npm/pnpm مستقلّ أو كلمة «موقع» مستقلّة — «NEXT_ACTION» في نصّ
       // هدفٍ كانت تطابق (قيس 2026-09-02: إيدو جلوبال).
-      const requiresNpmAudit = !planningOnly && /(?:next\.?js|(?<![\p{L}\w])p?npm(?![\w])|(?<![\p{L}])موقع(?![\p{L}]))/iu.test(effectiveGoal)
-      const requiresTests = !planningOnly && goalRequiresTests(effectiveGoal)
+      const requiresNpmAudit = !planningOnly && !parallelWorker && /(?:next\.?js|(?<![\p{L}\w])p?npm(?![\w])|(?<![\p{L}])موقع(?![\p{L}]))/iu.test(effectiveGoal)
+      // 10-11 — لا اعتمادياتٍ ولا قفلَ ⇦ لا تدقيق (audit-applies.ts)؛ يُقاس لحظةَ البوّابة.
+      const auditApplies = (): boolean => requiresNpmAudit && projectHasDependencies(PROJECT_DIR)
+      const requiresTests = !planningOnly && !parallelWorker && goalRequiresTests(effectiveGoal)
       // التحقّقُ بعد التعديل (plugins.verifyAfterEdit، 2026-09-27) — يُشعله مسُّ الشيفرة في مشروعٍ له أمرُ اختبار،
       // لا كلمةُ «test» في الطلب. الأمرُ من القرص (package.json/pytest/Cargo) لا من النموذج.
-      const verifyTestCommand = !planningOnly && plugins.read("verifyAfterEdit", "turn") ? projectTestCommand(PROJECT_DIR) : undefined
+      const verifyTestCommand = !planningOnly && !parallelWorker && plugins.read("verifyAfterEdit", "turn") ? projectTestCommand(PROJECT_DIR) : undefined
       let codeEditedThisTurn = false
       // الفجوة #3 — beforeDone: نجحت بعد آخر تعديل؟ وكم جولةَ إصلاحٍ طُلبت؟
       let beforeDoneClean = false
@@ -7987,6 +8541,9 @@ const runServeShell = async (): Promise<void> => {
       const testsApplicable = (): boolean => codeEditedThisTurn || goalAsksForTestWork(effectiveGoal) || projectTestCommand(PROJECT_DIR) !== undefined
       let testsNotApplicableSaid = false
       let verifyRuns = 0
+      // 10-08: آخرُ خرجٍ كاملٍ للاختبارات (الدليلُ المختصر 160 حرفاً يقطع «ECONNREFUSED …:3000»)، وخادمُ المشروع يُشغَّل مرّةً واحدة.
+      let lastTestOutput = ""
+      let verifyServerStarted = false
       // الاختباراتُ نفسُها تُعرف بأمرٍ واحد في البوّابتين (cargo test وpytest معها الآن).
       const isTestCommand = isProjectTestRun
       const isBuildCommand = (command: string) => /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:run\s+)?build|bun\s+run\s+build|cargo\s+build)\b/iu.test(command)
@@ -7998,14 +8555,19 @@ const runServeShell = async (): Promise<void> => {
       let successfulTests = false
       // 09-29: هل مسّت هذه الجولةُ الاعتماديات؟ بدونه فشلُ التدقيق «سابق» يُبلَّغ ولا يحجب (acceptance-receipt: preexisting).
       let depsTouchedThisTurn = false
+      // 10-11 — بصمةُ الاعتماديات عند بدء الدور (audit-applies.ts): تعديلُ سكربتٍ في package.json ليس مسّاً للاعتماديات.
+      const depsAtTurnStart = dependencyFingerprint(PROJECT_DIR)
+      // يُقرأ لحظةَ البوّابة لا لحظةَ إعلان الأداة (onTool يسبق التنفيذ فالملفُّ لم يتغيّر بعد).
+      const depsTouched = (): boolean => depsTouchedThisTurn || dependencyFingerprint(PROJECT_DIR) !== depsAtTurnStart
       let auditPreexistingTold = false
       // ذ4 — ثلاثُ حالاتٍ لكلّ بوّابة لا اثنتان: «نُفّذت على الشيفرة الحاليّة؟» و«نجحت؟» ودليلُ آخر فشل.
       // التعديلُ المُبطِل يعيدها إلى «لم يُفحص» — نجاحٌ من قبل التعديل لا يشهد للشيفرة الحاليّة.
       // الأعلامُ الأربعة أعلاه تبقى كما هي (سلوكُ الحلقة)؛ هذا إيصالٌ فوقها لا بديلٌ عنها.
+      let parentWrites = 0
       const gateTracks: Record<"build" | "typecheck" | "tests" | "audit", GateTrack> = { build: { ran: false, passed: false }, typecheck: { ran: false, passed: false }, tests: { ran: false, passed: false }, audit: { ran: false, passed: false } }
       const gateEvidence = (output: string): string => output.trim().slice(-160)
       const currentGateReceipts = () => gateReceipts(
-        { build: requiresBuild, typecheck: requiresTypecheck, tests: (requiresTests && testsApplicable()) || (verifyTestCommand !== undefined && codeEditedThisTurn), audit: requiresNpmAudit && (codeEditedThisTurn || depsTouchedThisTurn) && existsSync(join(PROJECT_DIR, "package.json")) },
+        { build: requiresBuild, typecheck: requiresTypecheck, tests: (requiresTests && testsApplicable()) || (verifyTestCommand !== undefined && codeEditedThisTurn), audit: auditApplies() && (codeEditedThisTurn || depsTouched()) && existsSync(join(PROJECT_DIR, "package.json")) },
         gateTracks,
       )
       const gateReceiptOf = (gate: "build" | "typecheck" | "tests" | "audit") => currentGateReceipts().find((r) => r.gate === gate) ?? { gate, state: "unverified" as const }
@@ -8013,9 +8575,13 @@ const runServeShell = async (): Promise<void> => {
         // 09-30 (قيس حيّاً على المثبَّت 4.0.95): الإبطالُ يسبق التنفيذ، فأمرٌ يرفضه حارسُ «لا تعدّل» حتميّاً كان يُحسب
         // «مسّ الاعتماديات» — فطالبت بوّابةُ التدقيق جولةً لم تعدّل شيئاً. ما يُرفض بالحارس نفسِه لا يعدّل.
         const invalidatingWord = command.trim().split(/\s+/u, 1)[0] ?? ""
-        if (noEditGoalRefusal(currentGoalText, Tools.tool(invalidatingWord)?.name ?? invalidatingWord, command.trim()) !== undefined) return
+        if (process.env.ABDO_PARALLEL_WORKER !== "1" && noEditGoalRefusal(currentGoalText, Tools.tool(invalidatingWord)?.name ?? invalidatingWord, command.trim()) !== undefined) return
         if (editsCode(command)) { codeEditedThisTurn = true; beforeDoneClean = false }
-        if (/^(?:write|edit|patch)\b/iu.test(command) || /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update)\b/iu.test(command)) {
+        if (/^(?:write|edit|medit|patch)\b/iu.test(command)) parentWrites += 1
+        // 10-11 (مقيس على m11 بالمثبَّت 4.0.141): كتابةُ .gitignore أبطلت البناءَ والاختبار فطالبت البوّابةُ بحقبةٍ أعادت التحقّقَ كلَّه.
+        // ملفّاتُ التعريف (gitignore، README، الرخصة…) لا تغيّر ما يُبنى ولا ما يُختبر.
+        const docTarget = /^(?:write|edit|medit|patch)\s+(?:\.\/)?(?:[^\s]*[\\/])?(?:\.gitignore|\.gitattributes|\.editorconfig|LICENSE(?:\.\w+)?|README(?:\.[\w-]+)*\.md|CHANGELOG\.md)(?:\s|$)/iu.test(command)
+        if ((/^(?:write|edit|patch)\b/iu.test(command) && !docTarget) || /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update)\b/iu.test(command)) {
           successfulTypecheck = false
           successfulBuild = false
           successfulTests = false
@@ -8026,26 +8592,34 @@ const runServeShell = async (): Promise<void> => {
           // التعديل لا يشهد للشيفرة الحالية (المسح العدائي: سوابق كاذبة).
           outputEvidenceFloor = allReceipts.length
         }
-        if (/^(?:write|edit)\s+(?:\.\/)?package(?:-lock)?\.json\b/iu.test(command) || /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update)\b/iu.test(command)) { successfulAudit = false; depsTouchedThisTurn = true; gateTracks.audit = { ran: false, passed: false } }
+        const manifestEdit = /^(?:write|edit|medit|patch)\s+(?:\.\/)?package(?:-lock)?\.json\b/iu.test(command)
+        const installCommand = /^run\s+(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update|i)\b/iu.test(command)
+        if (manifestEdit || installCommand) { successfulAudit = false; gateTracks.audit = { ran: false, passed: false } }
+        if (installCommand) depsTouchedThisTurn = true
       }
       // S13.5 (إصلاح النزاهة) — أوامرُ الوكيل المفوَّض تُطوى في قبول هذا الدور
       // بهذا المنفذ نفسِه. إبطالٌ لا يمنح، فلا سياسةَ ثانية ولا شهادةَ تُخترع؛
       // وبدونه كان التفويضُ يجعل قبولَ الأب أقدمَ من الشيفرة دائماً، بلا رجعة.
       nestedEffectObserver = invalidateAcceptanceFor
+      parentDeliverableProven = () => !parallelWorker && parentWrites >= 3 && (successfulBuild || successfulTests)
       // الحكم الصريح يحكم إن وُجد؛ غيابه يعود إلى نصّ الإيصال (exitZero) — لا fail-open.
       const observeAcceptanceReceipt = (command: string, output: string, verdict?: ToolVerdict): string | undefined => {
         const uiBefore = `${sprintEvidence.uiAt}/${sprintEvidence.auditAt}/${sprintEvidence.auditFailAt}`
         noteEvidence(sprintEvidence, command, verdict?.ok !== false, Date.now(), output)
         if (`${sprintEvidence.uiAt}/${sprintEvidence.auditAt}/${sprintEvidence.auditFailAt}` !== uiBefore) { mergeUiClock(sprintEvidence, readUiClock(uiClockFile())); writeUiClock(uiClockFile(), sprintEvidence) }
         // ذ4 — الأعلامُ كما كانت حرفاً (لا تُطفأ هنا إلا اختباراتٌ فشلت)، والتتبّعُ الثلاثيّ يُكتب معها.
-        if (isTestCommand(command)) { successfulTests = projectTestPassed(output, verdict); gateTracks.tests = { ran: true, passed: successfulTests, evidence: gateEvidence(output), ...(!successfulTests && exitZero(output, verdict) ? { unproven: true } : {}) } }
+        if (isTestCommand(command)) { lastTestOutput = output; successfulTests = projectTestPassed(output, verdict); gateTracks.tests = { ran: true, passed: successfulTests, evidence: gateEvidence(output), ...(!successfulTests && exitZero(output, verdict) ? { unproven: true } : {}) } }
         if (isTypecheckCommand(command)) { const ok = exitZero(output, verdict); if (ok) successfulTypecheck = true; gateTracks.typecheck = { ran: true, passed: ok, evidence: gateEvidence(output) } }
         const buildProblem = isBuildCommand(command) ? projectBuildViolation(PROJECT_DIR, output, verdict) : undefined
         if (isBuildCommand(command)) { const ok = buildProblem === undefined && exitZero(output, verdict); if (ok) successfulBuild = true; gateTracks.build = { ran: true, passed: ok, evidence: buildProblem ?? gateEvidence(output) } }
-        if (isAuditCommand(command)) { const ok = /(?:(?:found\s+)?0\s+vulnerabilit(?:y|ies)|No known vulnerabilities found)/iu.test(output) && exitZero(output, verdict); if (ok) successfulAudit = true; gateTracks.audit = { ran: true, passed: ok, evidence: gateEvidence(output), ...(!ok && !depsTouchedThisTurn ? { preexisting: true } : {}) } }
+        if (isAuditCommand(command)) { const ok = /(?:(?:found\s+)?0\s+vulnerabilit(?:y|ies)|No known vulnerabilities found)/iu.test(output) && exitZero(output, verdict); if (ok) successfulAudit = true; gateTracks.audit = { ran: true, passed: ok, evidence: gateEvidence(output), ...(!ok && !depsTouched() ? { preexisting: true } : {}) } }
         return buildProblem
       }
       let lastAnswer = ""
+      // 10-11 (مقيس على m11 بالمثبَّت 4.0.141: الحقبتان 4 و5 أعادتا الطقسَ كلَّه — تشغيلُ الخادم وPOST وإعادةُ التشغيل والتدقيق — لأنّ الحقبةَ
+      // التالية لـ«لم يُفحص البناء/التدقيق» تنادي النموذج بعد أن تشغّل النواةُ البوّابةَ نفسَها). النموذجُ ادّعى الاكتمالَ وما بقي بوّابةٌ حتميّة:
+      // تشغّلها النواة، فإن نجحت أُغلقت الحقبةُ بلا نداء نموذج، ولا يعود النموذجُ إلا بفشلها.
+      let gateOnlyContinuation = false
       // "turn_budget" بمفرداته من RUN_STOP_REASONS (contracts/src/session.ts) — مفردةٌ واحدة تغلب أسلوباً واحداً.
       let lastStop: "complete" | "empty-reply" | "round-limit" | "duplicate" | "uncallable" | "invalid-command" | "tool-failed" | "acceptance-pending" | "tool_budget" | "wall_clock_budget" | "stuck" | "turn_budget" = "complete"
       // كاشف الجدران (فكرة Anton الممتصة): جدار بيئةٍ خارجيٌّ تكرر ببصمته
@@ -8059,7 +8633,7 @@ const runServeShell = async (): Promise<void> => {
       const verifierOn = plugins.read("verifier", "turn")
       let verifierRejections = 0
       let semanticStamp = ""
-      const superActive = superAbdo.enabled && !planningOnly && selectedModel.lane === "agent"
+      const superActive = superAbdo.enabled && !planningOnly && !parallelWorker && selectedModel.lane === "agent"
       let superRepairPasses = 0
       let superAccepted = !superActive
       let superStamp = ""
@@ -8122,6 +8696,16 @@ const runServeShell = async (): Promise<void> => {
       // ولا يمسّ lastStop (المسح العدائي: كان يُختم completed/rerun:false).
       let waitingVerdict = false
       let pending: string | undefined
+      // 10-08: اختبارٌ رُفض اتصالُه بخادمٍ محلّيّ ⇦ المضيفُ يشغّل خادمَ المشروع تحت إدارة النواة (مرّةً في الدور) بإيصالٍ مرئيّ.
+      const startServerForTests = async (testCommand: string, port: number, serverCommand: string, epoch: number): Promise<void> => {
+        verifyServerStarted = true
+        await emitEvent(turn.id, verifyServerLine(testCommand, port, serverCommand))
+        emit({ kind: "tool", turnId: turn.id, cmd: serverCommand, epoch, acceptance: true })
+        const started = await dispatchToolV("run", serverCommand, turn.id, hooks)
+        allReceipts.push({ command: serverCommand, output: started.output, verdict: verdictOn ? started.verdict : undefined, mutated: verdictOn ? started.mutated : undefined })
+        allCommands.push(serverCommand)
+        emit({ kind: "tool-result", turnId: turn.id, cmd: serverCommand, output: started.output.slice(0, 16000), outputTruncated: started.output.length > 16000, epoch, acceptance: true })
+      }
       // S8: نصّ التعافي من هارنس عائلة النموذج — «قل ما ظننته غلطاً ثم أعِد،
       // ولا تكرّر النداء نفسه». عائلة الهارنس كانت صفر استيراد قبل هذا.
       const recoveryText = harnessInstruction(selectedModel.ref, "recovery")
@@ -8137,6 +8721,8 @@ const runServeShell = async (): Promise<void> => {
       // 09-29 (فكرةُ LangGraph): بوّابةُ الخطّة — مرّتان كحدّ، ثمّ يُترك الحكمُ لبقيّة السلسلة.
       let planStalls = 0
       let emptyReplies = 0
+      // 10-08: خلاصةُ المضيف من الإيصالات حين يصمت النموذجُ بعد دليلٍ أخضر — تحلّ محلَّ الجواب الفارغ وحده.
+      let hostAnswer: string | undefined
       let epochs = 0
       for (let epoch = 1; epoch <= MAX_AGENT_EPOCHS; epoch++) {
         // بوابة سقف الدور عند حدّ الحقبة (قبل عدّها): أكبر طلبٍ مقدَّر في هذا الدور هو
@@ -8181,15 +8767,42 @@ const runServeShell = async (): Promise<void> => {
         intentLedger?.reset()
         let forcedReceipt = ""
         let forcedFailed = false
+        let probeRanThisEpoch = false
         // typecheck/build/audit are deterministic acceptance probes. If the model has
         // already selected one, the host executes it at the next checkpoint
         // through the same gate instead of asking the model to repeat itself.
         if (epoch > 1 && pending !== undefined && (isTypecheckCommand(pending) || isBuildCommand(pending) || isAuditCommand(pending) || isTestCommand(pending))) {
           const command = pending
           pending = undefined
+          probeRanThisEpoch = true
           invalidateAcceptanceFor(command)
           emit({ kind: "tool", turnId: turn.id, cmd: command, epoch, acceptance: true })
-          const probe = await dispatchToolV("run", command, turn.id, hooks)
+          let probe = await dispatchToolV("run", command, turn.id, hooks)
+          // 10-11 (مقيس على m11 بالمثبَّت 4.0.140): «'vite' is not recognized» — الاعتمادياتُ لم تُثبَّت — عُدّ فشلاً مثبتاً فصعد إلى Pro وأنفق حقبة.
+          // بيئةٌ لم تُجهَّز لا عيبٌ في الشيفرة: تثبّتها النواةُ بمدير حزم المشروع وتعيد الفحص، ولا صعود.
+          const depsInstall = !exitZero(probe.output, probe.verdict) ? missingDepsInstall(PROJECT_DIR, probe.output) : undefined
+          if (depsInstall !== undefined) {
+            const installCmd = `run ${depsInstall}`
+            await emitEvent(turn.id, `📦 «${command.replace(/^run\s+/u, "")}» سقط لأنّ الاعتمادياتِ غير مثبّتة — تثبّتها النواةُ («${depsInstall}») وتعيد الفحص، بلا صعود.`)
+            invalidateAcceptanceFor(installCmd)
+            emit({ kind: "tool", turnId: turn.id, cmd: installCmd, epoch, acceptance: true })
+            const installed = await dispatchToolV("run", installCmd, turn.id, hooks)
+            receipts.push({ command: installCmd, output: installed.output, verdict: verdictOn ? installed.verdict : undefined, mutated: verdictOn ? installed.mutated : undefined })
+            allReceipts.push({ command: installCmd, output: installed.output, verdict: verdictOn ? installed.verdict : undefined, mutated: verdictOn ? installed.mutated : undefined })
+            allCommands.push(installCmd)
+            emit({ kind: "tool-result", turnId: turn.id, cmd: installCmd, output: installed.output.slice(0, 16000), outputTruncated: installed.output.length > 16000, epoch, acceptance: true })
+            if (exitZero(installed.output, installed.verdict)) {
+              emit({ kind: "tool", turnId: turn.id, cmd: command, epoch, acceptance: true })
+              probe = await dispatchToolV("run", command, turn.id, hooks)
+            }
+          }
+          const refusedProbePort = isTestCommand(command) && !verifyServerStarted ? refusedLocalPort(probe.output) : undefined
+          const probeServer = refusedProbePort !== undefined ? projectServerCommand(PROJECT_DIR, refusedProbePort) : undefined
+          if (refusedProbePort !== undefined && probeServer !== undefined) {
+            await startServerForTests(command.replace(/^run\s+/u, ""), refusedProbePort, probeServer, epoch)
+            emit({ kind: "tool", turnId: turn.id, cmd: command, epoch, acceptance: true })
+            probe = await dispatchToolV("run", command, turn.id, hooks)
+          }
           const output = probe.output
           const verdict = verdictOn ? probe.verdict : undefined
           const mutated = verdictOn ? probe.mutated : undefined
@@ -8203,7 +8816,10 @@ const runServeShell = async (): Promise<void> => {
             const candidate = playbookMiner.observe(output, verdict)
             if (candidate !== undefined) minedCandidates.push(candidate)
           }
-          forcedFailed = acceptanceProblem !== undefined || !exitZero(output, verdict)
+          // 10-11 (مقيس على n8n-clone، S11): التدقيقُ الآليّ سقط على eslint-config-next ⇦ braces (اعتماديّةُ تطويرٍ لم تمسّها الجولة، ولا إصلاحَ
+          // إلا بخفضٍ كاسر) فعُدّ فشلاً: صعودٌ إلى Pro ودرسٌ وأمرٌ بإصلاح الحزم، فسرد النموذجُ «⚙ npm install» بلا أداة. الفشلُ «السابق» يُبلَّغ ولا يُصلَح.
+          const preexistingAudit = isAuditCommand(command) && gateTracks.audit.preexisting === true
+          forcedFailed = !preexistingAudit && (acceptanceProblem !== undefined || !exitZero(output, verdict))
           // ذ2ب — التصعيد بفشلٍ **مثبت**: بوّابةُ قبولٍ حتميّة رجعت حمراء. ولا يُصعَّد
           // على تقديرٍ ولا على «لم يُفحص». والدليلُ يُستهلك مرّةً لكلّ حقبة، فحقبةٌ
           // واحدةٌ لا ترفع درجتين. وبلا سلّمٍ مضبوط لا شيء يقع أصلاً.
@@ -8244,6 +8860,10 @@ const runServeShell = async (): Promise<void> => {
           if (forcedFailed && rails.errorPlaybooks) inventory += errorPlaybookHints(output)
           const semanticFailure = acceptanceProblem === undefined ? "" : `\nرفض بوابة التسليم رغم رمز 0: ${acceptanceProblem}`
           forcedReceipt = `\nنتيجة فحص القبول المنفذ تلقائيًا «${command}»:\n${output.slice(0, 1200)}${inventory}${semanticFailure}\nأصلح السبب إن فشل، ولا تلخّص قبل اكتمال الهدف.`
+          if (preexistingAudit) {
+            forcedReceipt = `\nنُفّذ «${command}» تلقائيًا: ثغراتٌ سابقة في اعتمادياتٍ لم تمسّها هذه الجولة — تُبلَّغ ولا تحجب، وتحديثُ الحزم قرارٌ مستقلّ للمالك. لا تثبّت ولا تحدّث حزماً لإرضاء التدقيق؛ أكمل الهدف.`
+            if (!auditPreexistingTold) { auditPreexistingTold = true; await emitEvent(turn.id, `△ التدقيق: ${gateShortfall(gateReceiptOf("audit"))}`) }
+          }
         }
         const awarenessBrief = rails.awarenessBrief ? awareness.brief() : ""
         // S13.1 — الخلاصة المخزَّنة تُحقن في **كل** حقبة لا الأولى وحدها؛ ملخَّصةً
@@ -8251,8 +8871,18 @@ const runServeShell = async (): Promise<void> => {
         // فلا نداء نموذجٍ ثانٍ لهذه الحقبة. المعطَّل = السلسلتان فارغتان = بايتاً كما كان.
         const summaryBrief = rails.sessionSummary && sessionAwarenessOn && sessionSummary !== undefined ? renderSessionSummary(sessionSummary) : ""
         const summaryAsk = rails.sessionSummary && sessionAwarenessOn ? `\n${SUMMARY_INSTRUCTION}` : ""
+        // 10-10 (مقيس: ABDO-SPRINTS.md قُرئ 68 مرّة في الجلسة، حتى 14 في دورٍ واحد): نصُّ السبرنت المفتوح كان يُحمَّل للحكّام والعائلات ولا يدخل
+        // مدخلَ النموذج، وسطرُ الاستئناف يأمره بقراءة ملفّات التسليم — فكان يقرأ الخطّةَ ليعرف أين هو. حالةُ السبرنتات تُحقن هنا مرّةً في الحقبة الأولى.
+        const sprintStateBrief = sprintFocusText.length > 0
+          ? `\n[SPRINT_STATE — من ABDO-SPRINTS.md لحظةَ بدء الدور؛ لا تُعِد قراءةَ الخطّة إلا لتعديلها]\n${sprintShow(PROJECT_DIR).split(/\r?\n/u).slice(0, 40).join("\n")}\nالسبرنت المفتوح الآن (نصُّه كاملاً):\n${sprintFocusText.slice(0, 6000)}\nحين تجتاز بوّابتَه: «sprint done <رقم> :: <الدليل المقيس>» ثمّ التالي.\n`
+          : ""
+        // والهدفُ على خطّة سبرنتات هو الخطّةُ نفسُها (عنوانُها)، لا آخرُ رسالةٍ قبل «اكمل» — قد تكون طلبَ إعدادٍ جانبيّاً.
+        const planTitle = sprintStateBrief.length === 0 ? "" : (() => { try { return (readFileSync(join(PROJECT_DIR, "ABDO-SPRINTS.md"), "utf-8").split(/\r?\n/u).find((l) => /^#\s/u.test(l)) ?? "").replace(/^#+\s*/u, "").trim().slice(0, 200) } catch { return "" } })()
+        const resumeLine = sprintStateBrief.length > 0 && (priorGoal !== undefined || isResumeIntent(turn.body))
+          ? `↩ استئناف خطّة المشروع${planTitle.length > 0 ? ` «${planTitle}»` : ""}: واصل من السبرنت المفتوح أدناه مباشرةً — لا تبدأ من جديد ولا تُعِد قراءةَ ما في SPRINT_STATE.\n`
+          : priorGoal === undefined ? "" : resumeBrief(priorGoal)
         const epochInput = epoch === 1
-          ? `${projectOrientation}${orientationBrief}${projectAwareness}${summaryBrief}${coldMap}${priorRecall}${generalAwareness}${priorGoal !== undefined ? resumeBrief(priorGoal) : ""}${rails.semanticBrief ? semanticBrief : ""}${lessonsBrief}${recipesBrief}${secretNotice}${turn.body}${summaryAsk}`
+          ? `${rootInstructionsBrief}${projectOrientation}${orientationBrief}${projectAwareness}${summaryBrief}${coldMap}${priorRecall}${generalAwareness}${resumeLine}${sprintStateBrief}${rails.semanticBrief ? semanticBrief : ""}${lessonsBrief}${recipesBrief}${secretNotice}${teamBrief}${isDesktopDriveTask(turn.body) ? DESKTOP_DRIVE_BRIEF : ""}${turn.body}${summaryAsk}`
           : `واصل الهدف الأصلي من نقطة التوقف، ولا تبدأ من جديد:\n${turn.body}\n` +
             `${summaryBrief}${summaryAsk}` +
             (awarenessBrief.length > 0 ? `${awarenessBrief}` : "") +
@@ -8267,10 +8897,18 @@ const runServeShell = async (): Promise<void> => {
         // required to emit a write.  Carry the fail-closed requirement into the
         // tool loop itself so prose cannot advance the qualification run.
         const sprintPlanPending = !sprintPlanReady(PROJECT_DIR, process.env.ABDO_REQUIRE_SPRINT_PLAN === "1")
+        const replayAnswer = gateOnlyContinuation && probeRanThisEpoch && !forcedFailed && lastAnswer.trim().length > 0 ? lastAnswer : undefined
+        gateOnlyContinuation = false
+        let replayedThisEpoch = false
         const loop = await runTextAgentLoop({
           input: epochInput,
           history: epochHistory,
           ask: async (prompt, history) => {
+            if (replayAnswer !== undefined && !replayedThisEpoch) {
+              replayedThisEpoch = true
+              await emitEvent(turn.id, "✓ البوّابةُ التي بقيت نجحت بتشغيل النواة — تُغلق الحقبةُ بلا نداء نموذج (ادّعى الاكتمالَ قبلها).")
+              return "اكتمل: البوّابةُ المتبقّية نُفّذت تلقائيّاً ونجحت."
+            }
             let reply: NativeAgentReply | undefined
             // ب2 — لقطةٌ معلَّقة من `shot`: تُلحق بهذا النداء وحده ويذهب إلى نموذج الرؤية بسمته في model-route، ثم تُستهلك.
             // لقطةٌ مفردة أو بلاطاتُ الصفحة الكاملة: حتى أربع صور في النداء الواحد (سقفُ البوّابة)، والبقيّةُ تنتظر النداءَ التالي.
@@ -8291,9 +8929,20 @@ const runServeShell = async (): Promise<void> => {
             const notices = [budgetNotice, fabricationNotice].filter((n) => n.length > 0)
             const askPrompt = notices.length > 0 ? `${notices.join("\n")}\n\n${prompt}` : prompt
             fabricationNotice = ""
-            const text = await ask(askPrompt, callHooks, history, callSel, (native) => { reply = native })
+            // 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.143): وصفُ اللقطة سقط فأُرفقت بنداء نموذجٍ لا يقبل الصور — فرُمي الخطأ وسقط الدورُ كلُّه
+            // بعد أن اكتملت الشيفرة. اللقطةُ مساعدة: يُعاد النداءُ نفسُه بلا صور، ويُقال للنموذج أن يقرأ الصفحةَ نصّاً.
+            let text: Awaited<ReturnType<typeof ask>>
+            try {
+              text = await ask(askPrompt, callHooks, history, callSel, (native) => { reply = native })
+            } catch (error) {
+              if (callHooks === hooks || !IMAGE_REFUSED.test(String((error as Error)?.message ?? error))) throw error
+              await emitEvent(turn.id, `👁 النموذجُ لا يقبل الصور — أُعيد النداءُ بلا اللقطة (${batch.length}) ويُطلب منه قراءةُ الصفحة نصّاً.`)
+              text = await ask(`${askPrompt}\n\n[اللقطةُ لم تُرفق: نموذجُك لا يقبل الصور ونموذجُ الرؤية تعذّر — اقرأ الصفحةَ نصّاً بـpage أو look.]`, hooks, history, selectedModel, (native) => { reply = native })
+            }
             // م11 — خرجٌ مختلَق (مقيس على omni: ls -la مسرود بلا أداة): يُسمّى للمشغّل ويُصحَّح في النداء التالي، ولا يُرفض الردّ.
-            if (reply === undefined && typeof text === "string") {
+            // 10-11 (مقيس على m11): «⚙ run --bg npm start» و«⚙ read …» يُشفيان نداءً حقيقيّاً (healNarrated*) ثمّ يُنفَّذان — والتصحيحُ «سردتَ خرجاً»
+            // كان يُحقن في النداء التالي على نداءٍ نُفّذ فعلاً. ما يُشفى نداءً ليس اختلاقاً.
+            if (reply === undefined && typeof text === "string" && healNarratedReads(healNarratedWrite(text)) === text) {
               const fabricated = fabricatedOutputSignals(text, allReceipts.map((receipt) => receipt.output), allReceipts.map((receipt) => receipt.command))
               if (fabricated.length > 0) { fabricationNotice = fabricationCorrection(fabricated); await emitEvent(turn.id, `⚠ ${fabricationNoticeLine(fabricated)}`) }
             }
@@ -8309,6 +8958,16 @@ const runServeShell = async (): Promise<void> => {
             const layer = inside === undefined ? "" : folderInstructionsLayer(folderInstructions(PROJECT_DIR, inside, folderLoaded))
             if (layer !== "") await emitEvent(turn.id, `📌 تعليماتُ مجلّد: ${[...layer.matchAll(/«([^»]+)»/gu)].map((m) => m[1]).join("، ")}`)
             if (layer !== "") r = { ...r, output: `${r.output}${layer}` }
+            // 10-10 — مقيس في إعادة m11: بوّابةُ البناء حكمت (Tailwind بلا CSS في dist) لكنّ الحكمَ كان يُرمى هنا — يحمرّ مسارُ القبول ولا يعرف
+            // النموذجُ لماذا، فأعاد البناءَ نفسَه أربع مرّات. الحكمُ يُلحق بإيصال أمر البناء الذي يقرؤه النموذج.
+            if (isBuildCommand(command)) {
+              const buildProblem = projectBuildViolation(PROJECT_DIR, r.output, r.verdict)
+              if (buildProblem !== undefined) r = { ...r, output: `${r.output}\n⛔ بوّابةُ البناء لم تقبل هذا البناء: ${buildProblem}` }
+            }
+            // والاختبارُ كذلك (مقيس في الإعادة نفسها: `node --test` ⇦ «tests 0» برمز 0 حُسب «بلا دليل» داخلياً وصمت للنموذج، فسلّم بلا اختبار).
+            if (isTestCommand(command) && exitZero(r.output, r.verdict) && !projectTestPassed(r.output, r.verdict)) {
+              r = { ...r, output: `${r.output}\n⚠ بوّابةُ الاختبار: خرج الأمر 0 لكنّه لم يُثبت شيئاً — لا اختبارَ ناجحاً معدوداً${/\btests 0\b/u.test(r.output) ? " (tests 0: node --test لم يجد ملفّاً — سمِّه *.test.js أو ضعه في test/)" : ""}. اكتب اختباراً يشغّل ما يختبره بنفسه (الخادم على منفذٍ حرّ) ثمّ يفحص النتيجة، وأعد التشغيل.` }
+            }
             // المعطَّل يسلّم الحلقة نصّاً عارياً — فتسلك المسار القديم حرفياً.
             return verdictOn ? r : r.output
           },
@@ -8317,7 +8976,7 @@ const runServeShell = async (): Promise<void> => {
           // يوافقهما بدل أن يحرق جولةً على «ليست أداةً مسجلة» لاسمٍ عُرض للتوّ.
           isCallable: (toolName) => Tools.agentCallable(toolName) || externalTool(toolName) !== undefined,
           // أوامرُ المتصفّح وسطح المكتب متقلّبة: تكرارُها بعد تنقّلٍ قراءةٌ جديدة لا «duplicate» (مقيس 09-13: حقبٌ فارغة بسببه).
-          volatile: (command) => /^(?:(?:[a-z0-9_-]+\.)?(?:page|shot|find|look|scroll|network|console|tabs)|dismiss|desk)\b/u.test(command), // م6د (مقيس 09-14 على المثبَّت): «desk ui» بعد «لا نافذةَ مربوطة» ثمّ focus ناجح حُسب تكراراً فتوقّف الدور — سطحُ المكتب متقلّبٌ كالصفحة
+          volatile: (command) => /^(?:(?:[a-z0-9_-]+\.)?(?:page|shot|find|look|scroll|network|console|tabs)|dismiss|desk|logs)\b/u.test(command), // 10-08: «logs bg-1» والبناءُ جارٍ خرجُه يتغيّر — تكرارُه ليس مكرَّراً (أنهى بروفةَ النشر «duplicate»). م6د (مقيس 09-14 على المثبَّت): «desk ui» بعد «لا نافذةَ مربوطة» ثمّ focus ناجح حُسب تكراراً فتوقّف الدور — سطحُ المكتب متقلّبٌ كالصفحة
           priorCommands: allCommands,
           priorReceipts: allReceipts,
           // S11 — إعادةُ إيصال المكرَّر بدل حقبةٍ فارغة، بما بقي من سقف الدور.
@@ -8423,7 +9082,7 @@ const runServeShell = async (): Promise<void> => {
         epochHistory.push(...(nativeHistory ? loop.continuation : loop.memory))
         // S5: القصّ بميزانية بايتات لا بعدّ رسائل — يحمي الأحدث وإيصالات
         // القبول، ويعلن ما أُسقط (الإيصالات كلها في دفتر النواة).
-        const trimmed = trimEpochHistory(epochHistory as ChatMessage[])
+        const trimmed = trimEpochHistory(epochHistory as ChatMessage[], epochHistoryBudgetBytes())
         if (trimmed.dropped > 0) {
           epochHistory.splice(0, epochHistory.length, ...(trimmed.kept as ChatMessage[]))
           // درعٌ أخير: لو بقي التاريخ ضخماً رغم الميزانية، القصّ بالأزواج.
@@ -8554,18 +9213,30 @@ const runServeShell = async (): Promise<void> => {
         // حين يُفعَّل plugins.emptyGuard، ثمّ توقّفٌ باسمه.
         // سطرُ «— المقيس» يُلحقه المحرّكُ بكلّ جواب — ليس كلاماً من النموذج؛ الفراغُ يُقاس بدونه.
         const spokenAnswer = loop.answer.split("\n").filter((line) => !line.startsWith("— المقيس")).join("\n").trim()
-        if (loop.stopReason === "complete" && loop.commands.length === 0 && spokenAnswer.length === 0) {
+        // 10-08 (مقيس على nemotron-super عبر المحرّك من المصدر): أصلح العيبَ وأضاف الدالّةَ واختبارَها، ثمّ npm test ✓ 2/2، ثمّ ردٌّ فارغ
+        // ⇦ «empty-reply» وcheckpointed والعملُ تامٌّ على القرص. الفراغُ **بعد** اختباراتٍ خضراء تلت آخرَ تعديل ليس عطلاً بل لا شيءَ يُقال:
+        // يمضي الدورُ إلى بوّابات القبول بخلاصةٍ من الإيصالات، والبوّاباتُ هي الحَكَم. والفراغُ بلا دليلٍ أخضر يبقى توقّفاً باسمه.
+        // الردُّ الفارغ لا يبقى في التاريخ: المرمِّز يرفض رسالةَ مساعدٍ فارغة («empty assistant message») فتموت الحقبةُ التالية (مقيس 2026-09-27،
+        // وأعاده 10-08 هذا الفرعُ نفسُه: بوّابةُ التدقيق فتحت حقبةً فرُفض الدور). يُنزع من الذيل قبل أيّ حقبةٍ تالية.
+        const dropEmptyAssistantTail = () => {
+          while (epochHistory.length > 0) {
+            const last = epochHistory[epochHistory.length - 1]!
+            const text = typeof last.content === "string" ? last.content : ""
+            const spoken = text.split("\n").filter((line) => !line.startsWith("— المقيس")).join("").trim()
+            if (last.role !== "assistant" || spoken.length > 0 || (last as { toolCalls?: readonly unknown[] }).toolCalls?.length) break
+            epochHistory.pop()
+          }
+        }
+        if (loop.stopReason === "complete" && loop.commands.length === 0 && spokenAnswer.length === 0 && codeEditedThisTurn && successfulTests) {
+          dropEmptyAssistantTail()
+          const touched = [...new Set(allCommands.map((c) => /^(?:write|edit|medit|patch)\s+(\S+)/u.exec(c)?.[1]).filter((t): t is string => t !== undefined))]
+          const lastTest = [...allCommands].reverse().find((c) => isTestCommand(c))
+          hostAnswer = `(لم يكتب النموذجُ خلاصةً — هذه من إيصالات المحرّك.) عُدّل: ${touched.join("، ") || "—"}؛ ${lastTest ?? "الاختبارات"} ✓ بعد آخر تعديل.`
+          await emitEvent(turn.id, "↻ ردٌّ فارغ بعد اختباراتٍ خضراء تلت آخرَ تعديل — يمضي الدورُ إلى بوّابات القبول بخلاصةٍ من الإيصالات")
+        } else if (loop.stopReason === "complete" && loop.commands.length === 0 && spokenAnswer.length === 0) {
           emptyReplies += 1
           if (emptyGuardOn && emptyReplies === 1) {
-            // الردُّ الفارغ لا يُعاد إرساله رسالةً: المرمِّز يرفض رسالةَ مساعدٍ فارغة («empty assistant message»)
-            // فيموت النداءُ الثاني قبل أن يُرسل (مقيس 2026-09-27). يُنزع من ذيل التاريخ قبل المحاولة.
-            while (epochHistory.length > 0) {
-              const last = epochHistory[epochHistory.length - 1]!
-              const text = typeof last.content === "string" ? last.content : ""
-              const spoken = text.split("\n").filter((line) => !line.startsWith("— المقيس")).join("").trim()
-              if (last.role !== "assistant" || spoken.length > 0 || (last as { toolCalls?: readonly unknown[] }).toolCalls?.length) break
-              epochHistory.pop()
-            }
+            dropEmptyAssistantTail()
             lastStop = "acceptance-pending"
             pending = undefined
             continuationHint = "ردُّك السابق كان فارغاً تماماً. أجب عن المهمّة، أو نفّذ أداةً بسطرٍ يبدأ بـ«نفّذ:». لا ترسل ردّاً فارغاً."
@@ -8589,7 +9260,7 @@ const runServeShell = async (): Promise<void> => {
             lastAnswer = loop.answer
             lastStop = "acceptance-pending"
             pending = undefined
-            // 09-29 — أمرُ المالك «خليه ينفّذ»: ما سُرد بشكل «⚙ أداة …» لأداةٍ قابلةٍ للتنفيذ يُنفَّذ الآن بالسياسة والحرّاس
+            // 09-29 ما سُرد بشكل «⚙ أداة …» لأداةٍ قابلةٍ للتنفيذ يُنفَّذ الآن بالسياسة والحرّاس
             // والاعتماد نفسِها (dispatchToolV) ويعود إيصالُه الحقيقيّ إلى النموذج — لا تصحيحٌ نصّيّ وحده يعيد السردَ نفسَه.
             const narrated = narratedToolCalls(loop.answer, allCommands)
             if (narrated.length > 0) {
@@ -8641,7 +9312,9 @@ const runServeShell = async (): Promise<void> => {
           },
           sourceEventIds: [turn.id],
         })
-        lastAnswer = loop.answer
+        lastAnswer = hostAnswer !== undefined && loop.answer.split("\n").every((line) => line.trim().length === 0 || line.startsWith("— المقيس")) ? hostAnswer : loop.answer
+        // الجوابُ الحقيقيّ للمستخدم هو ما كتبه النموذجُ قبل البوّابة، لا سطرُ الإغلاق.
+        if (replayedThisEpoch && replayAnswer !== undefined) lastAnswer = replayAnswer
         lastStop = loop.stopReason
         pending = loop.pendingCommand
         emptyStalls = loop.commands.length === 0 && loop.stopReason !== "complete" ? emptyStalls + 1 : 0
@@ -8685,6 +9358,7 @@ const runServeShell = async (): Promise<void> => {
           lastStop = "acceptance-pending"
           const hasPackage = existsSync(join(PROJECT_DIR, "package.json"))
           pending = hasPackage ? "run npm run build" : undefined
+          gateOnlyContinuation = hasPackage
           continuationHint = hasPackage
             ? "نفّذ الآن run npm run build ولا تلخّص قبل ظهور رمز الخروج."
             : "المشروع لا يحتوي package.json بعد. أنشئه الآن بأداة write في الجذر، ملفاً واحداً فقط، ثم واصل بقية الملفات."
@@ -8697,6 +9371,7 @@ const runServeShell = async (): Promise<void> => {
           lastStop = "acceptance-pending"
           const hasPackage = existsSync(join(PROJECT_DIR, "package.json"))
           pending = hasPackage ? "run npm run typecheck" : undefined
+          gateOnlyContinuation = hasPackage
           continuationHint = hasPackage
             ? "نفّذ الآن run npm run typecheck ولا تلخّص قبل ظهور رمز الخروج."
             : "المشروع لا يحتوي package.json بعد. أنشئه أولاً ثم أعد فحص الأنواع."
@@ -8710,7 +9385,17 @@ const runServeShell = async (): Promise<void> => {
           testsNotApplicableSaid = true
         } else if (loop.stopReason === "complete" && requiresTests && !successfulTests) {
           lastStop = "acceptance-pending"
-          continuationHint = "لا يوجد إيصال اختبارات غير فارغة ناجحة. افحص إعداد الاختبارات وأصلح السبب، واكتب الاختبارات المطلوبة وشغل npm test -- --run ثم واصل الهدف."
+          // 10-08 (مقيس على nemotron-super): الاختباراتُ خضراء ثمّ npm install (لملفّ القفل) أبطلها بحقّ، فقال النموذجُ «تمّ» مرّتين ولم يُعِدها ⇦
+          // checkpointed والعملُ تامّ. «لم يُفحص على الشيفرة الحاليّة» (لا «فشل») يشغّله المضيفُ بنفسه بأمر المشروع — كمسار التحقّق بعد التعديل،
+          // وبحدّه نفسِه؛ والفشلُ الحقيقيّ يبقى للنموذج يصلحه.
+          const ownTestCommand = projectTestCommand(PROJECT_DIR)
+          if (ownTestCommand !== undefined && !gateTracks.tests.ran && verifyRuns < VERIFY_AFTER_EDIT_RUNS) {
+            await emitEvent(turn.id, verifyDemandLine(ownTestCommand, verifyRuns > 0))
+            verifyRuns += 1
+            pending = `run ${ownTestCommand}`
+            continue
+          }
+          continuationHint = `لا يوجد إيصال اختبارات غير فارغة ناجحة. افحص إعداد الاختبارات وأصلح السبب، واكتب الاختبارات المطلوبة وشغّل ${projectTestCommand(PROJECT_DIR) ?? "أمرَ اختبار المشروع"} (أمرُ المشروع نفسُه — لا «-- --run» إلّا لـvitest) ثم واصل الهدف.`
           acceptanceStalls = loop.commands.length === 0 ? acceptanceStalls + 1 : 0
           await emitEvent(turn.id, `↻ شرط الاختبارات: ${gateShortfall(gateReceiptOf("tests"))}؛ ${continuationHint}`)
           if (acceptanceStalls >= 2) break
@@ -8720,6 +9405,14 @@ const runServeShell = async (): Promise<void> => {
         // المضيفُ يشغّلها بنفسه (pending ⇦ فحصُ القبول في الحقبة التالية، بالبوّابة والموافقة نفسِهما) — لا يُرجى النموذجُ أن يتذكّر.
         if (loop.stopReason === "complete" && !requiresTests && verifyTestCommand !== undefined && codeEditedThisTurn && !successfulTests) {
           lastStop = "acceptance-pending"
+          // 10-08: اختبارٌ يطلب خادماً حيّاً رُفض اتصالُه ⇦ المضيفُ يشغّل خادمَ المشروع (مرّةً) ثمّ يعيد — لا تُحرق التشغيلاتُ الثلاث على غيابه.
+          const refusedPort = refusedLocalPort(lastTestOutput)
+          const serverCommand = refusedPort !== undefined && !verifyServerStarted ? projectServerCommand(PROJECT_DIR, refusedPort) : undefined
+          if (refusedPort !== undefined && serverCommand !== undefined) {
+            await startServerForTests(verifyTestCommand, refusedPort, serverCommand, epoch)
+            pending = `run ${verifyTestCommand}`
+            continue
+          }
           if (verifyRuns >= VERIFY_AFTER_EDIT_RUNS) {
             await emitEvent(turn.id, verifyGaveUpLine(verifyTestCommand, verifyRuns))
             break
@@ -8745,16 +9438,17 @@ const runServeShell = async (): Promise<void> => {
             continue
           }
         }
-        if (loop.stopReason === "complete" && requiresNpmAudit && (codeEditedThisTurn || depsTouchedThisTurn) && !successfulAudit && gateTracks.audit.preexisting === true && !auditPreexistingTold) {
+        if (loop.stopReason === "complete" && auditApplies() && (codeEditedThisTurn || depsTouched()) && !successfulAudit && gateTracks.audit.preexisting === true && !auditPreexistingTold) {
           // 09-29: ثغراتٌ سابقةٌ في اعتمادياتٍ لم تمسّها الجولة — تُقال مرّةً ولا تحجب (قيس: بناءٌ ✓ وprobe ✓ ثمّ acceptance-pending على glob الموروثة).
           auditPreexistingTold = true
           await emitEvent(turn.id, `△ التدقيق: ${gateShortfall(gateReceiptOf("audit"))}`)
         }
         // 09-30: التدقيقُ شرطٌ لجولةٍ عدّلت شيفرةً أو اعتماديات — قيس أنّه طالب مهمّةَ قراءةٍ («لا تعدّل أيّ ملفّ») ذُكرت فيها كلمةُ npm
         // بتدقيقٍ، فكان الدفعُ نحو «إصلاح» الحزم هو ما قاد إلى `npm update`.
-        if (loop.stopReason === "complete" && requiresNpmAudit && (codeEditedThisTurn || depsTouchedThisTurn) && !successfulAudit && gateTracks.audit.preexisting !== true && existsSync(join(PROJECT_DIR, "package.json"))) {
+        if (loop.stopReason === "complete" && auditApplies() && (codeEditedThisTurn || depsTouched()) && !successfulAudit && gateTracks.audit.preexisting !== true && existsSync(join(PROJECT_DIR, "package.json"))) {
           lastStop = "acceptance-pending"
           pending = "run npm audit --audit-level=high"
+          gateOnlyContinuation = true
           // مساحة عمل pnpm انساقت إلى `npm audit`/`npm i --package-lock-only` (قيس 2026-09-02):
           // يُسمّى مدير الحزم عموماً بحسب ملف القفل.
           continuationHint = "نفّذ تدقيق مدير الحزم (npm audit أو pnpm audit بحسب ملف القفل)، وإن ظهرت ثغرة عالية أو حرجة فحدّث الحزم ثم أعد البناء والتدقيق."
@@ -8795,7 +9489,7 @@ const runServeShell = async (): Promise<void> => {
         }
         acceptanceStalls = 0
         if (loop.stopReason === "complete") {
-          // 09-29 (أمر المالك — الانتقالُ التلقائيّ بين السبرنتات): سبرنتٌ أُغلق في هذا الدور وبقيت سبرنتاتٌ مفتوحة في
+          // 09-29: سبرنتٌ أُغلق في هذا الدور وبقيت سبرنتاتٌ مفتوحة في
           // ABDO-SPRINTS.md ⇦ لا يُختم الدور «مكتملاً» على سبرنتٍ واحد؛ يُقال التالي ويبدأ (حتى ثلاث مرّاتٍ في الدور، والسقفُ يحكم).
           // 09-30 (مقيس): كانت الحافّةُ بعد المراجعة المستقلّة، فالمراجعةُ الحاجبةُ أوقفت الدورَ قبل أن تُرى — والسبرنتُ الثالث لم يبدأ.
           // الحافّةُ أوّلاً: ما دامت سبرنتاتٌ مفتوحة يُمضى إليها، والمراجعةُ تحكم عند آخرها أو عند السقف.
@@ -8832,9 +9526,9 @@ const runServeShell = async (): Promise<void> => {
               const reviewJudge = resolveDecisionModel(selectedModel)
               await emitEvent(turn.id, `Super Abdo: reviewing execution evidence in a separate context, with no tools.${reviewJudge.ref === selectedModel.ref ? "" : ` 🧠 نموذجُ القرار: ${reviewJudge.ref}`}`)
               try {
-                const reply = await ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {
+                const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {
                   ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: SUPER_ABDO_REVIEW_SYSTEM,
-                }, [], reviewJudge)
+                }, [], selectedModel, reviewJudge)
                 review = parseSuperAbdoReview(reply)
               } catch { review = undefined }
               if (hooks.signal?.aborted === true) { lastStop = "acceptance-pending"; break }
@@ -8854,9 +9548,9 @@ const runServeShell = async (): Promise<void> => {
               await emitEvent(turn.id, `⚔ التفنيد العدائيّ (وضع «${workAtTurn.label}»): ثلاثُ عدساتٍ تحاول دحضَ الاكتمال — ثلاثةُ نداءاتٍ بلا أدوات.`)
               try {
                 const verdicts = await Promise.all(REFUTE_LENSES.map(async (lens) => {
-                  const reply = await ask(buildRefutePrompt(judgeGoal(), loop.answer, allReceipts, lens), {
+                  const reply = await askDecision(buildRefutePrompt(judgeGoal(), loop.answer, allReceipts, lens), {
                     ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REFUTE_SYSTEM,
-                  }, [], resolveDecisionModel(selectedModel))
+                  }, [], selectedModel)
                   return parseRefutation(lens.key, typeof reply === "string" ? reply : String(reply))
                 }))
                 const outcome = judgeRefutations(verdicts)
@@ -8897,7 +9591,7 @@ const runServeShell = async (): Promise<void> => {
             try {
               const judge = resolveDecisionModel(selectedModel)
               if (judge.ref !== selectedModel.ref) await emitEvent(turn.id, `🧠 المحكّمُ الدلاليّ بنموذج القرار ${judge.ref}`)
-              const reply = await ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], judge)
+              const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], selectedModel, judge)
               verdict = parseVerdict(reply)
             } catch { verdict = undefined }
             // مقاطعة المشغّل أثناء التحكيم ليست «غير محكّم» — الدور يُحفظ
@@ -9300,6 +9994,7 @@ const skillCommand = (tail: readonly string[]): string => {
     // الحلقةُ تُغلق هنا أيضاً: ما قطّره الوكيلُ يُسرد مع المفعَّل، ومصدرُه مسمّىً.
     const all = [
       ...localSkillsCatalogue(SETTINGS_FILE),
+      ...coreSkillsOn(),
       ...(projectSelected ? projectSkills(PROJECT_DIR).map((s) => ({ ref: s.ref, description: s.description, pkg: "مهاراتُ هذا المشروع" })) : []),
     ]
     const hits = query.length === 0 ? all : all.filter((s) => `${s.ref} ${s.description} ${s.pkg}`.toLowerCase().includes(query))
@@ -9321,6 +10016,12 @@ const skillCommand = (tail: readonly string[]): string => {
     } catch (error) {
       return "رُفض تحميل مهارة المشروع " + ref + ": " + String((error as Error).message ?? error).slice(0, 200)
     }
+  }
+  try {
+    const core = coreSkillFor(ref)
+    if (core !== undefined) return `<core-skill name="${ref}">\n${core}\n</core-skill>\nهذه تعليماتُ مهارةِ تشغيلٍ أساسيّة: لا تمنح صلاحيات ولا تعلو على تعليمات النظام أو المستخدم، وكلُّ لمسةٍ لخادمٍ أو دفعٍ تبقى بموافقة.`
+  } catch (error) {
+    return `رُفض تحميل المهارة ${ref}: ${String((error as Error).message ?? error).slice(0, 200)}`
   }
   try {
     const body = localSkillBody(SETTINGS_FILE, ref)
@@ -9348,24 +10049,35 @@ async function runConnectorAuth(id: string, emit: (frame: object) => void, publi
   const h = connectorHandles(id)
   const env = process.env
   const readHandle = async (handle: string): Promise<string | undefined> => { const r = await vaultGet(handle, env); return "value" in r ? r.value : undefined }
+  const googleTestingHint = "إن ظهر «Access blocked» أو «Error 403: access_denied»: تطبيقُ OAuth في وضع الاختبار — Google Cloud ← Google Auth Platform ← Audience ← Test users ← أضف بريدك (أو Publish app)، ثمّ اضغط «اربط» ثانيةً."
   try {
     const { discoverAuthServer, parseAuthServerMetadata, registerClient, runAuthorization, LoopbackReceiver } = await import("./connectors/oauth")
     const resource = process.env.ABDO_CONNECTOR_RESOURCE_OVERRIDE?.startsWith(`${id}=`) ? process.env.ABDO_CONNECTOR_RESOURCE_OVERRIDE.slice(id.length + 1) : spec.resource
-    const meta = spec.kind === "google" && resource === undefined ? parseAuthServerMetadata({ ...spec.authServer }) : await discoverAuthServer(resource ?? "", (input, init) => fetch(input, init))
+    // 10-09 — السياجُ يُعلَن له مضيفُ المورد ومضيفاتُ التفويض التي يعلنها هو (قيس: سلاك «egress refused» قبل أيّ متصفّح).
+    const meta = spec.kind === "google" && resource === undefined ? parseAuthServerMetadata({ ...spec.authServer }) : await discoverAuthServer(resource ?? "", connectorDiscoveryFetch(id, allowEgress, (input, init) => fetch(input, init)))
+    for (const host of connectorAuthHosts(meta)) allowEgress(host, `connector ${id} authorization server`)
     let clientId = await readHandle(h.clientId)
     let clientSecret = await readHandle(h.clientSecret)
     let port = spec.callbackPort ?? 0
-    if (clientId === undefined) {
-      if (spec.ownerClient !== undefined) { status("needs-client", spec.ownerClient.howTo); return }
+    if (clientId === undefined && spec.ownerClient !== undefined) { status("needs-client", spec.ownerClient.howTo); return }
+    // 10-10 — مقيس من لقطة المستخدم: أتلاسيان ردّ «Internal Server Error» على صفحة التفويض الأولى لأنّ العميلَ المسجَّل ديناميكيّاً في محاولةٍ
+    // سابقة (المحفوظ في الخزنة إلى الأبد) لم يعد معروفاً عندها — عميلٌ جديد ردّ 200 بالرابط نفسه. ومعه عيبٌ ثانٍ: العميلُ المُعاد استعمالُه
+    // سُجّل بعنوان عودةٍ على منفذٍ عشوائيّ قديم، والمحاولةُ الجديدة تستمع على منفذٍ عشوائيٍّ آخر. فالموصّلُ بالتسجيل الديناميكيّ (بلا عميلِ
+    // مالك) يُسجَّل من جديد في كلّ «اربط» على منفذ المحاولة نفسها — التسجيلُ الديناميكيّ صُمّم لذلك، والرموزُ الجديدة تُحفظ مع معرّفها.
+    if (spec.ownerClient === undefined) {
       if (port === 0) { const probe = new LoopbackReceiver(); port = probe.start(0).port; probe.stop() }
       const registered = await registerClient(meta, { clientName: "Abdo Code", redirectUris: [`http://127.0.0.1:${port}/callback`], scope: spec.scope })
       clientId = registered.clientId
       const stored = await vaultSet(h.clientId, clientId, env)
       if ("refusal" in stored) throw new Error(`الخزنة رفضت معرّف العميل: ${stored.refusal}`)
-      if (registered.clientSecret !== undefined) { clientSecret = registered.clientSecret; await vaultSet(h.clientSecret, clientSecret, env) }
+      clientSecret = registered.clientSecret
+      if (clientSecret !== undefined) await vaultSet(h.clientSecret, clientSecret, env)
     }
-    status("authorizing", "افتح المتصفّح وأكمل تسجيل الدخول — عبدو كود ينتظر على 127.0.0.1")
-    const tokens = await runAuthorization({ meta, client: { clientId, ...(clientSecret === undefined ? {} : { clientSecret }) }, scope: spec.scope, ...(spec.authorizeExtra === undefined ? {} : { extra: spec.authorizeExtra }), port, timeoutMs: 5 * 60_000, open: (url) => emit({ kind: "connector-open", id, url }) })
+    if (clientId === undefined) { status("error", "لا معرّفَ عميلٍ لهذا الموصّل"); return }
+    // 10-10 — مقيس من لقطة المستخدم: جوجل «Access blocked … has not completed the Google verification process · Error 403: access_denied»
+    // يظهر في صفحة جوجل نفسها ولا يعود إلى 127.0.0.1 — فكان التطبيقُ ينتظر خمس دقائق صامتاً. السببُ إعدادٌ في Google Cloud لا شيفرة: يُقال قبلها.
+    status("authorizing", `افتح المتصفّح وأكمل تسجيل الدخول — عبدو كود ينتظر على 127.0.0.1 عشرَ دقائق${spec.kind === "google" ? ` · ${googleTestingHint}` : ""}`)
+    const tokens = await runAuthorization({ meta, client: { clientId, ...(clientSecret === undefined ? {} : { clientSecret }) }, scope: spec.scope, ...(spec.authorizeExtra === undefined ? {} : { extra: spec.authorizeExtra }), port, timeoutMs: 10 * 60_000, open: (url) => emit({ kind: "connector-open", id, url }) })
     const writes: Promise<{ ok: true } | { refusal: unknown }>[] = [vaultSet(h.access, tokens.accessToken, env), vaultSet(h.tokenUrl, meta.token_endpoint, env)]
     if (tokens.refreshToken !== undefined) writes.push(vaultSet(h.refresh, tokens.refreshToken, env))
     for (const r of await Promise.all(writes)) if ("refusal" in r) throw new Error(`الخزنة رفضت الرمز: ${String(r.refusal)}`)
@@ -9376,7 +10088,9 @@ async function runConnectorAuth(id: string, emit: (frame: object) => void, publi
     publishSettings(saveSettings({ mcpServers: [...others, server] }))
     status("linked", `مربوطٌ — الخادم ${server.id} يُوصَل تلقائياً عند فتح الجلسة`)
   } catch (error) {
-    status("error", String((error as Error).message ?? error).slice(0, 300))
+    const message = String((error as Error).message ?? error)
+    const hint = spec.kind === "google" && /timeout|access_denied/u.test(message) ? ` — ${googleTestingHint}` : /timeout/u.test(message) ? " — لم يصل ردُّ المتصفّح خلال عشر دقائق؛ إن رفضت الخدمةُ الدخولَ في صفحتها فسببُها هناك، ثمّ اضغط «اربط» ثانيةً." : ""
+    status("error", (message.slice(0, 300) + hint).slice(0, 700))
   }
 }
 
@@ -9698,7 +10412,13 @@ const executeBody = async (body: string, hooks: AskHooks = {}): Promise<string> 
         mergeUiClock(sprintEvidence, readUiClock(uiClockFile()))
         const unmeasured = sprintEvidenceRefusal(evidence, sprintEvidence, { web })
         if (unmeasured !== undefined) return unmeasured
-        return sprintDone(PROJECT_DIR, Number.parseInt(num ?? "", 10), evidence).text
+        const closed = sprintDone(PROJECT_DIR, Number.parseInt(num ?? "", 10), evidence)
+        // 10-08: آخرُ سبرنتٍ أُغلق والشجرةُ غيرُ مودَعة ⇦ يُسمّى ما لم يُودَع (uncommitted-note.ts).
+        if (closed.ok && closed.text.includes("كلُّ السبرنتات مغلقة")) {
+          const st = Bun.spawnSync(["git", "-C", PROJECT_DIR, "status", "--porcelain"], { stdout: "pipe", stderr: "ignore", stdin: "ignore", timeout: 20_000 })
+          if (st.exitCode === 0) return closed.text + uncommittedNote(st.stdout.toString())
+        }
+        return closed.text
       }
       return SPRINT_USAGE
     }
@@ -9976,12 +10696,15 @@ const main = async () => {
       // ص1 — جسرُ خادم MCP بعيد (Slack/Linear/Notion…) على stdio؛ الرمزُ من البيئة الممنوحة لا من سطر الأمر.
       const { serveRemoteMcp, remoteOptionsFromEnv } = await import("./mcp-servers/remote")
       if (rest[0] === undefined) { console.error("الصيغة: mcp-remote <https-url>"); process.exitCode = 2; break }
+      // 10-09 — هذا الجسر عمليةٌ مستقلّة بسياجها: المورد ومضيفُ التجديد (المخزَّن عند الربط) يُعلَنان، https وحده.
+      for (const host of [httpsHost(rest[0]), httpsHost(process.env.ABDO_CONNECTOR_TOKEN_URL)]) if (host !== undefined) allowEgress(host, "linked connector (mcp-remote)")
       process.exitCode = await serveRemoteMcp(remoteOptionsFromEnv(rest[0]))
       break
     }
     case "mcp-google": {
       // ص1 — Gmail والتقويم وDrive بخادمٍ مدمج؛ الرموزُ من البيئة الممنوحة.
       const { serveGoogleMcp, googleOptionsFromEnv } = await import("./mcp-servers/google")
+      for (const host of GOOGLE_API_HOSTS) allowEgress(host, "linked Google connector (mcp-google)")
       process.exitCode = await serveGoogleMcp(googleOptionsFromEnv())
       break
     }

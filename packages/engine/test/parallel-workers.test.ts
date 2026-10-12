@@ -20,6 +20,23 @@ describe("parallel workers — parsing", () => {
   })
 })
 
+// 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.145): مهمّةٌ برأسٍ وبنود («اقرأ العقد أوّلاً» في المهمّتين) قُرئ كلُّ سطرٍ منها مهمّةً فرُفضت «متطابقتان» ثلاثاً.
+describe("parallel workers — multi-line tasks", () => {
+  test("numbered headers with bullet lines are one task each, even when bullets repeat across tasks", () => {
+    const tasks = parseParallelTasks("parallel <<<\n1. عامل الواجهة: Vite + Tailwind\n- اقرأ ABDO-CONTRACT.md أوّلاً\n- اكتب src/main.js\n2. عامل الخادم: Node + SQLite\n- اقرأ ABDO-CONTRACT.md أوّلاً\n- اكتب server/index.js والاختبارات")
+    expect(tasks).toEqual(["عامل الواجهة: Vite + Tailwind\n- اقرأ ABDO-CONTRACT.md أوّلاً\n- اكتب src/main.js", "عامل الخادم: Node + SQLite\n- اقرأ ABDO-CONTRACT.md أوّلاً\n- اكتب server/index.js والاختبارات"])
+  })
+  test("blank-line separated blocks are one task each", () => {
+    const tasks = parseParallelTasks("parallel <<<\nعامل الواجهة: Vite + Tailwind\nاقرأ ABDO-CONTRACT.md أوّلاً\n\nعامل الخادم: Node + SQLite\nاقرأ ABDO-CONTRACT.md أوّلاً")
+    expect(tasks).toHaveLength(2)
+    expect((tasks as string[])[1]).toStartWith("عامل الخادم")
+  })
+  test("the twin: single-line tasks stay one per line, and a real duplicate still says how to write multi-line tasks", () => {
+    expect(parseParallelTasks("parallel <<<\nأنشئ صفحة /about بنصٍّ تعريفيّ\nأضف مسار /api/health يعيد ok")).toHaveLength(2)
+    expect(parseParallelTasks("parallel <<<\nمهمّة مكرّرة بوصفٍ كافٍ\nمهمّة مكرّرة بوصفٍ كافٍ")).toContain("افصل بين المهامّ بسطرٍ فارغ")
+  })
+})
+
 describe("parallel workers — report and merge guard", () => {
   test("the report names each worker's branch, files and summary, and lists merge commands only for committed branches", () => {
     const text = renderParallelReport([

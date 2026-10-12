@@ -19,8 +19,8 @@ export const SEAT_ID = "approvalTakeover:seat"
 
 export interface SeatDeps {
   readonly document: SlotDocument
-  /** نقرةُ ✓/✕ — الطيّ والإرسال تملكهما القشرة، لا هذه الشجرة. */
-  readonly act: (choice: "approve" | "deny") => void
+  /** نقرةُ ✓/✕ — الطيّ والإرسال تملكهما القشرة، لا هذه الشجرة. `scope` = «اسمح لهذه الأداة في الجلسة» (منحٌ قائم). */
+  readonly act: (choice: "approve" | "deny", scope?: "tool") => void
   /** نقرةُ «المعاينة» — القشرة تعرف أين كتلةُ الفرق في المحادثة. */
   readonly reveal: () => void
   /** عقدةُ المؤلِّف: صنفُ الاستيلاء يُنزع عنها عند الفكّ. */
@@ -52,6 +52,12 @@ export const seat = (deps: SeatDeps): SlotContribution => ({
     const approve = make(deps.document, "button", "apv")
     approve.type = "button"
     approve.textContent = "✓ اسمح"
+    // 10-09 — «اسمح لهذه الأداة في الجلسة»: يظهر فقط حين يعلن المحرّكُ نطاقَ «tool» (مفتاح standingGrants)؛ المنحُ في الذاكرة،
+    // يُعلَن عند كلّ استعمال ويُنقض من «الصلاحيات». كان المحرّكُ يقبله والمقعدُ لا يعرضه — فكلُّ نقرةِ متصفّحٍ أو مكتبٍ تُسأل.
+    const session = make(deps.document, "button", "apv-session")
+    session.type = "button"
+    session.hidden = true
+    session.textContent = "✓ اسمح لهذه الأداة في الجلسة"
     const deny = make(deps.document, "button", "dny")
     deny.type = "button"
     deny.textContent = "✕ ارفض"
@@ -61,9 +67,11 @@ export const seat = (deps: SeatDeps): SlotContribution => ({
     preview.textContent = "المعاينة ▲"
     const state = make(deps.document, "span", "apv-state")
     bind(approve, "click", () => deps.act("approve"))
+    bind(session, "click", () => deps.act("approve", "tool"))
     bind(deny, "click", () => deps.act("deny"))
     bind(preview, "click", () => deps.reveal())
     row.appendChild(approve)
+    row.appendChild(session)
     row.appendChild(deny)
     row.appendChild(preview)
     row.appendChild(state)

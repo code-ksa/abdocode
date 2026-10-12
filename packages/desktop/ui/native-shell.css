@@ -221,6 +221,8 @@ html[data-theme="dark"] body.native-shell{--ns-bg:#1c1d20;--ns-card:#232529;--ns
 .native-shell #composer .ns-usage-button svg{width:14px;height:14px}
 .native-shell #send{position:absolute;right:8px;top:9px;width:27px;height:27px;line-height:1;border:0;border-radius:7px;background:transparent;color:#959b90;font-size:20px;padding:1px;order:9}
 .native-shell #send:hover{background:var(--ns-hover);color:var(--ns-fg)}
+/* 10-10 — مثل كلود: والدورُ يعمل يصير زرُّ الإرسال دائرةً ممتلئة بمربّع إيقاف، ظاهرةً لا رماديّةً شفّافة. */
+.native-shell #send.stop{background:var(--ns-fg);color:var(--ns-card);border-radius:50%;display:flex;align-items:center;justify-content:center}.native-shell #send.stop:hover{opacity:.85;background:var(--ns-fg);color:var(--ns-card)}.native-shell #send.stop svg{width:10px;height:10px}
 .native-shell #composer.approving{padding:12px;background:var(--ns-card);border:1px solid var(--ns-line);border-radius:11px}
 .native-shell #statusline{font-size:.625rem;min-height:14px;padding:0 20px 5px;line-height:1.35}
 .native-shell #notice{font-size:.6875rem;padding:3px 14px;line-height:1.5}
@@ -259,9 +261,11 @@ html[data-theme="dark"] body.native-shell{--ns-bg:#1c1d20;--ns-card:#232529;--ns
 .native-shell #settings.open{display:flex;flex-direction:column}
 .native-shell #settings>h2{font-size:1.125rem;font-weight:600;margin:0 55px 5px 26px;line-height:1.4}
 .native-shell #settings>.sub{font-size:.75rem;line-height:1.5;margin:0 55px 17px 26px;color:var(--ns-muted)}
-.native-shell #settings>.close{position:absolute;top:15px;right:18px;width:29px;height:29px;padding:4px;border-radius:6px;overflow:hidden;font-size:0;line-height:1;float:none;color:#71766a}
-.native-shell #settings>.close:before{content:'×';font-size:24px;font-weight:300}
+/* 10-09 (measured through computer use): a 29px faint × was missed twice — the close control is now 40px, full contrast, outlined. */
+.native-shell #settings>.close{position:absolute;top:12px;right:16px;width:40px;height:40px;padding:0;border-radius:8px;overflow:hidden;font-size:0;line-height:1;float:none;color:var(--ns-fg);background:var(--ns-card);border:1px solid var(--ns-line);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
+.native-shell #settings>.close:before{content:'×';font-size:28px;font-weight:400;line-height:1}
 .native-shell #settings>.close:hover{background:var(--ns-hover)}
+.native-shell #settings>.close:focus-visible{outline:2px solid var(--ns-accent,#3b82f6);outline-offset:2px}
 .native-shell #settings .settings-layout{grid-template-columns:219px minmax(0,1fr);gap:0;flex:1;min-height:0;overflow:hidden;border-top:1px solid var(--ns-line)}
 .native-shell #settings .settings-nav{position:static;align-self:stretch;padding:14px 12px;max-height:none;min-height:0;overflow:auto;background:#fcfcfa;border-right:1px solid var(--ns-line);gap:3px}
 .native-shell #settings .settings-nav button{font-size:.8125rem;min-height:34px;padding:7px 11px;line-height:1.4;border-radius:7px;display:flex;align-items:center;gap:9px;flex-shrink:0;color:#747870}
@@ -347,3 +351,5 @@ html[data-theme="dark"] .native-shell :is(.nd-leaf,#prompt,#settings .setting-ro
 .ns-update-button{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;border-radius:6px}.ns-update-button .iconbtn{padding:0 4px;min-width:0;height:auto;background:transparent;color:inherit}
 /* 09-14: لوحةُ المهامّ الخلفيّة — صفوفٌ تُفتح بالضغط كما في لوحة كلود */
 .ns-tasks-head{margin:14px 0 6px;font-size:var(--fs-ui);color:var(--muted)}.ns-task{border:1px solid var(--border);border-radius:8px;margin:6px 0;background:var(--surface,#fff)}.ns-task>summary{display:flex;gap:10px;align-items:center;padding:8px 10px;cursor:pointer;list-style:none}.ns-task>summary::-webkit-details-marker{display:none}.ns-task-kind{font-family:ui-monospace,monospace;font-size:var(--fs-meta);color:var(--muted);white-space:nowrap}.ns-task-cmd{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:left}.ns-task-state{font-size:var(--fs-meta);white-space:nowrap}.ns-task-running .ns-task-state{color:#2a7de1}.ns-task-exited .ns-task-state{color:var(--muted)}.ns-task-tail{margin:0;padding:8px 10px;border-top:1px solid var(--border);font-size:var(--fs-meta);white-space:pre-wrap;max-height:220px;overflow:auto;text-align:left}.ns-task .ns-button{margin:6px 10px 10px}
+/* 10-10: العنصرُ الفعّال في قائمة الإعدادات كان نصّاً داكناً (#292c27) على خلفيّةٍ داكنة في الوضع الداكن فلا يُرى — أبيضُ هنا. */
+html[data-theme="dark"] .native-shell #settings .settings-nav button.active,html[data-theme="dark"] .native-shell #settings .settings-nav button.active svg{color:#fff;background:var(--ns-hover)}

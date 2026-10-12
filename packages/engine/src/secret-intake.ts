@@ -312,6 +312,10 @@ export interface AssistedIntakeInput {
   readonly directory: string
   readonly editor: readonly string[]
   readonly timeoutMs: number
+  /** خروجُ المحرّر قبل هذا والقالبُ كما هو = سلّم الملفَّ لنافذةٍ قائمة (Notepad ويندوز 11 بالتبويبات) — يُنتظر الحفظ. الافتراض 5000. */
+  readonly handoffMs?: number
+  /** فاصلُ فحص الملفّ أثناء انتظار الحفظ بعد التسليم. الافتراض 500. */
+  readonly pollMs?: number
   /** كتابةُ الخزنة — تُحقن، فلا تعرف هذه الوحدة الخزنة ولا تستوردها. */
   readonly store: (handle: string, value: string) => Promise<{ ok: true } | { refusal: string }>
 }
@@ -358,7 +362,10 @@ export async function assistedIntake(input: AssistedIntakeInput): Promise<Assist
   const path = join(input.directory, `${input.handle}.${Math.random().toString(36).slice(2, 10)}.intake.txt`)
   const done = (refusal?: string): AssistedIntakeResult => {
     shredFile(path)
-    return { ok: refusal === undefined, handle: input.handle, ...(refusal === undefined ? {} : { refusal }), templateRemains: existsSync(path) }
+    const templateRemains = existsSync(path)
+    // 10-08 (مقيس): الرفضُ قال «ولم يبقَ ملفّ» والملفُّ باقٍ (templateRemains=true) — لا يُدّعى حذفٌ لم يقع.
+    const honest = refusal !== undefined && templateRemains ? refusal.replace(/\s*(?:—\s*)?(?:و?لم يبقَ ملفّ|والملفّ حُذف|وزُفّر القالب وحُذف)/gu, "").replace(/[،\s]+\.$/u, ".") : refusal
+    return { ok: refusal === undefined, handle: input.handle, ...(honest === undefined ? {} : { refusal: honest }), templateRemains }
   }
   try {
     mkdirSync(input.directory, { recursive: true })
@@ -366,6 +373,8 @@ export async function assistedIntake(input: AssistedIntakeInput): Promise<Assist
   } catch {
     return done(INTAKE_REFUSALS.TEMPLATE_WRITE_FAILED)
   }
+  const template = (() => { try { return readFileSync(path, "utf8") } catch { return "" } })()
+  const startedAt = Date.now()
   let child: { exited: Promise<number>; kill: (code?: number) => void }
   try {
     // محرّرٌ يُفتح **ليستقبل سرّاً** لا ليقرأ الخزنة: تسليمُه مقابضَ الخزنة
@@ -386,6 +395,23 @@ export async function assistedIntake(input: AssistedIntakeInput): Promise<Assist
   if (timedOut) {
     try { child.kill() } catch { /* المهم أن الملفّ يُزفَّر ويُحذف */ }
     return done(INTAKE_REFUSALS.EDITOR_TIMEOUT)
+  }
+  // 10-08 (مقيس على ويندوز 11): Notepad بالتبويبات يسلّم الملفَّ لنافذته القائمة ويخرج المُطلِقُ فوراً — فقُرئ القالبُ فارغاً قبل أن
+  // يكتب المستخدمُ شيئاً ورُفض «أُغلق كما هو». خروجٌ سريعٌ والقالبُ كما هو ⇦ يُنتظر حفظُ الملفّ (تغيّرُ محتواه ثمّ ثباتُه) حتى المهلة.
+  const readNow = (): string | undefined => { try { return readFileSync(path, "utf8") } catch { return undefined } }
+  if (Date.now() - startedAt < (input.handoffMs ?? 5000) && readNow() === template) {
+    const deadline = startedAt + input.timeoutMs
+    const step = input.pollMs ?? 500
+    let saved: string | undefined
+    while (Date.now() < deadline) {
+      await Bun.sleep(step)
+      const now = readNow()
+      if (now === undefined || now === template) continue
+      await Bun.sleep(step) // the save may still be landing — read it again once it is steady
+      const again = readNow()
+      if (again === now) { saved = now; break }
+    }
+    if (saved === undefined) return done(INTAKE_REFUSALS.EDITOR_TIMEOUT)
   }
   let text: string
   try { text = readFileSync(path, "utf8") } catch { return done(INTAKE_REFUSALS.TEMPLATE_UNREADABLE) }

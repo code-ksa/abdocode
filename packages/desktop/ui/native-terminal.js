@@ -1,4 +1,4 @@
-// node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.mjs
+// ../../node_modules/.bun/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.mjs
 var zs = Object.defineProperty;
 var Rl = Object.getOwnPropertyDescriptor;
 var Ll = (s, t) => {
@@ -9699,7 +9699,7 @@ var Dl = class extends D {
   }
 };
 
-// node_modules/.bun/@xterm+addon-fit@0.11.0/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
+// ../../node_modules/.bun/@xterm+addon-fit@0.11.0/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
 var h = 2;
 var _ = 1;
 var o = class {
@@ -9725,13 +9725,19 @@ var o = class {
   }
 };
 
-// packages/desktop/src/native-terminal.js
+// src/native-terminal.js
 function mountNativeTerminal(host, bridge, attach) {
   const L2 = (en2, ar2) => document.documentElement.lang === "ar" ? ar2 : en2;
   const root = document.createElement("div");
   root.className = "native-terminal";
   root.dir = "ltr";
-  root.addEventListener("keydown", (event) => event.stopPropagation());
+  root.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !menu.hidden) {
+      closeMenu();
+      event.preventDefault();
+    }
+    event.stopPropagation();
+  });
   root.addEventListener("mousedown", (event) => {
     if (!active || active.closed || event.target.closest("button, input, form, .nt-tools"))
       return;
@@ -9758,13 +9764,14 @@ function mountNativeTerminal(host, bridge, attach) {
   tabItems.className = "nt-tabitems";
   let disposed = false, active = null, sequence = 0, creating = false, unlistenOutput, unlistenExit;
   const terminals = new Map, early = new Map;
+  const palette = (dark) => dark ? { background: "#171717", foreground: "#e6e6e6", cursor: "#4f9cf0", cursorAccent: "#171717", selectionBackground: "#264f78", selectionInactiveBackground: "#3a3d41", black: "#000000", red: "#cd3131", green: "#0dbc79", yellow: "#e5e510", blue: "#2472c8", magenta: "#bc3fbc", cyan: "#11a8cd", white: "#e5e5e5", brightBlack: "#666666", brightRed: "#f14c4c", brightGreen: "#23d18b", brightYellow: "#f5f543", brightBlue: "#3b8eea", brightMagenta: "#d670d6", brightCyan: "#29b8db", brightWhite: "#ffffff" } : { background: "#ffffff", foreground: "#1f2328", cursor: "#2b80e6", cursorAccent: "#ffffff", selectionBackground: "#add6ff", selectionInactiveBackground: "#e5ebf1", black: "#24292f", red: "#cf222e", green: "#116329", yellow: "#7d4e00", blue: "#0969da", magenta: "#8250df", cyan: "#1b7c83", white: "#6e7781", brightBlack: "#57606a", brightRed: "#a40e26", brightGreen: "#1a7f37", brightYellow: "#633c01", brightBlue: "#218bff", brightMagenta: "#a475f9", brightCyan: "#3192aa", brightWhite: "#8c959f" };
+  const isDark = () => document.documentElement.dataset.theme === "dark" || document.body.classList.contains("dark");
   const updateTheme = () => {
-    const dark = document.documentElement.dataset.theme === "dark";
-    root.style.setProperty("--nt-background", dark ? "#171717" : "#ffffff");
-    root.style.setProperty("--nt-foreground", dark ? "#eeeeee" : "#242424");
-    for (const item of terminals.values()) {
-      item.term.options.theme = { ...item.term.options.theme, background: dark ? "#171717" : "#ffffff", foreground: dark ? "#eeeeee" : "#242424" };
-    }
+    const dark = isDark(), colors = palette(dark);
+    root.style.setProperty("--nt-background", colors.background);
+    root.style.setProperty("--nt-foreground", colors.foreground);
+    for (const item of terminals.values())
+      item.term.options.theme = colors;
   };
   const themeObserver = new MutationObserver(updateTheme);
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -9784,6 +9791,79 @@ function mountNativeTerminal(host, bridge, attach) {
       status.classList.add("error");
     }
   };
+  const clipWrite = (text) => bridge.invoke("clipboard_write_text", { text }).catch(() => navigator.clipboard.writeText(text));
+  const clipRead = () => bridge.invoke("clipboard_read_text").catch(() => navigator.clipboard.readText());
+  let flashTimer = 0;
+  const flash = (text) => {
+    status.textContent = text;
+    status.classList.remove("error");
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => {
+      if (!disposed && active)
+        status.textContent = active.closed ? status.textContent : active.cwd || "";
+    }, 1400);
+  };
+  const copySelection = (item) => {
+    const text = item?.term.getSelection();
+    if (!text)
+      return;
+    clipWrite(text).then(() => {
+      item.term.clearSelection();
+      flash(L2("Copied to clipboard", "نُسخ إلى الحافظة"));
+      item.term.focus();
+    }).catch(fail);
+  };
+  const pasteInto = (item) => {
+    if (!item || item.closed)
+      return;
+    clipRead().then((text) => {
+      if (text)
+        item.term.paste(text);
+      item.term.focus();
+    }).catch(fail);
+  };
+  const menu = document.createElement("div");
+  menu.className = "nt-menu";
+  menu.setAttribute("role", "menu");
+  menu.hidden = true;
+  const closeMenu = () => {
+    menu.hidden = true;
+  };
+  const openMenu = (event, item) => {
+    event.preventDefault();
+    const entry = (label, keys, disabled, action) => {
+      const el2 = document.createElement("button");
+      el2.type = "button";
+      el2.setAttribute("role", "menuitem");
+      el2.disabled = disabled;
+      const name = document.createElement("span");
+      name.textContent = label;
+      const hint = document.createElement("kbd");
+      hint.textContent = keys;
+      el2.append(name, hint);
+      el2.onclick = () => {
+        closeMenu();
+        action();
+      };
+      return el2;
+    };
+    menu.replaceChildren(entry(L2("Copy", "نسخ"), "Ctrl+C", !item.term.hasSelection(), () => copySelection(item)), entry(L2("Paste", "لصق"), "Ctrl+V", item.closed, () => pasteInto(item)), entry(L2("Select all", "تحديد الكل"), "Ctrl+Shift+A", false, () => {
+      item.term.selectAll();
+      item.term.focus();
+    }), entry(L2("Clear", "مسح الشاشة"), "", false, () => {
+      item.term.clear();
+      item.term.focus();
+    }));
+    menu.hidden = false;
+    const box = root.getBoundingClientRect(), w = menu.offsetWidth, h2 = menu.offsetHeight;
+    menu.style.left = Math.max(4, Math.min(event.clientX - box.left, box.width - w - 4)) + "px";
+    menu.style.top = Math.max(4, Math.min(event.clientY - box.top, box.height - h2 - 4)) + "px";
+  };
+  const onOutside = (event) => {
+    if (!menu.hidden && !menu.contains(event.target))
+      closeMenu();
+  };
+  document.addEventListener("mousedown", onOutside, true);
   const resize = (item) => {
     if (disposed || item.closed || item.view.hidden || !item.view.isConnected || item.view.clientWidth < 24 || item.view.clientHeight < 24)
       return;
@@ -9883,8 +9963,8 @@ function mountNativeTerminal(host, bridge, attach) {
     const item = { key, term: null, fit: null, view, tab, tabWrap, closed: false, id: null, cwd: null, observer: null };
     tabWrap.append(tab, button("×", L2("Close terminal", "إغلاق الطرفية"), () => close(item)));
     tabItems.append(tabWrap);
-    const dark = document.documentElement.dataset.theme === "dark" || document.body.classList.contains("dark") || document.documentElement.getAttribute("data-theme") === "dark";
-    const term = new Dl({ cursorBlink: true, cursorStyle: "bar", convertEol: false, fontFamily: "Cascadia Mono, Consolas, monospace", fontSize: 13, lineHeight: 1.18, scrollback: 5000, theme: { background: dark ? "#171717" : "#ffffff", foreground: dark ? "#eeeeee" : "#242424", cursor: "#2b80e6", selectionBackground: "#73a9e655", black: "#343434", red: "#c43c37", green: "#258549", yellow: "#94752b", blue: "#2676c9", magenta: "#9253b3", cyan: "#207b85", white: "#eeeeee" } });
+    const dark = isDark();
+    const term = new Dl({ cursorBlink: true, cursorStyle: "block", cursorInactiveStyle: "outline", convertEol: false, fontFamily: '"Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace', fontSize: 13, lineHeight: 1.2, letterSpacing: 0, scrollback: 1e4, rightClickSelectsWord: false, macOptionIsMeta: true, windowsPty: { backend: "conpty" }, allowProposedApi: false, theme: palette(dark) });
     const fit = new o;
     term.loadAddon(fit);
     item.term = term;
@@ -9901,18 +9981,27 @@ function mountNativeTerminal(host, bridge, attach) {
       inputQueue = inputQueue.then(() => bridge.invoke("terminal_write", { id: item.id, data })).catch(fail);
     });
     term.attachCustomKeyEventHandler((event) => {
-      if (event.type === "keydown" && event.ctrlKey && event.shiftKey && event.code === "KeyC") {
-        const text = term.getSelection();
-        if (text)
-          navigator.clipboard.writeText(text).catch(fail);
+      if (event.type !== "keydown" || event.altKey)
+        return true;
+      const code = event.code;
+      if (event.ctrlKey && (code === "KeyC" || code === "Insert") && (event.shiftKey || term.hasSelection())) {
+        event.preventDefault();
+        copySelection(item);
         return false;
       }
-      if (event.type === "keydown" && event.ctrlKey && event.shiftKey && event.code === "KeyV") {
-        navigator.clipboard.readText().then((text) => term.paste(text)).catch(fail);
+      if (event.ctrlKey && code === "KeyV" || event.shiftKey && !event.ctrlKey && code === "Insert") {
+        event.preventDefault();
+        pasteInto(item);
+        return false;
+      }
+      if (event.ctrlKey && event.shiftKey && code === "KeyA") {
+        event.preventDefault();
+        term.selectAll();
         return false;
       }
       return true;
     });
+    view.addEventListener("contextmenu", (event) => openMenu(event, item));
     try {
       await listenReady;
       if (disposed)
@@ -9979,13 +10068,15 @@ function mountNativeTerminal(host, bridge, attach) {
   tools.removeAttribute("id");
   tools.append(receipts, command);
   area.append(tools);
-  root.append(tabs, area, status);
+  root.append(tabs, area, status, menu);
   host.appendChild(root);
   attach(receipts);
   create();
   return () => {
     disposed = true;
     themeObserver.disconnect();
+    document.removeEventListener("mousedown", onOutside, true);
+    clearTimeout(flashTimer);
     unlistenOutput?.();
     unlistenExit?.();
     attach(null);

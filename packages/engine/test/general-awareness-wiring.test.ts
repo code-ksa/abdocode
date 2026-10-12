@@ -76,7 +76,7 @@ describe("S13.3 — المخزن في دليل التثبيت، والكتابة
 
   test("المعرفةُ العامّة تدخل المدخل بعد طبقات القياس، وبترويسة نسبها", () => {
     // هـ2 (2026-09-07): خلاصةُ الوكيل الموجِّه تلي رصدَ المشروع مباشرةً — قياسٌ عن هذا المشروع لا معرفةٌ عامّة.
-    const first = source.indexOf("? `${projectOrientation}${orientationBrief}${projectAwareness}")
+    const first = source.indexOf("? `${rootInstructionsBrief}${projectOrientation}${orientationBrief}${projectAwareness}")
     expect(first).toBeGreaterThan(0)
     const line = source.slice(first, source.indexOf("`", first + 4) + 1)
     expect(line.indexOf("${generalAwareness}")).toBeGreaterThan(line.indexOf("${priorRecall}"))

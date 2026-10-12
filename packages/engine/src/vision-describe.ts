@@ -1,5 +1,5 @@
 /**
- * عينُ الوكيل (أمر المالك 2026-09-29): نموذجُ الرؤية **يصف** ما في اللقطة، والنموذجُ الحاليّ **يقرّر**.
+ * عينُ الوكيل: نموذجُ الرؤية **يصف** ما في اللقطة، والنموذجُ الحاليّ **يقرّر**.
  *
  * قبل هذا كانت لقطةُ `shot` تُلحق بالنداء التالي فيذهب النداءُ كلُّه إلى نموذج الرؤية بوصفه الوكيلَ لتلك الخطوة —
  * فالنموذجُ الصغير (الذي يرى) هو الذي كان يقرّر، والكبيرُ (الذي لا يرى) يُعزَل. المقيس على تطبيق المالك: nemotron ultra
@@ -46,4 +46,14 @@ export function visionReportUsable(description: string): boolean {
   // جوابٌ هو نداءُ أداةٍ (مقيس: «نفّذ: read package.json 0 -1») ليس وصفاً — يُرفض كي لا يقرأه الوكيلُ أمراً.
   if (/^(?:نفّ?ذ|execute)\s*:/iu.test(text)) return false
   return !/^(?:i can(?:'|’)?t|i cannot|لا أستطيع|لا يمكنني|unable to)/iu.test(text)
+}
+
+/**
+ * 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.145): سقفُ 90 ث مُرِّر إشارةً إلى ask فلم تحترمها طبقةُ النقل (علق النداءُ 300 ث بسقفها هي).
+ * الانتظارُ نفسُه يُقطع هنا: بعد `ms` يرفض الوعدُ باسمه ويمضي الدور — والنداءُ الذي ما زال يجري لا يُنتظر.
+ */
+export function withDeadline<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label}: لم يُجب خلال ${Math.round(ms / 1000)} ث`)), ms) })
+  return Promise.race([work, deadline]).finally(() => { if (timer !== undefined) clearTimeout(timer) })
 }

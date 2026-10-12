@@ -55,7 +55,7 @@ describe("serve convergence wiring", () => {
     expect(SHIPPED_VAULT_SCRIPT).toContain("Join-Path $env:APPDATA 'abdocode\\vault'")
     expect(SHIPPED_VAULT_SCRIPT).not.toContain("abdo-akhbari")
     // هوية المساعد العربية تبقى داخل البروتوكول، بينما هوية التطبيق المرئية
-    // إنجليزية افتراضياً كما طلب المالك، من دون رجوع الاسم القديم.
+    // إنجليزية افتراضياً كما من دون رجوع الاسم القديم.
     expect(desktop).not.toContain("الإخباري")
     expect(desktop).toContain(`name: "عبدو كود".into()`)
     const config = await Bun.file(new URL("../../desktop/src-tauri/tauri.conf.json", import.meta.url)).text()
@@ -181,7 +181,7 @@ describe("serve convergence wiring", () => {
       // 10-01 — العروضُ التقديميّة، وبوّابةُ جودة الواجهات.
       "slides", "cvAnalysis", "driveUpload", "writeNudge", "auditGate",
       // 10-02 — الموصّلاتُ من المحادثة.
-      "connectTool", "remoteDeploy",
+      "connectTool", "remoteDeploy", "nativeTools", "opsSkills", "secretHostBinding",
     ])
     expect(declared.map((d) => `${d.name}: ${d.defaultOn}`).sort()).toEqual(
       ("denialBreaker: false, unattendedDeny: true, standingGrants: false, inboundGuard: true, mcpClient: false, delegation: false, reviewer: false, activity: false, walls: true, verifier: false, toolVerdict: true, trailCompaction: true, miner: true, readCompaction: true, cacheAccounting: true, resumeIntent: true, turnBudget: true, receiptFixtures: true, intentField: false"
@@ -192,7 +192,7 @@ describe("serve convergence wiring", () => {
         + ", terminalPanel: true, serversPanel: false, tasksPanel: true"
         // البند 13 (2026-09-27): المسبارُ التلقائيّ يُنفق توكنات فيبدأ مطفأً.
         + ", providerProbe: true, toolAvailability: true, overflowLadder: true, contextBreakdown: true, emptyGuard: false, verifyAfterEdit: true, keylessSearch: true, research: true, projectHooks: true, dataTable: true, osSandbox: true, imageGen: true"
-        + ", webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, cvAnalysis: true, driveUpload: true, writeNudge: true, auditGate: true, connectTool: true, remoteDeploy: true").split(", ").sort(),
+        + ", webAudit: true, releaseCheck: true, visualCompare: true, seoAudit: true, slides: true, cvAnalysis: true, driveUpload: true, writeNudge: true, auditGate: true, connectTool: true, remoteDeploy: true, nativeTools: true, opsSkills: true, secretHostBinding: false").split(", ").sort(),
     )
     // ولا صفَّ ثابتاً بقي في القشرة: الصفوف عُقدٌ تُبنى من الإطار، والاستعادة تُحسب من الأوصاف.
     expect(desktopUi).toContain('<div id="pluginrows"></div>')
@@ -296,7 +296,8 @@ describe("serve convergence wiring", () => {
     // بوابات القبول الأربع تُشتقّ من الهدف الفعليّ لا من نصّ الدور.
     for (const gate of ["requiresBuild", "requiresTypecheck", "requiresNpmAudit", "requiresTests"]) {
       // ن3: build/typecheck/tests من وحدة acceptance-goal-words؛ npm audit ما زال تعبيراً مضمَّناً — كلُّها على الهدف الفعليّ.
-      expect(source).toMatch(new RegExp(`const ${gate} = !planningOnly && (?:/[^\\n]*/iu\\.test\\(effectiveGoal\\)|goalRequires\\w+\\(effectiveGoal\\))`, "u"))
+      // 10-11: a parallel worker carries no whole-project gate (the parent builds and tests after merging)
+      expect(source).toMatch(new RegExp(`const ${gate} = !planningOnly && (?:!parallelWorker && )?(?:/[^\\n]*/iu\\.test\\(effectiveGoal\\)|goalRequires\\w+\\(effectiveGoal\\))`, "u"))
       expect(source).not.toMatch(new RegExp(`const ${gate} = !planningOnly && (?:/[^\\n]*/iu\\.test\\(turn\\.body\\)|goalRequires\\w+\\(turn\\.body\\))`, "u"))
     }
     // بوابة الخرج المسمّى في موضعَيها.
@@ -321,7 +322,8 @@ describe("serve convergence wiring", () => {
     // ذ3: `lessonsBrief` يليه بالقاعدة نفسها — لا درسَ أو مفتاحٌ معطَّل = سلسلةٌ فارغة.
     // هـ2 (2026-09-07): خلاصةُ الوكيل الموجِّه تلي رصدَ المشروع — سلسلةٌ فارغة في الوضع الأساسيّ.
     // 2026-09-13: وصفاتُ الإعداد المحفوظة (recipesBrief) تلي الدروسَ بالقاعدة نفسها — لا وصفةَ مذكورةً في الرسالة = سلسلةٌ فارغة.
-    expect(source).toContain('? `${projectOrientation}${orientationBrief}${projectAwareness}${summaryBrief}${coldMap}${priorRecall}${generalAwareness}${priorGoal !== undefined ? resumeBrief(priorGoal) : ""}${rails.semanticBrief ? semanticBrief : ""}${lessonsBrief}${recipesBrief}${secretNotice}${turn.body}${summaryAsk}`')
+    expect(source).toContain(': priorGoal === undefined ? "" : resumeBrief(priorGoal)')
+    expect(source).toContain('? `${rootInstructionsBrief}${projectOrientation}${orientationBrief}${projectAwareness}${summaryBrief}${coldMap}${priorRecall}${generalAwareness}${resumeLine}${sprintStateBrief}${rails.semanticBrief ? semanticBrief : ""}${lessonsBrief}${recipesBrief}${secretNotice}${teamBrief}${isDesktopDriveTask(turn.body) ? DESKTOP_DRIVE_BRIEF : ""}${turn.body}${summaryAsk}`')
     expect(source).toContain('const secretNotice = secretWarning === undefined ? "" : `${secretWarning.model}\\n\\n`')
     expect(source).toContain("if (priorGoal !== undefined) await emitEvent(turn.id, resumeAnnouncement(priorGoal))")
     // حقيقة الدور تحفظ الهدف الفعليّ — بدءاً ونهايةً — فالاستئناف المتسلسل يظلّ يشير إلى الهدف الحقيقيّ؛
@@ -549,7 +551,7 @@ describe("serve convergence wiring", () => {
         expect(d.site).toBe("call")
         expect(d.wired).toBe(true)
         expect(source.split('pluginOnNow("inboundGuard")').length - 1).toBe(1)
-        expect(source).toContain("const result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)")
+        expect(source).toContain("      result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)") // 10-08: داخل try (tool-crash.ts)
         // نداءٌ **واحدٌ** في الملفّ كلِّه — من داخل الغلاف. أيُّ نداءٍ ثانٍ
         // طريقٌ يلتفّ حول الحارس، وهذا العددُ هو ما يمنعه.
         expect(source.split("dispatchToolRaw(").length - 1).toBe(1)
@@ -579,7 +581,8 @@ describe("serve convergence wiring", () => {
         // هـ2 (2026-09-07): delegation ثلاثةُ قرّاء — الإعلانُ، وdelegate الفرديّ، وteam المتوازي — كلُّها عند النداء.
         // 09-17: القرّاءُ الثلاثة يمرّون من delegationEnabled() (المفتاحُ أو وضعُ عملٍ يوازي) — قارئٌ واحد للمفتاح وأربعةُ مواضع للدالّة.
         expect(source.split(`pluginOnNow("${d.name}")`).length - 1).toBe(1)
-        if (d.name === "delegation") expect(source.split("delegationEnabled()").length - 1).toBe(4)
+        // 10-11: +1 — the team-mode line («stronger/max» and the customer asked for agents) reads the same gate
+        if (d.name === "delegation") expect(source.split("delegationEnabled()").length - 1).toBe(5)
         expect(source).not.toContain(`plugins?.${d.name}`)
         continue
       }
@@ -624,6 +627,25 @@ describe("serve convergence wiring", () => {
         // البندان 9 و10 — يُسألان في ask عند بناء الطلب، بالمحلِّل نفسِه (`pluginOnNow`)، قارئاً واحداً لكلٍّ.
         expect(d.site).toBe("call")
         expect(source.split(`pluginOnNow("${d.name}")`).length - 1).toBe(1)
+        continue
+      }
+      if (d.name === "nativeTools") {
+        // 10-09 — يُسأل عند اختيار البروتوكول في ask، بالمحلِّل نفسِه، قارئاً واحداً.
+        expect(d.site).toBe("call")
+        expect(source.split('pluginOnNow("nativeTools")').length - 1).toBe(1)
+        expect(source).toContain('usesNativeToolProtocol(selected.provider, selected.model, process.env.ABDO_AGENT_PROTOCOL, pluginOnNow("nativeTools"))')
+        continue
+      }
+      if (d.name === "secretHostBinding") {
+        // البند 27 — يُسأل قبل خروج كلّ طلبٍ سحابيّ بمفتاح، بالمحلِّل نفسِه، قارئاً واحداً.
+        expect(d.site).toBe("call")
+        expect(source.split('pluginOnNow("secretHostBinding")').length - 1).toBe(1)
+        continue
+      }
+      if (d.name === "opsSkills") {
+        // 10-09 — يُسأل عند الإعلان (والسرد) وعند التحميل: قارئان بالمحلِّل نفسِه.
+        expect(d.site).toBe("call")
+        expect(source.split('pluginOnNow("opsSkills")').length - 1).toBe(2)
         continue
       }
       if (d.name === "toolAvailability") {
@@ -703,7 +725,8 @@ describe("serve convergence wiring", () => {
     // 2026-09-13: «browser owned|extension|off» من الشات يحفظ خلفيّة المتصفّح ويبثّ الإعدادات القانونيّة أيضاً.
     // 2026-09-14: «وصّل» على جسر المتصفّح يفعّل عميلَ MCP بنفسه ويبثّ الإعدادات القانونيّة (كان يُرفض بمفتاحٍ لا يعرفه المستخدم).
     // 2026-10-02: «connect <موصّل>» من المحادثة يربط ويبثّ الإعدادات القانونيّة كزرّ الإعدادات.
-    expect(source.match(/pluginFrameFields\(/gu)).toHaveLength(15)
+    // 2026-10-10: أداةُ «settings» للوكيل (عبدو كود يغيّر إعداداته من المحادثة) تبثّ الإعدادات القانونيّة بعد كلّ حفظ.
+    expect(source.match(/pluginFrameFields\(/gu)).toHaveLength(16)
     expect(source).toContain("const pluginFrameFields = (s: Settings): Record<string, unknown> => ({")
     // السياق يُمرَّر إلى الوصف: بلا وسيطٍ كانت os تُثبَّت على «other» فتُعرض كلُّ
     // قاعدةٍ على `os == windows` معطَّلةً بينما يقرؤها كلُّ دورٍ مفعَّلة.
@@ -909,7 +932,7 @@ describe("serve convergence wiring", () => {
     const sessionNew = source.indexOf('if (frame.kind === "session-new") {')
     const sessionBody = source.slice(sessionNew, source.indexOf("currentSession = `s-${Date.now()}`", sessionNew))
     expect(sessionNew).toBeGreaterThan(0)
-    // انقلبت (أمر المالك 2026-09-28): محادثةٌ جديدة لا تقطع الدورَ الجاري ولا تُرفض — الدورُ يمسك جلستَه وتاريخَه
+    // انقلبت: محادثةٌ جديدة لا تقطع الدورَ الجاري ولا تُرفض — الدورُ يمسك جلستَه وتاريخَه
     // (turnSession/turnConversation) ويكمل في الخلفية، والشاشةُ وحدها تنتقل؛ الموافقةُ المعلّقة تصل القشرةَ موسومةً بدورها.
     expect(sessionBody).not.toContain("اقطعه قبل بدء محادثةٍ جديدة")
     expect(source).toContain("const turnSession = currentSession")
@@ -1188,7 +1211,16 @@ describe("serve convergence wiring", () => {
     expect(source.indexOf("const customCommand = expandCustomCommand(secretScan.redacted, PROJECT_DIR)")).toBeGreaterThan(classify)
     const admit = source.indexOf("await serveJournal.admit({ turnId: turn.id, body: turn.body, sessionId: currentSession, attachments:turnAttachments })")
     const attachments = source.indexOf('attached=resolveAttachments(SETTINGS_FILE,currentSession,turnAttachments)')
-    const bodies = source.indexOf("turnBodies.set(turn.id, turn.body)")
+    // 10-11: دورُ الدردشة الجانبيّ (runSideChat، معرَّفٌ أعلى الملفّ) له قبولُه وسطرُ جسده — يُقاس كلٌّ في مساره.
+    const bodies = source.indexOf("turnBodies.set(turn.id, turn.body)", turnConst)
+    const side = source.indexOf("const runSideChat = async (turn:")
+    const sideAdmit = source.indexOf("await serveJournal.admit({ turnId: turn.id, body: turn.body, sessionId: session", side)
+    const sideBodies = source.indexOf("turnBodies.set(turn.id, turn.body)", side)
+    expect(side).toBeGreaterThan(0)
+    expect(sideAdmit).toBeGreaterThan(side)
+    expect(sideBodies).toBeGreaterThan(sideAdmit)
+    // ولا يُنادى إلا بالدور المبنيّ من الجسد المحجوب.
+    expect(source.indexOf("void runSideChat(turn, turnAttachments, secretNotice)")).toBeGreaterThan(turnConst)
     const remember = source.indexOf("const taskFact = remember({")
     expect(classify).toBeGreaterThan(0)
     // ⛔ الطفرة (أ): تحريكُ الحارس إلى ما بعد القبول يقلب هذا الترتيب فيسقط.

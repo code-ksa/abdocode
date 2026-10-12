@@ -38,7 +38,7 @@ describe("ح4 — a completion claim over red gates is refuted by name, never si
 describe("browser backend (owner 09-13): one setting, switchable from Settings and from chat, honoured before any surface is created", () => {
   test("setting key, validator, chat word, off-refusal and extension forwarding all exist in order", () => {
     expect(source).toContain('browserBackend?: "owned" | "extension" | "off"')
-    expect(source).toContain('"desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "turnRenewals", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled"')
+    expect(source).toContain('"desktopControlEnabled", "browserBackend", "autoCompact", "turnTokenCap", "cloudTokenCap", "turnRenewals", "turnNotifications", "updateCheckEnabled", "remoteControlEnabled", "memorySearchEnabled"')
     expect(source).toContain('return "browserBackend غير معروف (owned | extension | off)"')
     const runner = source.indexOf("const runSurfaceTool = async (name: string, rest: string, turnId: string): Promise<string> => {")
     const word = source.indexOf('if (name === "browser") {', runner)
@@ -81,7 +81,7 @@ describe("auto-compact (owner 09-13): older turns fold into a verified summary, 
 
 describe("observed 2026-09-13 on 4.0.2: browser commands are volatile (never «duplicate»), and the managed dev port follows the project stack", () => {
   test("the loop gets a volatile predicate covering the surface/desktop words, and parseServerCommand receives the project dir", () => {
-    expect(source).toContain('volatile: (command) => /^(?:(?:[a-z0-9_-]+\\.)?(?:page|shot|find|look|scroll|network|console|tabs)|dismiss|desk)\\b/u.test(command),') // ن5: tabs قراءةٌ متقلّبة
+    expect(source).toContain('volatile: (command) => /^(?:(?:[a-z0-9_-]+\\.)?(?:page|shot|find|look|scroll|network|console|tabs)|dismiss|desk|logs)\\b/u.test(command),') // ن5: tabs قراءةٌ متقلّبة
     // 09-15: أدواتُ الجسر الخارجيّة (chrome.page/chrome.shot…) متقلّبةٌ أيضاً — كانت تُحسب تكراراً بعد Enter
     expect(source).toContain('(?:[a-z0-9_-]+\\.)?(?:page|shot|find|look|scroll|network|console|tabs)')
     expect(source).toContain("const serverCommand = parseServerCommand(cmd, PROJECT_DIR)")

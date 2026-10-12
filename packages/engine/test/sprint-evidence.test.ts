@@ -70,7 +70,7 @@ describe("every claim in sprint evidence needs its own measurement after the las
   test("the engine refuses before it writes the plan, and every observed receipt feeds the clock with its output", () => {
     const cli = readFileSync(join(import.meta.dir, "..", "src", "cli.ts"), "utf8")
     const refusal = cli.indexOf("const unmeasured = sprintEvidenceRefusal(evidence, sprintEvidence, { web })")
-    const write = cli.indexOf("return sprintDone(PROJECT_DIR, Number.parseInt(num ?? \"\", 10), evidence).text")
+    const write = cli.indexOf("const closed = sprintDone(PROJECT_DIR, Number.parseInt(num ?? \"\", 10), evidence)")
     expect(refusal).toBeGreaterThan(0)
     expect(write).toBeGreaterThan(refusal)
     expect(cli.slice(refusal, write)).toContain("if (unmeasured !== undefined) return unmeasured")
@@ -204,5 +204,20 @@ describe("a PASS on fewer widths", () => {
     expect(sprintEvidenceRefusal("audit PASS ✓", newEvidenceClock())).toContain("لم تُقَس أيُّ صفحةٍ")
     noteEvidence(clock, "audit /", true, 3, full)
     expect(sprintEvidenceRefusal("audit PASS ✓ — probe / 200", clock, { web: true })).toBeUndefined()
+  })
+})
+
+// 10-08 (مقيس): «sprint done 14 :: sprint-14-measure.txt» ستَّ مرّاتٍ وأربعةُ ملفّاتِ أدلّةٍ في جذر المشروع — اسمُ الملفّ يُسمّى باسمه.
+describe("a file name as evidence is named as a file name, not as a missing measurement", () => {
+  test("the measured shapes are refused with the route: the measurement as text after ::", () => {
+    for (const evidence of ["sprint-14-measure.txt", "SPRINT-14-EVIDENCE.md", " notes/evidence.json "]) {
+      const why = sprintEvidenceRefusal(evidence, newEvidenceClock())!
+      expect(why).toContain("اسمُ ملفٍّ لا دليل")
+      expect(why).toContain("نصّاً بعد «::»")
+    }
+  })
+  test("the twin: a sentence that mentions a file is judged as a claim, not as a file name", () => {
+    const why = sprintEvidenceRefusal("read welcome.md ✓ — يذكر 4 شرائح", newEvidenceClock())
+    expect(why ?? "").not.toContain("اسمُ ملفٍّ لا دليل")
   })
 })

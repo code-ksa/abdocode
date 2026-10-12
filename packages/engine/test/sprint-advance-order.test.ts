@@ -23,7 +23,7 @@ test("judges (review, verifier, refutation) get the sprint plan state when the t
   expect(cli).toContain("متابعةُ خطّة ABDO-SPRINTS.md")
   expect(cli).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {")
   expect(cli).toContain("buildRefutePrompt(judgeGoal(), loop.answer, allReceipts, lens), {")
-  expect(cli).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], judge)")
+  expect(cli).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], selectedModel, judge)")
   expect(cli).not.toContain("buildVerifierPrompt(effectiveGoal,")
 })
 

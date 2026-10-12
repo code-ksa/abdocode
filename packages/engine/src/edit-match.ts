@@ -34,6 +34,34 @@ export type EditParse = EditPlan | string
 export const EDIT_USAGE = `الصيغة: edit <ملف> [${EDIT_ALL_FLAG}] :: النصّ القديم => النصّ الجديد`
 
 /**
+ * 10-08 (مقيس على موقع Next.js): النموذجُ نسخ مثالَ medit من الكتالوج **حرفياً** («القديم الأوّل => الجديد الأوّل @@») ثمّ ألصق
+ * الملفَّ كلَّه بعده، تحت `edit` لا `medit`. الردُّ كان سطرَ الصيغة وحده، فأعاد الأمرَ نفسَه حتى أوقفه حارسُ التكرار — دورٌ كاملٌ بلا كتابة.
+ * نصُّ المثال يُعرف هنا، والردُّ يسمّي العيوبَ الثلاثة بأسمائها: الأداة، والمثالُ المنسوخ، والملفُّ الكامل بلا «=>» (وهذا write).
+ */
+export const isUsagePlaceholder = (text: string): boolean =>
+  /^(?:القديم|الجديد)\s+(?:ال(?:أ|ا)وّ?ل|الثاني)$/u.test(text.trim().replace(/[\u064B-\u0652]/gu, ""))
+
+export function heredocEditHint(word: "edit" | "medit", rest: string): string | undefined {
+  const marker = rest.match(/\s<<<(?:\r?\n|[ \t])/u)
+  if (marker?.index === undefined) return undefined
+  const target = rest.slice(0, marker.index).trim() || "<ملف>"
+  const body = rest.slice(marker.index + marker[0].length).replace(/^\r?\n/u, "")
+  const hunks = body.split(/\r?\n@@[ \t]*(?:\r?\n|$)/u).filter((h) => h.trim().length > 0)
+  const notes: string[] = []
+  if (word === "edit") notes.push(`edit لا يقبل «<<<» — صيغتُه سطرٌ واحد: edit ${target} :: القديم => الجديد؛ والاستبدالاتُ العدّة بـmedit ${target} <<<`)
+  hunks.forEach((hunk, index) => {
+    const parts = hunk.split(/\r?\n=>[ \t]*(?:\r?\n|$)/u)
+    if (parts.length === 2 && isUsagePlaceholder(parts[0]!) && isUsagePlaceholder(parts[1]!)) {
+      notes.push(`الحزمة ${index + 1} نصُّ المثال من الكتالوج حرفياً («${parts[0]!.trim()}» => «${parts[1]!.trim()}») لا نصٌّ من ملفّك — احذفها`)
+    } else if (parts.length === 1) {
+      const lines = hunk.split(/\r?\n/u).length
+      notes.push(`الحزمة ${index + 1} بلا سطر «=>» (${lines} سطراً تبدأ بـ«${hunk.trim().split(/\r?\n/u, 1)[0]!.slice(0, 40)}») — إن كانت الملفَّ كلَّه فاكتبها كاملةً: write ${target} <<< ثمّ المحتوى`)
+    }
+  })
+  return notes.length > 0 ? `${notes.join("؛ ")}. لم يُطبَّق شيء.` : undefined
+}
+
+/**
  * يحلّل ذيلَ الأمر (ما بعد كلمة `edit`). الفصلُ على **أوّل** `::`، وأمّا فاصلُ الطرفين فبثلاث درجات:
  *
  * ١) سطرٌ لا يحمل إلا `=>` — الفاصلُ الذي لا يلتبس (وهو نفسُه فاصلُ `medit`)، فيُقدَّم على كلّ ما عداه.
@@ -45,7 +73,7 @@ export const EDIT_USAGE = `الصيغة: edit <ملف> [${EDIT_ALL_FLAG}] :: ا�
 export const parseEditCommand = (rest: string): EditParse => {
   const body = rest.trim()
   const cut = body.indexOf("::")
-  if (cut < 0) return EDIT_USAGE
+  if (cut < 0) return heredocEditHint("edit", ` ${body}`) ?? EDIT_USAGE
   const head = body.slice(0, cut).trim()
   const tail = body.slice(cut + 2)
   const line = tail.match(/\r?\n[ \t]*=>[ \t]*(?:\r?\n|$)/u)

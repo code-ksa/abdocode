@@ -15,7 +15,8 @@ test("a worker's task carries its lane: this task only, no plan or handoff edits
   expect(t).toContain(WORKER_SCOPE_NOTE)
   expect(WORKER_SCOPE_NOTE).toContain("لا تعدّل ABDO-SPRINTS.md ولا ABDO-HANDOFF.md")
   expect([0, 1, 2].map(workerPortOffset)).toEqual([10, 20, 30])
-  expect(cli).toContain('ABDO_PARALLEL_WORKER: "1", ABDO_WORKER_PORT_OFFSET: String(workerPortOffset(i))')
+  // 10-11 — and its share of the turn budget (all workers together cost one worker)
+  expect(cli).toContain('ABDO_PARALLEL_WORKER: "1", ABDO_PARALLEL_SHARE: String(tasks.length), ABDO_WORKER_PORT_OFFSET: String(workerPortOffset(i))')
   expect(cli).toContain("{ task: workerTask(task), project: PROJECT_DIR")
 })
 

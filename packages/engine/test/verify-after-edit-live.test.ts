@@ -15,7 +15,7 @@ import { stripChildEnv } from "../../tools/src/env-strip"
 const BROKEN = "نفّذ: write sum.js <<<\nmodule.exports = (a, b) => a - b\n"
 const FIXED = "نفّذ: write sum.js <<<\nmodule.exports = (a, b) => a + b\n"
 
-async function turnWith(replies: readonly string[], opts: { verify: boolean; testScript?: boolean }) {
+async function turnWith(replies: readonly string[], opts: { verify: boolean; testScript?: boolean; goal?: string }) {
   const bodies: string[] = []
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const content = replies[Math.min(bodies.length, replies.length - 1)]!
@@ -49,7 +49,7 @@ async function turnWith(replies: readonly string[], opts: { verify: boolean; tes
   try {
     send({ kind: "hello", shell: "desktop", token: "t" })
     await wait(() => frames.some((f) => f.kind === "ready"), "ready")
-    send({ kind: "submit", mode: "full-access", turn: { id: "v1", body: "Refactor sum.js for clarity" } })
+    send({ kind: "submit", mode: "full-access", turn: { id: "v1", body: opts.goal ?? "Refactor sum.js for clarity" } })
     await wait(() => frames.some((f) => f.turnId === "v1" && ["done", "refused", "unresolved"].includes(f.kind)), "turn end")
     const end = frames.find((f) => f.turnId === "v1" && ["done", "refused", "unresolved"].includes(f.kind))
     const events = frames.filter((f) => f.turnId === "v1" && f.kind === "event").map((f) => String(f.payload))
@@ -105,4 +105,27 @@ test("the twins: documentation-only edits and projects without a test script run
   const noTests = await turnWith([BROKEN, "Done."], { verify: true, testScript: false })
   expect(noTests.acceptanceRuns).toEqual([])
   expect(noTests.end).toMatchObject({ kind: "done", outcome: "completed" })
+}, 200_000)
+
+// 10-08 (مقيس على nemotron-super): npm test ✓ بعد آخر تعديل ثمّ ردٌّ فارغ ⇦ كان «empty-reply» وcheckpointed والعملُ تامّ على القرص.
+test("an empty reply after green tests that followed the last edit completes with the engine's summary; without green tests it still stops by name", async () => {
+  const green = await turnWith([BROKEN, "نفّذ: run npm test", FIXED, "نفّذ: run npm test", ""], { verify: true })
+  expect(green.events.some((e) => e.startsWith("↻ ردٌّ فارغ بعد اختباراتٍ خضراء"))).toBe(true)
+  expect(green.end).toMatchObject({ kind: "done", outcome: "completed" })
+  expect(green.sum).toContain("a + b")
+  // التوأم: الاختباراتُ حمراء فتنتهي الحقبةُ، ثمّ تبدأ التاليةُ بردٍّ فارغ ⇦ يبقى التوقّفُ باسمه.
+  const red = await turnWith([BROKEN, "نفّذ: run npm test", ""], { verify: false })
+  expect(red.events.some((e) => e.startsWith("↻ ردٌّ فارغ بعد اختباراتٍ خضراء"))).toBe(false)
+  expect(red.end).toMatchObject({ kind: "done", outcome: "checkpointed" })
+}, 200_000)
+
+// 10-08 (مقيس على nemotron-super): هدفٌ يطلب الاختبارات، والنموذجُ قال «تمّ» ولم يُعِدها بعد تغييرٍ أبطلها ⇦ checkpointed والعملُ تامّ.
+test("a goal that asks for tests: tests not yet run on the current code are run by the host with the project's own command", async () => {
+  const ok = await turnWith([FIXED.replace("a + b", "b + a"), "Done.", "Done."], { verify: true, goal: "Tidy sum.js and run the tests" })
+  expect(ok.acceptanceRuns).toContain("run npm test")
+  expect(ok.end).toMatchObject({ kind: "done", outcome: "completed" })
+  // التوأم: الاختبارُ الذي يشغّله المضيفُ أحمر ⇦ يعود للنموذج ليصلح ولا يُعلَن الإكمال.
+  const red = await turnWith([BROKEN, "Done.", "Done.", "Done."], { verify: true, goal: "Tidy sum.js and run the tests" })
+  expect(red.acceptanceRuns).toContain("run npm test")
+  expect(red.end?.outcome).not.toBe("completed")
 }, 200_000)

@@ -58,11 +58,14 @@ English:
 
 | الصلاحية | التبرير |
 |---|---|
-| `debugger` | أحداثُ ماوس وكيبورد موثوقة عبر مجال Input في بروتوكول التنقيح فقط (نقرة/كتابة/مفتاح على العنصر الذي يراه المستخدم)؛ لا تُقرأ الشبكة ولا الذاكرة. |
+| `debugger` | أحداثُ ماوس وكيبورد موثوقة (مجال Input)، ولقطةُ الصفحة كاملةً (Page.captureScreenshot)، وقراءةُ كونسول التبويب وطلبات شبكته عند طلب المستخدم وحده (أداة devtools — الرموزُ تُحجب قبل أن تصل التطبيق المحلّيّ)؛ لا شيء يغادر الجهاز. |
 | `<all_urls>` | الوكيل يعمل على أيّ صفحةٍ **سبق للمستخدم أن فتحها**، ويفتح روابط http/https يطلبها المستخدم؛ لا يمكن حصرها بنطاقاتٍ مسبقة. |
 | `scripting` | قراءةُ شجرة العناصر والأنماط المحسوبة والتمرير داخل الصفحة. |
 | `storage` | حفظُ منفذ الجسر المحلّيّ والرمز فقط. |
 | `tabs` | معرفةُ التبويب الفعّال ونافذته لالتقاط اللقطة (`captureVisibleTab`) ومتابعةِ اكتمال التحميل بعد الفتح. |
+
+**تبرير `debugger` بالإنجليزية** (لحقل المتجر):
+> Trusted mouse and keyboard events (Input domain), full-page screenshots (Page.captureScreenshot), and reading the tab's console and network requests only when the user asks (devtools tool — tokens are redacted before they reach the local app). Nothing leaves the device.
 
 **الشيفرة البعيدة (Remote code)**: **لا** — كلُّ الشيفرة داخل الحزمة؛ المقبس المحلّيّ ينقل مفرداتٍ مغلقة (page/look/scroll/open/tap/fill/key/shot) لا شيفرة.
 
@@ -84,3 +87,42 @@ English:
 - الحزمة تجتاز فحص الجاهزية (`node scripts/pack.mjs --check`): أيقونات ٤ مقاسات، وصفٌ ≤١٣٢ حرفاً، بلا `eval`، بلا وجهةٍ غير محلّية.
 - **المراجعة**: صلاحيتا `debugger` و`<all_urls>` تضعان الإضافة في مسار المراجعة المتعمّقة (أيامٌ إلى أسابيع) — متوقَّع، لا عيب.
 - **سفاري لم يُجرَّب** على هذا الجهاز (ويندوز بلا Xcode)؛ المسار الاصطناعيّ مكتوبٌ بحسب وثائق MDN/أبل ويُقاس على ماك.
+
+## ٧) النشر الآليّ
+
+`scripts/publish.mjs` يبني الحزم (فايرفوكس بمعرّف القائمة الحيّة `abdo-code-bridge@technologyksa.sa`، slug `abdo-code-bridge`)
+ثمّ يرفع وينشر عبر الواجهات الرسمية: **AMO API v5** و**Edge Add-ons API v1.1** و**Chrome Web Store API v2**. الواجهات الثلاث
+**تحدّث عنصراً قائماً فقط** — أوّلُ نشرٍ في كلّ متجرٍ يدويٌّ من لوحته.
+
+### المفاتيح التي ينشئها المالك (مرّةً واحدة)
+
+| المتجر | أين تُنشأ | الأسرار |
+|---|---|---|
+| **فايرفوكس (AMO)** | addons.mozilla.org ← Tools ← **Manage API Keys** ← Generate new credentials | `AMO_JWT_ISSUER` (JWT issuer، بصيغة `user:…`)، `AMO_JWT_SECRET` (JWT secret) |
+| **إيدج** | Partner Center ← Microsoft Edge ← **Publish API** ← (Enable the new experience) ← **Create API credentials**؛ ومعرّف المنتج من Extension overview ← Extension identity | `EDGE_CLIENT_ID`، `EDGE_API_KEY` (له تاريخ انتهاء يظهر في الصفحة — يُجدَّد قبله)، `EDGE_PRODUCT_ID` |
+| **كروم** | ١) Google Cloud Console: فعّل **Chrome Web Store API** ← OAuth consent screen ← Credentials ← **OAuth client ID** ٢) refresh token بالنطاق `https://www.googleapis.com/auth/chromewebstore` (OAuth Playground بمعرّفك أنت) ٣) معرّف الناشر من Account في لوحة المطوّر ومعرّف العنصر من صفحته — **العنصر يجب أن يوجد في لوحة كروم قبلاً** | `CWS_CLIENT_ID`، `CWS_CLIENT_SECRET`، `CWS_REFRESH_TOKEN`، `CWS_PUBLISHER_ID`، `CWS_EXTENSION_ID` |
+
+⚠️ شاشة موافقة جوجل في وضع **Testing** تُصدر refresh token ينتهي بعد ٧ أيام — انقلها إلى **In production** قبل استخراج الرمز.
+
+### أين توضع
+
+- **أسرار مستودع GitHub** (`code-ksa/abdocode` ← Settings ← Secrets and variables ← Actions) بالأسماء العشرة أعلاه حرفياً؛
+  `.github/workflows/bridge-publish.yml` يربطها بمتغيّرات البيئة.
+- و/أو **الخزنة المحلّية** عبر ملفٍّ يُفتح للمالك — **لا تُلصق في المحادثة أبداً**. السكربت يقرأ البيئة وحدها، لا يطبع سرّاً
+  (كلّ خرجٍ يُقنَّع، حتى ما يعيده المتجر) ولا يكتبه على القرص.
+- متجرٌ تنقصه مفاتيحه يُعلَن `skipped: missing <VAR>` ولا يُحسب نجاحاً؛ و`--require-all` يجعل التخطّي فشلاً.
+
+### أمر الإصدار
+
+```bash
+# ١) ارفع "version" في extension/manifest.json (والإصدارَ المثبَّت في packages/engine/test/browser-extension-pack.test.ts) وأودِع
+# ٢) الوسم يشغّل bridge-publish: يطابق الوسمَ بالمانيفست، يشغّل الاختبارين، ثمّ ينشر في المتاجر الثلاثة
+git tag bridge-vX.Y.Z
+git push origin bridge-vX.Y.Z
+```
+
+- من GitHub يدوياً: Actions ← bridge-publish ← Run workflow (`stores`، و`dry_run` لعرض الطلبات بلا نداء).
+- محلّياً: `node scripts/publish.mjs --dry-run` (لا شبكة، الاعتمادات مقنَّعة) ثمّ
+  `node scripts/publish.mjs --stores firefox,edge --notes "…"`.
+- بعد النشر: AMO تُنشئ النسخة listed وتنتظر المراجعة؛ إيدج `InProgressSubmission` = تقديمٌ سابق ما زال قيد المراجعة
+  (انتظر ثمّ أعد)؛ كروم `PENDING_REVIEW`. والإصدار يجب أن يتجاوز المنشور في كلّ متجر.

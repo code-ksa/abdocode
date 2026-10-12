@@ -87,7 +87,7 @@ test("in the shell's own palette: a custom command is offered, and it is sent wi
   const html = readFileSync(new URL("../../desktop/ui/index.html", import.meta.url), "utf8")
   const palette = html.slice(html.indexOf("    let customCommands = [];"), html.indexOf("let palSel ="))
   const items = html.slice(html.indexOf("const paletteItems = () =>"), html.indexOf("const renderPalette = () =>"))
-  const fire = html.slice(html.indexOf("const fire = () => {"), html.indexOf('el("send").onclick = fire;'))
+  const fire = html.slice(html.indexOf("const fire = () => {"), html.indexOf('el("send").onclick = () =>'))
   const calls: { body: string }[] = []
   const prompt = { value: "" }
   const context: Record<string, unknown> = {

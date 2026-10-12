@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { isInside, normalizeForCompare, protectedPathVerdict, PROTECTED_RULES } from "../src/protected-paths"
+import { isInside, normalizeForCompare, protectedCommandVerdict, protectedPathVerdict, PROTECTED_RULES } from "../src/protected-paths"
 
 const ENV = {
   APPDATA: "C:\\Users\\o\\AppData\\Roaming",
+  USERPROFILE: "C:\\Users\\o",
   SystemRoot: "C:\\Windows",
   ProgramFiles: "C:\\Program Files",
   "ProgramFiles(x86)": "C:\\Program Files (x86)",
@@ -86,6 +87,7 @@ describe("المساراتُ المحميّة — لا تُكتب ولو مُن�
       verdict("   ").rule, verdict("C:\\Windows\\x").rule, verdict("C:\\Program Files\\x").rule,
       verdict("C:\\ProgramData\\x").rule, verdict("C:\\Users\\o\\AppData\\Roaming\\abdocode\\x").rule,
       verdict("C:\\work\\myapp\\.git\\hooks\\x").rule, verdict("C:\\work\\myapp\\.git\\config").rule,
+      verdict("C:\\Users\\o\\.ssh\\id_rsa").rule, verdict("C:\\Users\\o\\.gnupg\\pubring.kbx").rule,
     ])
     for (const rule of seen) expect(PROTECTED_RULES).toContain(rule as never)
     expect(seen.size).toBe(PROTECTED_RULES.length)
@@ -105,5 +107,24 @@ describe("الحارسُ موصولٌ — ويسبق السؤال", () => {
     // والرفضُ يحمل سببَه وقاعدتَه — رفضٌ بلا سببٍ يُجادَل ولا يُصلَح.
     expect(source).toContain("لا تُفتح بموافقة.")
     expect(source).toContain("(قاعدة ${shielded.rule})")
+  })
+})
+
+// 10-08 (measured on abdo-router): the model generated a key into ~/.ssh by itself — the folder that holds the production keys and config.
+describe("the user's ~/.ssh is protected in every spelling", () => {
+  test("file tools: absolute, ~, $env:USERPROFILE and %USERPROFILE% are all refused; the rest of the home folder is not", () => {
+    for (const p of ["C:\\Users\\o\\.ssh\\id_rsa", "~/.ssh/config", "$env:USERPROFILE\\.ssh\\abdo-router-deploy", "%USERPROFILE%\\.ssh\\known_hosts"]) {
+      const v = verdict(p)
+      expect(v.allowed).toBe(false)
+      expect(v.rule).toBe("user-ssh")
+    }
+    expect(verdict("C:\\Users\\o\\Documents\\notes.txt").allowed).toBe(true)
+    expect(verdict("C:\\Users\\o\\.sshx\\a").allowed).toBe(true)
+  })
+  test("commands: ssh-keygen -f into ~/.ssh and a copy over id_rsa are refused; reading a public key is not", () => {
+    expect(protectedCommandVerdict('ssh-keygen -t ed25519 -f "C:\\Users\\o\\.ssh\\abdo-router-deploy" -N x', PROJECT, ENV).allowed).toBe(false)
+    expect(protectedCommandVerdict("Copy-Item key.pem $env:USERPROFILE\\.ssh\\id_rsa -Force", PROJECT, ENV).allowed).toBe(false)
+    expect(protectedCommandVerdict("cp ./k ~/.ssh/config", PROJECT, ENV).allowed).toBe(false)
+    expect(protectedCommandVerdict("Get-Content C:\\Users\\o\\.ssh\\agent_admin_ed25519.pub", PROJECT, ENV).allowed).toBe(true)
   })
 })

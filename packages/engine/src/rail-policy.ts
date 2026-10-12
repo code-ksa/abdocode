@@ -61,8 +61,9 @@ const PROFILES: Record<RailTier, Omit<RailProfile, "reason">> = {
   thin: { tier: "thin", coldMap: true, awarenessBrief: true, factRecall: true, errorPlaybooks: false, sprintPlanRequired: false, maxRounds: 100, qualityGuards: false, coaching: false, orientationProse: false, sessionSummary: false, semanticBrief: false, generalAwareness: false },
 }
 
-/** الصغيرةُ السحابيّة المعلَنة باسمها: mini/nano/lite/small/tiny/micro كلمةً مستقلّة، أو distill، أو حجمٌ ≤13B في المرجع. */
-const SMALL_CLOUD = /(?:^|[^a-z])(?:mini|nano|lite|small|tiny|micro)(?![a-z])|distill|(?:^|[^0-9.])(?:[1-9]|1[0-3])b(?![0-9a-z])/
+/** الصغيرةُ السحابيّة المعلَنة باسمها: mini/nano/lite/small/tiny/micro كلمةً مستقلّة، أو distill، أو حجمٌ ≤13B في المرجع.
+ *  10-08: وluna — طبقةُ OpenAI الصغرى في عائلتي gpt-5.6/gpt-6 (مقيس من صفحة الأسعار: gpt-6-luna ‎$0.10 إدخالاً مقابل sol ‎$2 وastra ‎$10). */
+const SMALL_CLOUD = /(?:^|[^a-z])(?:mini|nano|lite|small|tiny|micro|luna)(?![a-z])|distill|(?:^|[^0-9.])(?:[1-9]|1[0-3])b(?![0-9a-z])/
 
 /**
  * يشتق المستوى حين يكون الإعداد «تلقائي». `providerLocal` من سجلّ المزوّدين: `false` سحابيّ ⇦ رفيع

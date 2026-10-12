@@ -50,8 +50,9 @@ describe("wiring", () => {
     const cli = readFileSync(join(import.meta.dir, "..", "src", "cli.ts"), "utf8")
     expect(cli).toContain('if (/^point(?:\\s|$)/u.test(rest.trim())) {')
     expect(cli).toContain("const route = shotRoute(loadSettings())")
-    expect(cli).toContain("reply = await visionPointAsk(pointSystem(), pointBody(description, width, height)")
-    expect(cli).toContain("desktopPointed = { x: verdict.x, y: verdict.y, label: verdict.label, digest: shotDigest(data) }")
+    expect(cli).toContain("reply = await visionPointAsk(pointSystem(), pointBody(description, seen.width, seen.height), { mime: fitted.mime, data }")
+    expect(cli).toContain("const verdict = { ...parsed, ...scalePoint(parsed.x, parsed.y, seen, { width, height }) }")
+    expect(cli).toContain("desktopPointed = { x: verdict.x, y: verdict.y, label: verdict.label, digest: shotDigest(rawShot) }")
     // النقرُ ليس هنا: point يعود بإيصالٍ فقط، والنقرُ فعلُ النموذج التالي بالبوّابة
     const pointAt = cli.indexOf('if (/^point(?:\\s|$)/u.test(rest.trim())) {'), waitAt = cli.indexOf("// ن4 — desk wait <نصّ> [ث]")
     expect(cli.slice(pointAt, waitAt)).not.toContain("MouseButton")

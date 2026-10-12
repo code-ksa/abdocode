@@ -24,6 +24,11 @@ export interface NativeAgentReply {
   readonly text: string
   readonly command: string
   readonly call: NativeAgentCall
+  /**
+   * 10-09 — حتى أربعة نداءات قراءةٍ أصليّة في ردٍّ واحد (read/list/glob/grep)، كما يفعل Codex وClaude: نداءٌ واحدٌ للنموذج بدل أربعة.
+   * يتحقّق منها المُحوِّل؛ والحلقةُ تجيب كلَّ معرّف نداءٍ بردّه (المزوّدُ يرفض طلباً فيه معرّفٌ بلا ردّ).
+   */
+  readonly batch?: readonly { readonly command: string; readonly call: NativeAgentCall }[]
 }
 
 export interface TextAgentLoopOptions {
@@ -188,6 +193,42 @@ export const writeDigest = (content: string): string | undefined => {
   return `${match[1]!}\n[اختُصرت حمولةُ الكتابة: ${payload.length} حرفاً كُتبت فعلاً، بصمة ${stableHash(payload)}؛ الملفّ على القرص هو الحجّة — اقرأه إن احتجت محتواه]`
 }
 
+/**
+ * 10-09 — البند 7 من جرد هيرمس (كبسُ وسائط الاستدعاء) على المسار الأصيل: حمولةُ write/edit تسكن وسائطَ النداء (`toolCalls[].input`) لا
+ * نصَّ الرسالة، فلم يرها ضغطُ الكتابة (يقرأ `نفّذ: write … <<<`) ولا عدّادُ حجمه (يقرأ `content`) — وبعد أن صار المسارُ الأصيل افتراضَ
+ * nemotron بقي كلُّ ملفٍّ كُتب يُرسل كاملاً في كلّ نداءٍ تالٍ. الحقلُ الكبير يُستبدل بسطر الإيصال نفسِه (بصمةٌ وطول)، والشكلُ يبقى
+ * كائنَ وسائطٍ صالحاً؛ والمعرّفُ والاسمُ لا يُمسّان.
+ */
+const NATIVE_WRITE_FIELDS = ["content", "new_text", "old_text"] as const
+const WRITE_ARG_DIGEST = /^\[اختُصرت حمولةُ الكتابة: \d+ حرفاً/u
+const nativeArgs = (call: NativeAgentCall): Record<string, unknown> | undefined =>
+  call.input !== null && typeof call.input === "object" && !Array.isArray(call.input) ? call.input as Record<string, unknown> : undefined
+/** Pure. Uncompacted write payload carried in a native assistant message's call arguments (0 for text-protocol messages). */
+export const nativeWritePayloadChars = (message: TextAgentMessage): number => {
+  let chars = 0
+  for (const call of message.toolCalls ?? []) {
+    const args = nativeArgs(call)
+    if (args === undefined) continue
+    for (const field of NATIVE_WRITE_FIELDS) { const value = args[field]; if (typeof value === "string" && !WRITE_ARG_DIGEST.test(value)) chars += value.length }
+  }
+  return chars
+}
+/** Pure. The native assistant message with every write/edit payload replaced by its receipt line; `undefined` when nothing is left to compact. */
+export const nativeWriteDigest = (message: TextAgentMessage): TextAgentMessage | undefined => {
+  if (message.role !== "assistant" || nativeWritePayloadChars(message) === 0) return undefined
+  const toolCalls = (message.toolCalls ?? []).map((call) => {
+    const args = nativeArgs(call)
+    if (args === undefined) return call
+    const next: Record<string, unknown> = { ...args }
+    for (const field of NATIVE_WRITE_FIELDS) {
+      const value = next[field]
+      if (typeof value === "string" && value.length > 0 && !WRITE_ARG_DIGEST.test(value)) next[field] = `[اختُصرت حمولةُ الكتابة: ${value.length} حرفاً كُتبت فعلاً، بصمة ${stableHash(value)}؛ الملفّ على القرص هو الحجّة — اقرأه إن احتجت محتواه]`
+    }
+    return { ...call, input: next }
+  })
+  return { ...message, toolCalls }
+}
+
 const execDigest = (command: string, content: string, verdictLine: string): string => {
   const line = verdictLine.replace(/[\r\n]+/gu, " ").trim().slice(0, 160)
   return `نتيجة «${command.split("\n", 1)[0]}» — نُفِّذت سابقاً (${content.length} حرفاً، بصمة ${stableHash(content)})؛ الحكم: ${line.length === 0 ? "(بلا حكم)" : line}`
@@ -239,7 +280,15 @@ export const compactTrail = (
     const cutoff = Math.max(0, ordered.length - Math.max(0, keepRecent[kind] ?? Infinity))
     for (const entry of ordered.slice(0, cutoff)) {
       const message = next[entry.index]
-      if (message === undefined || isTrailDigest(message.content)) continue
+      if (message === undefined) continue
+      if (kind === "write" && message.toolCalls !== undefined && message.toolCalls.length > 0) {
+        const digested = nativeWriteDigest(message)
+        if (digested === undefined) continue
+        next[entry.index] = digested
+        compacted.write += 1
+        continue
+      }
+      if (isTrailDigest(message.content)) continue
       const content = kind === "read" ? readDigest(entry.command, message.content)
         : kind === "exec" ? execDigest(entry.command, message.content, entry.verdictLine ?? "")
           : writeDigest(message.content)
@@ -390,6 +439,9 @@ export { toolReceiptFailed } from "./tool-verdict"
 const hasEmbeddedToolTranscript = (payload: string): boolean =>
   /^\s*(?:⚙|✍|✕|⛔|📁)\s+(?:run|write|edit|patch|list|glob|grep)\b/gmu.test(payload)
 
+/** 10-09 — معاينةُ المقترح المرفوض: رأسُه وذيلُه؛ العيبُ المقيس كان في آخر الحمولة والمعاينةُ تقطع عند الحرف 500. */
+const headAndTail = (text: string): string => (text.length <= 900 ? text : `${text.slice(0, 450)}\n…\n${text.slice(-450)}`)
+
 type CommandParse =
   | Readonly<{ kind: "none" }>
   | Readonly<{ kind: "command"; command: string }>
@@ -489,7 +541,9 @@ const GLYPH_HEAD = String.raw`[\s\uFFFD\uFE0E\uFE0F\u200B-\u200F\u2060\uFEFF]*�
 const GLYPH_READ_VERB = String.raw`(?:read|list|ls|glob|grep|docs|recall|look|page|probe|logs|status|audit|seo|compare|ui-book\s+(?:list|show))\b`
 // 10-02 — بناءٌ واختبارٌ كالتي تشغّلها البوّاباتُ نفسُها، بلا ربطٍ ولا توجيه (&& ; | > <): إعادتُها لا تُتلف شيئاً.
 // وخادمُ المشروع (dev/start) خادمٌ مُدار تملكه النواة وتوقفه نهايةَ الدور — مقيس: «⚙ run npm run start --bg ⚙ wait 5000 ⚙ audit» ثلاثَ حقبٍ بأداةٍ صفر.
-const GLYPH_SAFE_RUN = String.raw`run\s+(?:--bg\s+)?(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|test|lint|typecheck|dev|start)|npx\s+tsc\s+--noEmit)\b[^&|;<>\r\n]*`
+// 10-11 (مقيس على m11 بالمثبَّت 4.0.140): «⚙ run npm install» رُفض «سطرَ سجلّ» وكلّف نداءً — التثبيتُ العاري (بأعلامٍ فقط) يثبّت ما في البيان
+// وإعادتُه لا تُتلف. أمّا «npm install <حزمة>» من سطرٍ منسوخ فيضيف اعتماديّةً — لا يُشفى.
+const GLYPH_SAFE_RUN = String.raw`run\s+(?:--bg\s+)?(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|test|lint|typecheck|dev|start)|(?:npm|pnpm|yarn|bun)\s+(?:install|ci|i)(?=(?:\s+--?[\w-]+)*\s*(?:$|[\r\n\u0600-\u06FF]))|npx\s+tsc\s+--noEmit)\b[^&|;<>\r\n]*`
 const GLYPH_COMMAND = new RegExp(String.raw`^${GLYPH_HEAD}(${GLYPH_READ_VERB}|${GLYPH_SAFE_RUN})`, "u")
 /** ذاكرةُ الحقبة كما يكتبها المحرّك — نموذجٌ يعيدها حرفيّاً يُقصّ منها. */
 /** «⚙ wait 5000» / «⚙ sleep 3» بين نداءين: انتظارٌ لا أداةَ له (الأدواتُ تنتظر الإنصاتَ بنفسها) — يُسقط ولا يُفشل الشفاء. */
@@ -616,7 +670,11 @@ const parseCommand = (text: string, verifiedEffect = false, seen = ""): CommandP
     return Object.freeze({ kind: "invalid", why: "أداة run تقبل سطر أمر واحداً بلا شرح لاحق. للبرنامج متعدد الأسطر اكتب ملفاً أولاً بأداة write ثم شغله باستدعاء run مستقل" })
   }
   if (/^(?:read|list|glob|grep)\b/u.test(command) && /[\r\n]/u.test(command)) {
-    return Object.freeze({ kind: "invalid", why: "أداة القراءة تقبل سطر استدعاء واحداً؛ لا تلحق بها شرحاً أو محتوى ملف، ولا تكرر القراءة بإضافة نص بعد المسار" })
+    // 10-11 (مقيس على CRM الثالث: 6 تصحيحاتٍ من 16، كلٌّ نداءٌ كامل ~11 ث) — سطرُ قراءةٍ تامٌّ يليه شرحٌ أو نصّ: القراءةُ بلا أثرٍ جانبيّ،
+    // فيُنفَّذ سطرُها الأوّل ويُهمل ما بعده (والنتيجةُ الحقيقيّة تُغني عن أيّ نصٍّ ألحقه النموذج). سطرٌ أوّلُ ناقص يبقى رفضاً كما كان.
+    const first = command.split(/\r?\n/u, 1)[0]!.trim()
+    if (!/^(?:read|list|glob|grep)\s+\S/u.test(first)) return Object.freeze({ kind: "invalid", why: "أداة القراءة تقبل سطر استدعاء واحداً؛ لا تلحق بها شرحاً أو محتوى ملف، ولا تكرر القراءة بإضافة نص بعد المسار" })
+    command = first
   }
   const fullFileEdit = command.match(/^edit\s+(\S+)\s+<<<\s*'([\s\S]*)'$/u)
   if (fullFileEdit !== null && !/<<<<|>>>/u.test(command)) {
@@ -658,6 +716,41 @@ const parseCommand = (text: string, verifiedEffect = false, seen = ""): CommandP
       payload = fenced[1]!.trim()
       command = `write ${syntax[1]!} <<<\n${fenced[1]!}`
     }
+    // 10-11 (مقيس على m11 بالمثبَّت 4.0.139، DeepSeek): الحمولةُ تُختم بوسمَي إغلاق بروتوكول النموذج «</｜｜DSML｜｜ parameter>» و«…invoke>» —
+    // رُفضت بهما ثلاثُ كتاباتِ شيفرةٍ كاملة (218 و161 و26 سطراً) وأُعيدت، وكُتب .gitignore بهما فعدّه المحكّمُ عيباً. وسمُ البروتوكول ليس محتوى
+    // أيِّ ملفّ، فيُنزع من ذيل الحمولة في كلّ نوع؛ وفي وسطها يبقى كما هو (فحصُ الصياغة يقول كلمته). ومثلُه «</parameter>» عارياً بلا DSML
+    // (رُفضت به كتابتان في الحقبة 6) — يُنزع من ملفّات الشيفرة وحدها، فقد يكون وسماً حقيقيّاً في XML أو HTML.
+    // 10-11 (مقيس على m11 بالمثبَّت 4.0.141): ويأتي الوسمُ بلا اسمٍ أيضاً «</｜｜DSML｜｜>» — رُفض به ملفٌّ من 207 أسطر. أيُّ وسم DSML في الذيل يُنزع.
+    const dsmlAny = "<\\/?[｜|]{1,2}\\s*DSML\\s*[｜|]{1,2}[^\\r\\n>]*>"
+    const bareTag = "<\\/?(?:parameter|invoke|tool_calls|function_calls)\\b[^\\r\\n>]*>"
+    const tagLine = syntax !== null && /\.(?:[cm]?[jt]sx?|css|scss|json)$/iu.test(syntax[1]!) ? `(?:${dsmlAny}|${bareTag})` : dsmlAny
+    const dsmlTail = syntax !== null ? new RegExp(`(?:\\r?\\n[ \\t]*${tagLine}[ \\t]*)+\\s*$`, "u").exec(command) : null
+    if (dsmlTail !== null) {
+      command = `${command.slice(0, dsmlTail.index)}\n`
+      payload = command.match(/^write\s+\S+\s+<<<(?:\r?\n|[ \t])([\s\S]*)$/u)?.[1]?.trim()
+    }
+    // 10-08 (مقيس على nemotron-ultra): حمولةٌ تُختم بسطرٍ وحده «»» — إغلاقُ اقتباس النموذج العربيّ لأمره — فرُفض الملفُّ «Unexpected »»
+    // نحو عشرين مرّةً في دورٍ واحد ولم يُحذف. سطرٌ أخيرٌ لا يحمل إلا «»» ليس شيفرةً صالحة في ملفّ شيفرةٍ أبداً، فيُنزع كما يُنزع السياج؛
+    // وفي غير الشيفرة (md، txt، html) يبقى بايتاً كما كُتب.
+    // 10-08 (مقيس على الصفحة الرئيسيّة نفسِها): ومثلُه سطرٌ أخير «>>» أو «>>>» أو «EOF» — بقيّةُ علامة إغلاقٍ لا شيفرة؛ رُفضت الصفحةُ مرّتين به.
+    // 10-11 (مقيس على CRM الخامس: ثلاثُ كتاباتٍ كاملة 79 و199 و310 سطراً رُفضت «سطرٌ فيه علامات < وحدها» وأُعيدت) — ومثلُها «<<<» تُستعمل
+    // علامةَ إغلاقٍ للحمولة كما تُفتح بها: سطرٌ أخيرٌ وحده ليس شيفرةً في ملفّ شيفرة، فيُنزع؛ وفي وسط الحمولة يبقى رفضاً.
+    const closingQuote = syntax !== null && /\.(?:[cm]?[jt]sx?|css|scss|json)$/iu.test(syntax[1]!) ? /\r?\n[ \t]*(?:»[ \t.]*|>{2,3}|<{2,3}|EOF)\s*$/u.exec(command) : null
+    if (closingQuote !== null) {
+      command = `${command.slice(0, closingQuote.index)}\n`
+      payload = payload?.replace(/\s*(?:»[ \t.]*|>{2,3}|<{2,3}|EOF)$/u, "").trim()
+    }
+    // 10-09 (مقيس على nemotron-120b، مهمّة m7 مقابل OpenCode): سياجٌ وحيدٌ على طرف حمولة شيفرة — «```js» أوّلَها بلا إغلاق أو «```» آخرَها
+    // بلا فتح — رُفض ستّاً وعشرين مرّةً في دورٍ واحد بالرسالة العامّة نفسِها، فأكل ربعَ ساعةٍ من خمسٍ وعشرين وجعل عبدو كود أبطأَ أربع مرّات.
+    // سطرُ سياجٍ وحده ليس شيفرةً في ملفّ شيفرةٍ أبداً، فيُنزع كما يُنزع «»»/EOF؛ وفي Markdown يبقى رفضاً (قد يكون محتوًى ناقصاً).
+    const codeFile = syntax !== null && /\.(?:[cm]?[jt]sx?|css|scss|json)$/iu.test(syntax[1]!)
+    if (codeFile && ((payload ?? "").match(/^[ \t]*```/gmu)?.length ?? 0) === 1) {
+      const leading = /^(write\s+\S+\s+<<<\r?\n)[ \t]*```[\w+.-]*[ \t]*(?:\r?\n|$)/u
+      const trailing = /\r?\n[ \t]*```[ \t]*\s*$/u.exec(command)
+      if (leading.test(command)) command = command.replace(leading, "$1")
+      else if (trailing !== null) command = `${command.slice(0, trailing.index)}\n`
+      payload = command.match(/^write\s+\S+\s+<<<(?:\r?\n|[ \t])([\s\S]*)$/u)?.[1]?.trim()
+    }
     if (payload !== undefined && payload.length >= 2 &&
         ((payload.startsWith("\"") && payload.endsWith("\"")) || (payload.startsWith("'") && payload.endsWith("'")))) {
       return Object.freeze({ kind: "invalid", why: "محتوى write ليس سلسلة مقتبسة: احذف علامتي الاقتباس الخارجيتين واكتب المحتوى الحقيقي مباشرة" })
@@ -666,8 +759,22 @@ const parseCommand = (text: string, verifiedEffect = false, seen = ""): CommandP
     // — فتحاً أو إغلاقاً — يجعلها فرديّة. فيمرّ ماركداون فيه كتلُ كودٍ متوازنة،
     // ويُرفض ما بقي معلَّقاً. والتغليفُ الكامل يمسكه شرطُ البدء بعلامة اقتباس مائلة.
     const unbalancedFence = ((payload ?? "").match(/^```/gmu)?.length ?? 0) % 2 === 1
-if (payload?.startsWith("`") === true || unbalancedFence || /^<{2,}\s*$/gmu.test(payload ?? "") || hasEmbeddedToolTranscript(payload ?? "") || /^✅.*(?:كتب|كتاب|إنشاء)|^(?:تم|تمت)\s+(?:كتابة|إنشاء)|^(?:ال)?ملف\s+(?:تم|تمت)\s+(?:كتابته|إنشاؤه|إنشاؤها)/gmu.test(payload ?? "")) {
-      return Object.freeze({ kind: "invalid", why: "محتوى write يجب أن يكون بايتات الملف فقط: لا تغلفه بـbacktick أو سياج كود ولا تلحق به رسالة نجاح" })
+    // 10-09: الرفضُ يسمّي السطرَ المعيب برقمه ونصّه — الرسالةُ العامّة جعلت النموذجَ يعيد الحمولةَ نفسَها ستّاً وعشرين مرّة.
+    const lines = (payload ?? "").split(/\r?\n/u)
+    const at = (re: RegExp): string => {
+      const i = lines.findIndex((line) => re.test(line))
+      return i < 0 ? "" : ` — السطر ${i + 1} من المحتوى: «${lines[i]!.trim().slice(0, 80)}»`
+    }
+    const SUCCESS_LINE = /^✅.*(?:كتب|كتاب|إنشاء)|^(?:تم|تمت)\s+(?:كتابة|إنشاء)|^(?:ال)?ملف\s+(?:تم|تمت)\s+(?:كتابته|إنشاؤه|إنشاؤها)/u
+    const TRANSCRIPT_LINE = /^\s*(?:⚙|✍|✕|⛔|📁)\s+(?:run|write|edit|patch|list|glob|grep)\b/u
+    const fault = payload?.startsWith("`") === true ? `يبدأ المحتوى بعلامة backtick${at(/^`/u)}؛ احذفها`
+      : unbalancedFence ? `سطرُ سياجٍ \`\`\` بلا نظير${at(/^```/u)}؛ احذفه — لا تغلّف المحتوى بسياج`
+      : /^<{2,}\s*$/gmu.test(payload ?? "") ? `سطرٌ فيه علامات < وحدها${at(/^<{2,}\s*$/u)}؛ احذفه`
+      : hasEmbeddedToolTranscript(payload ?? "") ? `سطرٌ منسوخٌ من سجلّ التنفيذ${at(TRANSCRIPT_LINE)}؛ احذفه`
+      : lines.some((line) => SUCCESS_LINE.test(line)) ? `رسالةُ نجاحٍ داخل المحتوى${at(SUCCESS_LINE)}؛ احذفها، فالملفّ يُكتب كما ترسله`
+      : undefined
+    if (fault !== undefined) {
+      return Object.freeze({ kind: "invalid", why: `محتوى write يجب أن يكون بايتات الملف فقط: ${fault}` })
     }
   }
   return Object.freeze({ kind: "command", command })
@@ -760,6 +867,7 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     if (nativeReply !== undefined) {
       currentIntent = intentOn ? nativeIntent(nativeReply) : undefined
       currentSummary = undefined
+      if (nativeReply.batch !== undefined && nativeReply.batch.length > 1) return { kind: "batch", commands: nativeReply.batch.map((member) => member.command) }
       return { kind: "command", command: nativeReply.command }
     }
     if (!intentOn) { currentIntent = undefined; return parseAfterSummary(text) }
@@ -831,12 +939,20 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
   const knownReceipts = new Map<string, string>()
   const lastRun = new Map<string, number>()
   const pageGenAtRun = new Map<string, number>()
+  // 10-08 (مقيس على موقع Next.js): audit فشل («انقطع اتصالُ المتصفّح»)، ثمّ open نجح، ثمّ audit نفسُه حُسب «مكرَّراً» فانتهى الدورُ
+  // بثلاث حقبٍ فارغة. أمرٌ فشل آخرُ تشغيلٍ له ثمّ نُفّذت بعده أداةُ فعلٍ (لا قراءة: open، stop، run…) ليس حلقة — هو إعادةُ محاولةٍ
+  // بعد إصلاح. والقراءةُ وحدها لا تغيّر شيئاً، فالفاشلُ بعدها يبقى مكرَّراً (الإرثُ المثبَّت)؛ والحلقةُ الحقيقيّة يمسكها كاشفُ الجدران.
+  const failedRunAt = new Map<string, number>()
+  let lastActionAt = -1
   let sequence = 0
   let pageGeneration = 0
-  const recordRun = (key: string, output: string): void => {
+  const recordRun = (key: string, output: string, failed = false): void => {
     if (!replayOn) return
     knownReceipts.set(key, output)
     lastRun.set(key, sequence)
+    if (failed) failedRunAt.set(key, sequence)
+    else failedRunAt.delete(key)
+    if (!/^(?:read|list|glob|grep)\b/u.test(key.slice(key.indexOf(":") + 1))) lastActionAt = sequence
     sequence += 1
     const generation = pageGenerationOf(output)
     if (generation !== undefined && generation > pageGeneration) pageGeneration = generation
@@ -848,6 +964,8 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     if (!replayOn) return false
     const at = pageGenAtRun.get(key)
     if (at !== undefined && pageGeneration > at) return true
+    const failedAt = failedRunAt.get(key)
+    if (failedAt !== undefined && lastActionAt > failedAt) return true
     const last = lastRun.get(key)
     return STATEFUL_ACTION.test(command) && last !== undefined && sequence - 1 > last
   }
@@ -862,7 +980,7 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
   if (options.priorReceipts !== undefined) {
     for (const receipt of options.priorReceipts) {
       seenCommandKeys.add(`${workspaceGeneration}:${receipt.command}`)
-      recordRun(`${workspaceGeneration}:${receipt.command}`, receipt.output)
+      recordRun(`${workspaceGeneration}:${receipt.command}`, receipt.output, receipt.verdict !== undefined ? verdictFailed(receipt.verdict) : toolReceiptFailed(receipt.command, receipt.output))
       if (/^(?:read|list|glob|grep)\b/u.test(receipt.command)) {
         knownReads.set(`${workspaceGeneration}:${receipt.command}`, receipt.output)
         lastReadOutput.set(receipt.command, receipt.output)
@@ -878,7 +996,7 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
   const trail: TextAgentMessage[] = [...options.history, { role: "user", content: options.input }]
   const recordAssistant = () => trail.push(nativeReply === undefined
     ? { role: "assistant", content: withoutSummary(stripMeasure(current)) }
-    : { role: "assistant", content: nativeReply.text, toolCalls: [nativeReply.call] })
+    : { role: "assistant", content: nativeReply.text, toolCalls: nativeReply.batch !== undefined && nativeReply.batch.length > 1 ? nativeReply.batch.map((member) => member.call) : [nativeReply.call] })
   // Every follow-up (including rejected proposals) belongs to the dialogue.
   // Without this, the next call sees consecutive assistant commands but loses
   // the receipts and corrections that explain why the model chose them.
@@ -905,7 +1023,7 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     let chars = 0
     for (const entry of ordered.slice(0, cutoff)) {
       const message = trail[entry.index]
-      if (message !== undefined && !isTrailDigest(message.content)) chars += message.content.length
+      if (message !== undefined) chars += (isTrailDigest(message.content) ? 0 : message.content.length) + nativeWritePayloadChars(message)
     }
     return chars
   }
@@ -945,6 +1063,19 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
    * ذ9و — إطعامُ نتيجةٍ إلى الأثر **بلا نداء نموذج**: خطوةُ الحزمة الوسطى. النتيجةُ تدخل رسالةً مستقلّةً
    * بمدخلها في `trailEntries`، فيبقى الترقيمُ ١:١ الذي تعتمده الخلاصةُ والإعادةُ والضغط.
    */
+  /** 10-09 — حزمةٌ أصليّة: يُدفع ردُّ كلّ نداءٍ عدا الأخير بمعرّفه، ويصير الأخيرُ نداءَ followUp (الذي يجيبه بمعرّفه). */
+  let nativeDuplicateBatches = 0
+  const settleNativeBatch = (texts: readonly string[], tracked: readonly (Tracked | undefined)[] = []): void => {
+    const batch = nativeReply?.batch
+    if (nativeReply === undefined || batch === undefined || batch.length < 2) return
+    batch.slice(0, -1).forEach((member, index) => {
+      trail.push({ role: "tool", content: texts[index] ?? "", toolCallId: member.call.id, name: member.call.name })
+      const kept = tracked[index]
+      if (kept !== undefined && kept.kind === "read" && compaction !== undefined) trailEntries.push({ index: trail.length - 1, ...kept })
+    })
+    const last = batch[batch.length - 1]!
+    nativeReply = { kind: "native", text: nativeReply.text, command: last.command, call: last.call }
+  }
   const appendResult = (prompt: string, tracked?: Tracked): void => {
     const tracks = tracked !== undefined &&
       ((tracked.kind === "read" && compaction !== undefined) || (tracked.kind === "exec" && tc !== undefined))
@@ -960,8 +1091,10 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     const nativeObservation = nativeReply !== undefined
     if (nativeReply !== undefined) {
       trail.push({ role: "tool", content: prompt, toolCallId: nativeReply.call.id, name: nativeReply.call.name })
-      if (tracks) {
-        trailEntries.push({ index: trail.length - 1, ...tracked })
+      if (tracks) trailEntries.push({ index: trail.length - 1, ...tracked })
+      // 10-09: كتابةٌ أصليّةٌ متعقَّبة تُطلق التمريرةَ أيضاً (كما في النمط النصّيّ) — وإلا لم تُضغط حمولاتُ الوسائط قطّ.
+      if (tracks || writeEntryPending) {
+        writeEntryPending = false
         maybeCompactTrail({ read: compaction?.keepRecent ?? 0, exec: tc?.keepRecent ?? 0 })
       }
       prompt = "واصل الهدف الأصلي من نتيجة الأداة. اختر استدعاءً واحداً منظماً إن بقي عمل."
@@ -1060,6 +1193,8 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
       if (strictOne || uncallable !== undefined) {
         stopReason = strictOne ? "invalid-command" : "uncallable"
         recordAssistant()
+        const refusedText = strictOne ? "لم يُنفَّذ: الحزمةُ معطَّلة في هذه الخطوة." : `لم يُنفَّذ: «${uncallable}» ليست أداةً مسجّلة أو ليست في سقفك.`
+        settleNativeBatch(parsed.commands.map(() => refusedText))
         current = await followUp(
           strictOne
             ? "فشل فحص القبول قبل هذا الرد: أخرج الآن استدعاءً واحداً فقط يصلح السبب، لا حزمةَ قراءة."
@@ -1071,6 +1206,17 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
       }
       // ما قُرئ في هذه الحقبة يُسقَط من الحزمة بلا إعادة تشغيل — ولا «توقّفٌ بالتكرار» يقتل إخوته.
       const admitted = parsed.commands.filter((c) => options.volatile?.(c) === true || !seenCommandKeys.has(`${workspaceGeneration}:${c}`) || rerunAllowed(c, `${workspaceGeneration}:${c}`))
+      if (admitted.length === 0 && nativeReply?.batch !== undefined && nativeReply.batch.length > 1) {
+        nativeDuplicateBatches += 1
+        recordAssistant()
+        const again = parsed.commands.map((member) => `«${member}» قُرئ سابقاً في هذه الحقبة — نتيجتُه المحفوظة:\n${shownRead(knownReads.get(`${workspaceGeneration}:${member}`) ?? "(في الأثر أعلاه)", readShow)}\n`)
+        settleNativeBatch(again)
+        if (nativeDuplicateBatches >= 2) { stopReason = "duplicate"; trail.push({ role: "tool", content: again[again.length - 1] ?? "", toolCallId: nativeReply!.call.id, name: nativeReply!.call.name }); break }
+        current = await followUp(`${again[again.length - 1] ?? ""}كلُّ نداءات هذه الحزمة قُرئت سابقاً — لا تُعدها؛ اختر خطوةً جديدة نحو الهدف.`)
+        responseGeneration += 1
+        answer = current
+        continue
+      }
       if (admitted.length === 0) {
         // S11 — حزمةٌ كلُّها مكرَّر: يُعاد إيصالُ أوّلها بسطرٍ صريح بدل قطع الحقبة (ضمن الميزانيّة).
         const head = parsed.commands[0]!
@@ -1085,10 +1231,11 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
         commands.push(member)
         seenCommandKeys.add(key)
         notifyTool(member)
-        const { output, verdict, idempotencyKey, mutated } = resolveDispatch(await options.dispatch(member))
+        const memberCall = nativeReply?.batch?.find((entry) => entry.command === member)?.call
+        const { output, verdict, idempotencyKey, mutated } = resolveDispatch(await (memberCall === undefined ? options.dispatch(member) : options.dispatch(member, memberCall)))
         seenOutput = `${seenOutput}\n${output}`.slice(-2_000_000)
         notifyToolResult(member, output, verdict, idempotencyKey, mutated)
-        recordRun(key, output)
+        recordRun(key, output, verdict !== undefined ? verdictFailed(verdict) : toolReceiptFailed(member, output))
         knownReads.set(key, output)
         readReceipts.push(`نتيجة موثقة لـ«${member}»:\n${shownRead(output, readShow)}`)
         if (verdict !== undefined ? verdictFailed(verdict) : toolReceiptFailed(member, output)) hadToolFailure = true
@@ -1098,6 +1245,18 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
         if (nudge !== undefined) readStreak += 1
       }
       recordAssistant()
+      nativeDuplicateBatches = 0
+      if (nativeReply?.batch !== undefined && nativeReply.batch.length > 1) {
+        // 10-09 — حزمةٌ أصليّة: ردٌّ لكلّ معرّف نداءٍ بترتيب الحزمة؛ المُسقَطُ مكرَّراً يُقال إنّه قُرئ (لا معرّفَ بلا ردّ).
+        const byCommand = new Map(results.map((result) => [result.tracked.command, result] as const))
+        const ordered = nativeReply.batch.map((member) => byCommand.get(member.command) ?? { text: `«${member.command}» قُرئ سابقاً في هذه الحقبة — نتيجتُه في الأثر أعلاه.\n`, tracked: undefined })
+        settleNativeBatch(ordered.map((entry) => entry.text), ordered.map((entry) => entry.tracked))
+        const tail = ordered[ordered.length - 1]!
+        current = await followUp(tail.text, tail.tracked, results.length)
+        responseGeneration += 1
+        answer = `${commands.map((used) => `⚙ ${used}`).join("\n")}\n${current}`
+        continue
+      }
       // النتائجُ كلُّها تدخل الأثر أوّلاً، والنداءُ بعد آخرها: نداءٌ واحدٌ لحزمةٍ واحدة.
       for (const earlier of results.slice(0, -1)) appendResult(earlier.text, earlier.tracked)
       const last = results[results.length - 1]!
@@ -1163,7 +1322,7 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     if (verdict?.ok === true && /^(write|edit|patch|run)\s/u.test(command)) verifiedEffect = true
     seenOutput = `${seenOutput}\n${output}`.slice(-2_000_000)
     notifyToolResult(command, output, verdict, idempotencyKey, mutated)
-    recordRun(commandKey, output)
+    recordRun(commandKey, output, verdict !== undefined ? verdictFailed(verdict) : toolReceiptFailed(command, output))
     if (isReadCommand) knownReads.set(commandKey, output)
     if (isReadCommand) {
       readReceipts.push(`نتيجة موثقة لـ«${command.split("\n", 1)[0]}»:\n${shownRead(output, readShow)}`)
@@ -1180,10 +1339,10 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     // كتابةُ ملفٍّ وحدها تصفّر السلسلة — بناءٌ أو اختبارٌ بلا تعديل ليس تقدّماً (مقيس: 13 قراءة، بناء، 10 قراءات ولم يُنبَّه).
     if (nudge !== undefined) readStreak = /^(?:write|edit|patch)\b/u.test(command) ? 0 : isReadCommand ? readStreak + 1 : readStreak
     recordAssistant()
-    // م11 — رسالةُ المساعد التي حملت حمولةَ الكتابة كاملةً تُتعقّب للضغط (النمطُ النصّيّ وحده؛ الغياب = لا تعقّب).
-    if (wc !== undefined && nativeReply === undefined && /^write\s/u.test(command)) {
+    // م11 — رسالةُ المساعد التي حملت حمولةَ الكتابة كاملةً تُتعقّب للضغط؛ 10-09: والمسارُ الأصيل أيضاً (write/edit في وسائط النداء).
+    if (wc !== undefined && (nativeReply === undefined ? /^write\s/u.test(command) : /^(?:write|edit)\s/u.test(command))) {
       const recorded = trail[trail.length - 1]
-      if (recorded !== undefined && recorded.role === "assistant" && writeDigest(recorded.content) !== undefined) {
+      if (recorded !== undefined && recorded.role === "assistant" && (nativeReply === undefined ? writeDigest(recorded.content) !== undefined : nativeWriteDigest(recorded) !== undefined)) {
         trailEntries.push({ index: trail.length - 1, command, kind: "write" })
         writeEntryPending = true
       }
@@ -1238,7 +1397,7 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     continuation: Object.freeze(trail.slice(options.history.length)),
     commands: Object.freeze(commands),
     ...(pendingCommand === undefined ? {} : { pendingCommand }),
-    ...(stopReason === "invalid-command" ? { invalidProposalPreview: withoutSummary(stripMeasure(current)).slice(0, 500) } : {}),
+    ...(stopReason === "invalid-command" ? { invalidProposalPreview: headAndTail(withoutSummary(stripMeasure(current))) } : {}),
     ...(currentSummary === undefined ? {} : { summary: currentSummary }),
     stopReason,
     readCompactions,

@@ -140,3 +140,19 @@ describe("S11 — الاستدعاءُ المكرَّر: إيصالُه السا
     expect(cliSource).toContain("· إعادة المكرَّر=${loop.duplicateReplays}${loop.readsWithoutWrite === undefined ? \"\" : ` · قراءات بلا كتابة=")
   })
 })
+
+// 10-08 (مقيس على موقع Next.js): audit فشل («انقطع اتصالُ المتصفّح»)، ثمّ open نجح، ثمّ audit نفسُه حُسب مكرَّراً فانتهى الدورُ بثلاث حقبٍ فارغة.
+describe("a failed command retried after another tool ran is a retry, not a duplicate", () => {
+  const outputs = (command: string, nth: number) => command === "audit" ? (nth === 1 ? "انقطع اتصالُ متصفّح الوكيل — فشل" : "audit: PASS — 1 صفحة") : "أُطلق متصفّح القشرة وفُتحت الواجهة"
+  test("audit fails, open succeeds, audit runs again (the measured sequence)", async () => {
+    const { dispatched } = await drive(["نفّذ: audit", "نفّذ: open http://127.0.0.1:3000", "نفّذ: audit", "تم"], outputs, { isCallable: () => true, duplicateReplay: { budget: 3 } })
+    expect(dispatched).toEqual(["audit", "open http://127.0.0.1:3000", "audit"])
+  })
+  test("the twins: the same failed command again with nothing in between is replayed, and a succeeded one is not rerun", async () => {
+    const immediate = await drive(["نفّذ: audit", "نفّذ: audit", "تم"], outputs, { isCallable: () => true, duplicateReplay: { budget: 3 } })
+    expect(immediate.dispatched).toEqual(["audit"])
+    expect(immediate.result.duplicateReplays).toBe(1)
+    const green = await drive(["نفّذ: read a.md", "نفّذ: open http://127.0.0.1:3000", "نفّذ: read a.md", "تم"], (c) => c.startsWith("read") ? "# a" : "فُتحت الواجهة", { isCallable: () => true, duplicateReplay: { budget: 3 } })
+    expect(green.dispatched).toEqual(["read a.md", "open http://127.0.0.1:3000"])
+  })
+})

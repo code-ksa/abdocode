@@ -31,6 +31,8 @@ export type ApprovalState =
       readonly mode: string
       /** رأى المشغّل معاينة الفرق لهذا الدور قبل السؤال؟ (زرّ «المعاينة»). */
       readonly diffSeen: boolean
+      /** 10-09 — النطاقاتُ التي أعلنها المحرّك لهذا السؤال («tool» = منحٌ لهذه الأداة في الجلسة)؛ القشرةُ لا تخترع نطاقاً. */
+      readonly scopes: readonly string[]
     }
   | {
       readonly kind: "deciding"
@@ -39,6 +41,7 @@ export type ApprovalState =
       readonly cls: string
       readonly mode: string
       readonly diffSeen: boolean
+      readonly scopes: readonly string[]
       readonly choice: "approve" | "deny"
     }
 
@@ -103,6 +106,7 @@ export const fold = (store: ApprovalStore, frame: Record<string, unknown>): Appr
         cls: asText(frame.class),
         mode: asText(frame.mode),
         diffSeen: store.diffs.includes(turnId),
+        scopes: Object.freeze(Array.isArray(frame.scopes) ? (frame.scopes as unknown[]).filter((s): s is string => typeof s === "string") : []),
       }),
       diffs: store.diffs,
     }))

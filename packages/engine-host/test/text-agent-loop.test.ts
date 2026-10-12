@@ -674,22 +674,43 @@ describe("owned text agent loop", () => {
     expect(result.stopReason).toBe("invalid-command")
   })
 
-  test("rejects a dangling closing code fence inside a write payload", async () => {
-    const dispatched: string[] = []
-    const answers = [
+  // 10-09 (مقيس على nemotron-120b، m7 مقابل OpenCode): سياجٌ وحيدٌ على طرف حمولة شيفرة رُفض 26 مرّةً بالرسالة العامّة نفسِها فصار
+  // عبدو كود أبطأَ أربع مرّات. في ملفّ الشيفرة يُنزع؛ والتوأمُ: في Markdown يبقى رفضاً، والرفضُ يسمّي السطرَ المعيب.
+  test("strips a lone fence on the edge of a code payload and writes the bytes", async () => {
+    for (const reply of [
       "نفّذ: write app/layout.tsx <<<\nexport default function Layout() { return null }\n```",
-      "تم التصحيح",
-    ]
+      "نفّذ: write app/layout.tsx <<<\n```tsx\nexport default function Layout() { return null }",
+    ]) {
+      const dispatched: string[] = []
+      const answers = [reply, "تم"]
+      await runTextAgentLoop({
+        input: "أصلح layout",
+        history: [],
+        ask: async () => answers.shift() ?? "تم",
+        dispatch: async (command) => { dispatched.push(command); return "written" },
+        isCallable: (name) => name === "write",
+        maxRounds: 1,
+      })
+      expect(dispatched).toHaveLength(1)
+      expect(dispatched[0]!.replace(/\n$/u, "")).toBe("write app/layout.tsx <<<\nexport default function Layout() { return null }")
+    }
+  })
+
+  test("a dangling fence in Markdown is still refused, and the refusal names the line", async () => {
+    const dispatched: string[] = []
+    const asked: string[] = []
+    const answers = ["نفّذ: write NOTES.md <<<\n# ملاحظات\n\nسطر\n```", "تم التصحيح"]
     const result = await runTextAgentLoop({
-      input: "أصلح layout",
+      input: "اكتب الملاحظات",
       history: [],
-      ask: async () => answers.shift() ?? "تم",
+      ask: async (messages) => { asked.push(JSON.stringify(messages)); return answers.shift() ?? "تم" },
       dispatch: async (command) => { dispatched.push(command); return "written" },
       isCallable: (name) => name === "write",
       maxRounds: 1,
     })
     expect(dispatched).toHaveLength(0)
     expect(result.stopReason).toBe("invalid-command")
+    expect(asked.join("\n")).toContain("السطر 4 من المحتوى: «```»")
   })
 
   // التوأمُ الإيجابي لحارس السياج (2026-09-06): قبل هذا الإصلاح كان الفحصُ
@@ -766,7 +787,8 @@ describe("owned text agent loop", () => {
   test("rejects a dangling heredoc marker inside the source payload", async () => {
     const dispatched: string[] = []
     const answers = [
-      "نفّذ: write app/page.tsx <<<\nexport default function Page() { return null }\n<<",
+      // 10-11: a trailing «<<»/«<<<» line is a closing marker and is stripped (closing-lt-marker.test.ts); INSIDE the payload it stays a refusal.
+      "نفّذ: write app/page.tsx <<<\nexport default function Page() { return null }\n<<\nexport const extra = 1",
       "تم التصحيح",
     ]
     const result = await runTextAgentLoop({
@@ -928,8 +950,9 @@ describe("owned text agent loop", () => {
   })
 
   test("rejects transcript syntax and embedded receipts before a shell command runs", async () => {
+    // 10-11 — «⚙ run npm install» العاري صار يُشفى نداءً (glyph-install-heal.test.ts)؛ التثبيتُ بحزمةٍ مسمّاة من سطرٍ منسوخ يبقى رفضاً.
     for (const proposal of [
-      "⚙ run npm install",
+      "⚙ run npm install left-pad",
       "نفذ: run npm install\n\n⚙ run npm install",
     ]) {
       const dispatched: string[] = []

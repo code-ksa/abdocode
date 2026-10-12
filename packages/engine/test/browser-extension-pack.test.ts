@@ -20,7 +20,7 @@ describe("browser extension store packages", () => {
       const chrome = JSON.parse(readFileSync(join(out, "unpacked", "chrome-edge", "manifest.json"), "utf8"))
       expect(chrome.manifest_version).toBe(3)
       expect(chrome.background.service_worker).toBe("background.js")
-      expect(chrome.version).toBe("0.6.8")
+      expect(chrome.version).toBe("0.7.0")
       expect(firefox.version).toBe(chrome.version)
       expect(firefox.background).toEqual({ scripts: ["background.js"] })
       expect(firefox.permissions).not.toContain("debugger")

@@ -84,7 +84,8 @@ var fold = (store, frame) => {
         request: asText(frame.request),
         cls: asText(frame.class),
         mode: asText(frame.mode),
-        diffSeen: store.diffs.includes(turnId)
+        diffSeen: store.diffs.includes(turnId),
+        scopes: Object.freeze(Array.isArray(frame.scopes) ? frame.scopes.filter((s) => typeof s === "string") : [])
       }),
       diffs: store.diffs
     }));
@@ -140,6 +141,10 @@ var seat = (deps) => ({
     const approve = make(deps.document, "button", "apv");
     approve.type = "button";
     approve.textContent = "✓ اسمح";
+    const session = make(deps.document, "button", "apv-session");
+    session.type = "button";
+    session.hidden = true;
+    session.textContent = "✓ اسمح لهذه الأداة في الجلسة";
     const deny = make(deps.document, "button", "dny");
     deny.type = "button";
     deny.textContent = "✕ ارفض";
@@ -149,9 +154,11 @@ var seat = (deps) => ({
     preview.textContent = "المعاينة ▲";
     const state = make(deps.document, "span", "apv-state");
     bind(approve, "click", () => deps.act("approve"));
+    bind(session, "click", () => deps.act("approve", "tool"));
     bind(deny, "click", () => deps.act("deny"));
     bind(preview, "click", () => deps.reveal());
     row.appendChild(approve);
+    row.appendChild(session);
     row.appendChild(deny);
     row.appendChild(preview);
     row.appendChild(state);

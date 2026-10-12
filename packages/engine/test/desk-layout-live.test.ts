@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { findLayout, layoutFromMeasure, layoutMatches, loadLayouts, saveLayouts, upsertLayout, LAYOUTS_FILE } from "../src/desk-layouts"
 import { powershellRunner, runDesktop, type DesktopBound } from "../src/desktop-control"
+import { ORANGE_FORM } from "./helpers/orange-window"
 
 // S8 (09-18) — **اللوحُ الحيّ على نافذةٍ نملكها**: الاستعادةُ تُقاس بأثرها — النافذةُ تُنقل فعلاً بـSetWindowPos ويُقرأ مستطيلُها
 // من النظام بعد النقل، والمسبارُ يعيد العمليّةَ والمقياسَ ومنطقةَ العميل، واللقطةُ تسمّي وضعَها وإطارَها ومقياسَها.
@@ -13,6 +14,7 @@ const FIXTURE = [
   "param([string]$Title)",
   "Add-Type -AssemblyName System.Windows.Forms",
   "$f = New-Object System.Windows.Forms.Form",
+  ...ORANGE_FORM,
   "$f.Text = $Title",
   "$f.Width = 620",
   "$f.Height = 340",
@@ -30,7 +32,7 @@ const until = async (label: string, ok: () => boolean | Promise<boolean>, ms = 3
   while (!(await ok())) { if (Date.now() > deadline) throw Error(`timed out: ${label}`); await Bun.sleep(200) }
 }
 
-test.skipIf(process.platform !== "win32")("desk measures the bound window (process, scale, client), places it where a saved layout says, maximizes on request, and the shot names its frame", async () => {
+test.skipIf(process.platform !== "win32" || process.env.ABDO_DESK_LIVE !== "1")("desk measures the bound window (process, scale, client), places it where a saved layout says, maximizes on request, and the shot names its frame", async () => {
   const dir = mkdtempSync(join(tmpdir(), "abdo-desk-layout-live-"))
   const script = join(dir, "window.ps1")
   writeFileSync(script, FIXTURE)

@@ -353,10 +353,23 @@
   .block.warnb { border-color: var(--bad); }
   .block .role { font-size: var(--fs-meta); color: var(--dim); margin-bottom: 6px; display: flex; gap: 10px; align-items: center; }
   .block .role .who { color: var(--accent); font-weight: 600; }
-  #interruptbar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px; background: var(--bg); border-top: 1px solid var(--border); z-index: 5; }
-  #interruptbar button { background: none; border: 1px solid var(--bad); color: var(--bad); border-radius: 6px; padding: 4px 12px; cursor: pointer; font: inherit; }
-  #interruptstate { color: var(--muted); font-size: var(--fs-meta); }
-  .block .role .stop { margin-inline-start: auto; background: none; border: 1px solid var(--bad); color: var(--bad); border-radius: 5px; font-size: var(--fs-meta); padding: 1px 8px; cursor: pointer; font-family: inherit; }
+  /* 10-09: لا شريطَ مقاطعة منفصل — زرُّ الإرسال نفسُه يصير مربّعَ إيقاف، وعلامةُ عبدو تتحرّك ما دام الدور يعمل. */
+  .abdo-working { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); }
+  .abdo-working .t { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .abdo-mark { width: 18px; height: 18px; overflow: visible; flex: none; }
+  .abdo-mark path { transform-box: fill-box; transform-origin: center; }
+  .abdo-mark .l { animation: abdo-l 1.2s ease-in-out infinite; }
+  .abdo-mark .r { animation: abdo-r 1.2s ease-in-out infinite; }
+  .abdo-mark .a { animation: abdo-a 1.2s ease-in-out infinite; }
+  @keyframes abdo-l { 50% { transform: translateX(-2.6px); } }
+  @keyframes abdo-r { 50% { transform: translateX(2.6px); } }
+  @keyframes abdo-a { 0%, 100% { opacity: .5; transform: scale(.84); } 50% { opacity: 1; transform: scale(1.08); } }
+  @media (prefers-reduced-motion: reduce) { .abdo-mark path { animation: none; } }
+  #queued { max-width: 780px; margin: 0 auto 6px; display: flex; flex-direction: column; gap: 4px; }
+  #queued:empty { display: none; }
+  #queued .q { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px dashed var(--line); border-radius: 10px; color: var(--dim); font-size: var(--fs-meta); background: var(--panel); }
+  #queued .q span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #queued .q button { border: 0; background: transparent; color: var(--dim); cursor: pointer; font: inherit; }
   .block .body { font-size: var(--fs-body); line-height: 1.85; white-space: pre-wrap; }
   /* Courier New يحمل حروفاً عربيّةً بعرضٍ ثابت فتنفصل — العربيّةُ تسقط إلى Segoe UI فتتّصل. */
   .block.sysb .body { font-family: Consolas, "Segoe UI", Cairo, monospace; font-size: var(--fs-ui); }
@@ -448,7 +461,7 @@
   /* IDEA 6 — نقاط التعليق: المِرساة وغلافُ المساهمة بلا صندوق، فالتخطيط لا
      يتغيّر بدخولهما بين الأب والشجرة (المساهمة تبقى ابنَ الأب في الفلكس نفسه). */
   [data-anchor], [data-slot] { display: contents; }
-  /* بطاقةُ الإذن (2026-09-28، بطلب المالك: كمظهر كلود وشات جي بي تي): بطاقةٌ هادئة، الأمرُ في صندوق، والقرارُ زرّان — أساسيٌّ ومحيط. */
+  /* بطاقةُ الإذن: بطاقةٌ هادئة، الأمرُ في صندوق، والقرارُ زرّان — أساسيٌّ ومحيط. */
   #approvalseat { display: flex; flex-direction: column; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow); }
   #approvalseat[hidden] { display: none; }
   #composer.approving > #prompt, #composer.approving > .row { display: none; }
@@ -536,13 +549,15 @@
     cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
   #send:disabled { opacity: .35; cursor: default; }
+  #send svg { width: 12px; height: 12px; display: block; }
+  #send.stop { background: var(--sendbg); color: var(--sendfg); }
   #quickrow { max-width: 720px; margin: 10px auto 0; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   #quickrow .chip { background: var(--card); }
 
   footer { padding: 6px 24px; border-top: 1px solid var(--line); font-size: var(--fs-chip); color: var(--dim); font-family: Consolas, monospace; direction: ltr; text-align: left; }
 
   /* ---- لوحة المتصفّح داخل النافذة (نمط كوديكس) — الأيقونة تفتحها انزلاقاً ---- */
-  /* كان عائماً فوق الركن الذي يجلس فيه «إعدادات» فيتراكب معه (لقطة المالك).
+  /* كان عائماً فوق الركن الذي يجلس فيه «إعدادات» فيتراكب معه.
      السببُ أُزيل لا حُوصر: صار زرَّ أيقونةٍ في ترويسة الجلسة مع أخواته، فلا
      يطفو فوق شيءٍ أصلاً ولا يحتاج أحدٌ أن يحجز له مكاناً. */
   #pane { width: 100%; min-width: 0; overflow: hidden; border-inline-start: 1px solid var(--line);
@@ -800,7 +815,7 @@
     <div id="slot-transcript-node" data-anchor="transcript.node"></div>
     <div id="composerwrap" class="center">
       <div id="palette"></div>
-      <div id="interruptbar" hidden><button id="interruptbtn" type="button">⏹ مقاطعة (Esc)</button><span id="interruptstate"></span></div>
+      <div id="queued" aria-live="polite"></div>
       <div id="composer">
         <input id="prompt" placeholder="اسأل عبدو…" autocomplete="off">
         <div class="row">
@@ -1274,17 +1289,21 @@
     const openAnswerBlock = (turnId) => {
       const node = addBlock("assistant", uiText("AbdoCode", "عبدو"), "");
       const state = node.querySelector(".state");
-      const started = Date.now();
-      const stop = document.createElement("button");
-      stop.className = "stop"; stop.textContent = uiText("⏹ Interrupt (Esc)", "⏹ مقاطعة (Esc)");
-      stop.onclick = () => interruptNow();
-      node.querySelector(".role").appendChild(stop);
-      const bar = el("interruptbar"); bar.hidden = false; el("interruptbtn").onclick = () => interruptNow();
-      const tick = setInterval(() => { const t = uiText("Working · ", "يعمل · ") + Math.round((Date.now() - started) / 1000) + "s"; state.textContent = t; el("interruptstate").textContent = t; }, 500);
+      // البدءُ من لحظة الإرسال لا من فتح اللوح: العودةُ إلى محادثةٍ تعمل تعيد فتحَ لوحها فلا يعود العدّ إلى الصفر.
+      const started = turnStartedAt.get(turnId) ?? Date.now();
+      const mark = document.createElement("span"); mark.className = "abdo-working";
+      mark.innerHTML = ABDO_MARK + '<span class="t"></span>';
+      state.replaceChildren(mark);
+      const label = mark.querySelector(".t");
+      const paint = () => { label.textContent = uiText("Working · ", "يعمل · ") + Math.round((Date.now() - started) / 1000) + "s"; };
+      paint();
+      const tick = setInterval(paint, 500);
       const entry = {
         node, bodyEl: node.querySelector(".body"), lines: [], streamed: false,
+        // لوحٌ يُطوى لأنّ المستخدم انتقل إلى محادثةٍ أخرى: يتوقّف عدّادُه ولا يُحسم الدور — الدورُ ما يزال يعمل في الخلفية.
+        dispose() { clearInterval(tick); },
         finish(interruptedFlag, outcome) {
-          clearInterval(tick); stop.remove(); el("interruptbar").hidden = true;
+          clearInterval(tick);
           // مقيس 09-14 على 4.0.14: رفضُ المزوّد كان يُوسم «قوطع بيد المشغّل» — الوسمُ من سبب النهاية لا من «ليست done».
           const ending = interruptedFlag ? "interrupted" : (outcome || "done");
           // داخل #feed المحميّ من الترجمة الآليّة — فتُترجم هنا بلغة الواجهة.
@@ -1436,7 +1455,7 @@
       const chipModel = el("modelchip")?.querySelector(".lbl")?.textContent?.trim();
       el("statusline").textContent = Shell.statusLine({
         model: modelName === "AbdoCode" && chipModel ? chipModel : modelName, mode, directory: rootDir || "…", contextLeft,
-        working: working ? { startedAtMs: working, nowMs: Date.now() } : undefined,
+        working: working && runningHere() ? { startedAtMs: working, nowMs: Date.now() } : undefined,
       });
     };
     setInterval(() => { if (working) renderStatus(); }, 1000);
@@ -1470,9 +1489,58 @@
       }
     };
     let engineUp = false;
+    // 10-09 (مقيس على المثبَّت 4.0.111): بعد «أثق، افتحه» يعيد المحرّكُ الاتّصال، وEnter في تلك الثواني كان يُبتلع بلا كلمة
+    // (`!engineUp` ⇦ return). الرسالةُ تُحجز ويُقال ذلك، وتُرسل فور «ready».
+    let heldSend = false;
+    // بطاقةُ الثقة المعلّقة: تقول «فُتح» حين يصل إطارُ المشروع موثوقاً، لا «جارٍ الفتح…» إلى الأبد.
+    let pendingTrustCard = null;
     let lastPrompt = "";
     const sendFrame = (frame) => invoke("engine_send", { line: JSON.stringify(frame) });
     const refreshSessions = () => sendFrame({ kind: "history" });
+
+    // 10-09 — حالةُ الدور لمحادثته لا للنافذة: الدورُ الجاري يخصّ جلسته، والمحادثةُ الجديدة أو الأخرى لا ترى «يعمل» ولا مربّعَ إيقاف.
+    const ABDO_MARK = '<svg class="abdo-mark" viewBox="0 0 32 32" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path class="l" d="m8 10-4 6 4 6"/><path class="r" d="m24 10 4 6-4 6"/><path class="a" d="m11 22 5-13 5 13m-8-4h6"/></g></svg>';
+    const STOP_GLYPH = '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="1" width="10" height="10" rx="2" fill="currentColor"/></svg>';
+    const turnStartedAt = new Map();
+    const runningTurnId = () => outbox.kind === "offering" ? outbox.turn.id : null;
+    const runningHere = () => {
+      const id = runningTurnId();
+      if (id === null) return false;
+      const owner = turnSessions.get(id);
+      return owner === undefined || owner === currentSessionId;
+    };
+    // رسائلُ كُتبت والدورُ يعمل (هنا أو في محادثةٍ أخرى): تنتظر في جلستها وتُرسل وحدها حين يفرغ المحرّك وجلستُها معروضة.
+    const queuedBySession = new Map();
+    const queueKey = () => currentSessionId ?? "";
+    const renderQueued = () => {
+      const box = el("queued"); if (!box) return;
+      box.replaceChildren();
+      for (const [index, item] of (queuedBySession.get(queueKey()) ?? []).entries()) {
+        const row = document.createElement("div"); row.className = "q";
+        const text = document.createElement("span"); text.dir = "auto"; text.textContent = "⏳ " + item.body;
+        const drop = document.createElement("button"); drop.type = "button"; drop.textContent = "✕"; drop.title = uiText("Remove from queue", "أزل من الانتظار");
+        drop.onclick = () => { const list = queuedBySession.get(queueKey()) ?? []; list.splice(index, 1); renderQueued(); };
+        row.append(text, drop); box.appendChild(row);
+      }
+    };
+    const renderSend = () => {
+      const button = el("send"); if (!button) return;
+      const typed = (el("prompt")?.value ?? "").trim() !== "";
+      const stopMode = runningHere() && !typed;
+      button.disabled = false;
+      button.classList.toggle("stop", stopMode);
+      button.innerHTML = stopMode ? STOP_GLYPH : "↑";
+      button.title = stopMode ? uiText("Stop (Esc)", "أوقف (Esc)") : runningTurnId() !== null ? uiText("Queue — sent when the running turn ends", "في الانتظار — يُرسل حين ينتهي الدور الجاري") : uiText("Send", "أرسل");
+      button.setAttribute("aria-label", button.title);
+    };
+    const drainQueue = () => {
+      if (working !== undefined || !engineUp) return;
+      const list = queuedBySession.get(queueKey());
+      if (!list || list.length === 0) return;
+      const next = list.shift();
+      renderQueued();
+      submitBody(next.body, next.prepared);
+    };
 
     const interruptNow = () => {
       if (outbox.kind === "offering") {
@@ -1489,9 +1557,10 @@
       if (!result.ok) { notice("مرفوض: " + result.why); return null; }
       outbox = result.state;
       lastPrompt = body;
+      if (currentSessionId !== null) turnSessions.set(turn.id, currentSessionId);
+      turnStartedAt.set(turn.id, Date.now());
       window.AbdoDesktopShell?.submitted(turn, submission);
-      el("send").disabled = true;
-      working = Date.now(); renderStatus();
+      working = Date.now(); renderStatus(); renderSend();
       addBlock("user", uiText("You", "أنت"), body);
       openAnswerBlock(turn.id);
       // IDEA 8: نصّ الدور تعرفه القشرة وحدها (لا إطار وارد يحمله) فيُسجَّل هنا.
@@ -1532,7 +1601,27 @@
       b.onclick = () => { if (!confirm(uiText("Restore the files this turn changed to their previous content? Files it created are removed.", "تُعاد الملفّات التي غيّرها هذا الدور إلى ما كانت عليه، وتُحذف التي أنشأها. متابعة؟"))) return; b.disabled = true; operatorSubmit("rollback " + f.turnId); };
       row.appendChild(b); entry.node.appendChild(row);
     };
+    // 10-10 — دردشةٌ بجانب مهمّة كودٍ تعمل في جلسةٍ أخرى: دورُها لا يمرّ بالصندوق ولا بـworking (هما للدور الجاري)، فتُحسم وحدها هنا.
+    const sideTurns = new Set();
+    const submitSide = (body, submission) => {
+      turnCounter += 1;
+      const turn = { id: "turn-" + turnCounter + "-" + Date.now(), body };
+      if (currentSessionId !== null) turnSessions.set(turn.id, currentSessionId);
+      sideTurns.add(turn.id); turnStartedAt.set(turn.id, Date.now());
+      addBlock("user", uiText("You", "أنت"), body);
+      openAnswerBlock(turn.id);
+      void sendFrame({ kind: "submit", turn, mode, conversationMode: "chat", attachments: submission.attachments ?? [] }).catch(() => {
+        window.AbdoDesktopShell?.frame({ kind: "refused", turnId: turn.id, why: uiText("The request could not reach the engine.", "تعذّر إيصال الطلب إلى المحرك.") });
+      });
+      return turn.id;
+    };
     const settle = (turnId, interruptedFlag, outcome) => {
+      if (sideTurns.has(turnId)) {
+        sideTurns.delete(turnId); turnStartedAt.delete(turnId);
+        const sideEntry = blocks.get(turnId);
+        if (sideEntry && sideEntry.finish) sideEntry.finish(interruptedFlag, outcome);
+        return;
+      }
       if (pendingSubmissionEnvelope?.turn.id === turnId) pendingSubmissionEnvelope = null;
       const entry = blocks.get(turnId);
       if (entry && entry.finish) entry.finish(interruptedFlag, outcome);
@@ -1540,11 +1629,15 @@
         outbox = Turns.acknowledge(outbox, turnId);
         outbox = { kind: "idle" };
       }
-      working = undefined; renderStatus();
-      el("send").disabled = false;
+      working = undefined; renderStatus(); renderSend();
+      turnStartedAt.delete(turnId);
+      // الرسالةُ المنتظِرة لهذه المحادثة تنطلق بعد أن يُحسم الدورُ كاملاً (setTimeout: بعد بقيّة معالجة الإطار).
+      setTimeout(drainQueue, 0);
     };
 
     const clearFeed = () => {
+      // 10-09 — مقيس من لقطة المستخدم: «يعمل · 113s» بقي في المحادثة الجديدة لأنّ عدّاد اللوح المطويّ ظلّ يكتب. يُوقف ولا يُحسم الدور.
+      for (const entry of blocks.values()) entry.dispose?.();
       for (const blk of feed.querySelectorAll(".block")) blk.remove();
       const marker = el("removed-marker"); if (marker) marker.remove();
       blocks.clear(); toolBlocks.clear(); planBlocks.clear(); approvalBlocks.clear(); removedBlocks = 0;
@@ -1719,20 +1812,22 @@
       const deciding = state.kind === "deciding";
       seat.querySelector(".apv").disabled = deciding;
       seat.querySelector(".dny").disabled = deciding;
+      const session = seat.querySelector(".apv-session");
+      if (session) { session.hidden = !(Array.isArray(state.scopes) && state.scopes.includes("tool")); session.disabled = deciding; }
       seat.querySelector(".apv-preview").hidden = !state.diffSeen;
       seat.querySelector(".apv-state").textContent = deciding
         ? (state.choice === "approve" ? "أُرسل السماح — بانتظار قرار الدفتر…" : "أُرسل الرفض — بانتظار قرار الدفتر…")
         : "";
     };
     // النقرة تنقل إلى «يُقرَّر» ولا تمحو شيئاً — سطر الدفتر هو الذي يُنهي المقعد.
-    const approvalAct = (choice) => {
+    const approvalAct = (choice, scope) => {
       if (Approval === null || approvalStore.state.kind !== "asked") return;
       const turnId = approvalStore.state.turnId;
       const folded = Approval.choose(approvalStore, choice);
       if (folded.refused) { notice("موافقة: " + folded.refused); return; }
       approvalStore = folded.store;
       renderApproval();
-      sendFrame({ kind: choice === "approve" ? "approve" : "deny", turnId: turnId });
+      sendFrame({ kind: choice === "approve" ? "approve" : "deny", turnId: turnId, ...(choice === "approve" && scope === "tool" ? { scope: "tool" } : {}) });
     };
     const approvalFold = (f) => {
       if (Approval === null) return;
@@ -1784,7 +1879,7 @@
     // ولا تعرف الشجرةُ شيئاً عن الإطارات ولا المخازن.
     const mountApproval = (Mount) => slots.register(Mount.seat({
       document: document,
-      act: (choice) => approvalAct(choice),
+      act: (choice, scope) => approvalAct(choice, scope),
       reveal: () => {
         for (const block of feed.querySelectorAll(".block.sysb")) {
           if (block.querySelector(".who").textContent.indexOf("معاينة") >= 0) block.scrollIntoView({ block: "center" });
@@ -1947,6 +2042,7 @@
         if (typeof f.sessionId === "string" && f.sessionId) currentSessionId = f.sessionId;
         customCommands = Array.isArray(f.customCommands) ? f.customCommands : [];
         engineUp = true;
+        if (heldSend) { heldSend = false; setTimeout(() => fire(), 0); }
         requestSettingsSnapshot();
         if (f.settings?.mode && MODE_ORDER.includes(f.settings.mode)) {
           mode = f.settings.mode;
@@ -2008,7 +2104,8 @@
         }
         el("composerwrap").classList.add("center");
         el("quickrow").style.display = "flex";
-        if (working !== undefined) notice(uiText("The previous conversation keeps working in the background; you can send here once it finishes.", "المحادثةُ السابقة تكمل عملها في الخلفية؛ يمكنك الإرسال هنا بعد انتهائها."));
+        if (working !== undefined) notice(uiText("The previous conversation keeps working in the background. Write here — your message starts when it finishes — or go back to stop or steer it.", "المحادثةُ السابقة تكمل عملها في الخلفية. اكتب هنا فيبدأ دورُك فور انتهائها، أو عُد إليها لإيقافها أو توجيهها."));
+        renderStatus(); renderSend(); renderQueued(); drainQueue();
         return;
       }
       if (f.kind === "archive") {
@@ -2031,6 +2128,7 @@
         // الدورُ الجاري يخصّ هذه المحادثة: لوحُه الحيّ يُفتح ثانيةً فتصله الأُطرُ القادمة.
         if (outbox.kind === "offering" && turnSessions.get(outbox.turn.id) === currentSessionId && !blocks.has(outbox.turn.id)) openAnswerBlock(outbox.turn.id);
         if (Approval !== null) renderApproval();
+        renderStatus(); renderSend(); renderQueued(); drainQueue();
         return;
       }
       if (f.kind === "models") {
@@ -2125,6 +2223,10 @@
       if (f.kind === "dev-servers") { devServersFrame(f); return; }
       if (f.kind === "browser-history") { browserHistoryFrame(f); return; }
       if (f.kind === "project") {
+        if (f.trusted && pendingTrustCard !== null && pendingTrustCard.path === f.path) {
+          appControlText(pendingTrustCard.node.querySelector(".state"), "Opened ✓", "فُتح ✓");
+          pendingTrustCard = null;
+        }
         rootDir = f.path; renderStatus();
         customCommands = Array.isArray(f.customCommands) ? f.customCommands : [];
         runtimeSettings = { ...runtimeSettings, project: f.path };
@@ -2162,7 +2264,7 @@
         appControlText(row.querySelector(".dny"), "✕ Cancel", "✕ إلغاء");
         row.querySelector(".apv").style.cssText = "background:var(--ok);color:#fff;border:0;border-radius:6px;padding:5px 16px;cursor:pointer;font-family:inherit";
         row.querySelector(".dny").style.cssText = "background:var(--bad);color:#fff;border:0;border-radius:6px;padding:5px 16px;cursor:pointer;font-family:inherit";
-        row.querySelector(".apv").onclick = () => { sendFrame({ kind: "trust-grant", path: f.path }); row.remove(); appControlText(node.querySelector(".state"), "Opening…", "جارٍ الفتح…"); };
+        row.querySelector(".apv").onclick = () => { sendFrame({ kind: "trust-grant", path: f.path }); row.remove(); appControlText(node.querySelector(".state"), "Opening…", "جارٍ الفتح…"); pendingTrustCard = { path: f.path, node }; };
         row.querySelector(".dny").onclick = () => { window.AbdoDesktopShell?.cancelPendingRoutine(); row.remove(); appControlText(node.querySelector(".state"), "Cancelled", "أُلغي"); };
         node.appendChild(row); scroll();
         return;
@@ -2424,13 +2526,38 @@
 
     const fire = () => {
       const body = prompt.value.trim();
-      if (body.length === 0 || !engineUp) return;
+      if (body.length === 0) return;
+      if (!engineUp) {
+        heldSend = true;
+        notice(uiText("The engine is still starting — your message will be sent as soon as it is ready.", "المحرّك يبدأ — تُرسل رسالتُك فور جاهزيّته."));
+        return;
+      }
       if (working !== undefined) {
-        if (shellSettings.followup === "steer" && outbox.kind === "offering") {
-          prompt.value = ""; palette.style.display = "none";
+        if (runningHere() && shellSettings.followup === "steer" && outbox.kind === "offering") {
+          prompt.value = ""; palette.style.display = "none"; renderSend();
           sendFrame({ kind: "steer", turnId: outbox.turn.id, instruction: body });
           notice("أُرسل التوجيه للدور الجاري؛ لن يعيد آثار الأدوات المنفّذة.");
-        } else notice("انتظر تمام الدور الجاري أو غيّر المتابعة إلى «وجّه الدور الجاري».");
+          return;
+        }
+        // 10-09 — «انتظر نهاية الدور» كانت تردّ الرسالة بنصٍّ وتتركها؛ الآن تُحجز في محادثتها وتُرسل وحدها (مثل كلود).
+        try {
+          const prepared = window.AbdoDesktopShell?.api.chatWork?.prepareSubmission() ?? {conversationMode:"code",attachments:[]};
+          // 10-10 — الدردشةُ لا تنتظر مهمّةَ كودٍ في جلسةٍ أخرى: المحرّكُ يجيبها بجانبها (runSideChat).
+          if (!runningHere() && prepared.conversationMode === "chat") {
+            if (submitSide(body, prepared)) { prompt.value = ""; palette.style.display = "none"; renderSend(); }
+            return;
+          }
+          const commandName = body.split(/\s/u, 1)[0];
+          const outgoing = prepared.conversationMode !== "chat" && COMMANDS.some(c => c.cmd === commandName) ? body.slice(1) : body;
+          const list = queuedBySession.get(queueKey()) ?? [];
+          list.push({ body: outgoing, prepared }); queuedBySession.set(queueKey(), list);
+          // محادثةٌ جديدة بلا دور ليست في السجلّ: تُحفظ كي يعود إليها المستخدم وتُرسل رسالتُها منها.
+          if (!runningHere()) { void sendFrame({ kind: "session-keep" }).then(refreshSessions).catch(() => {}); }
+          prompt.value = ""; palette.style.display = "none"; renderQueued(); renderSend();
+          notice(runningHere()
+            ? uiText("Queued — sent when this turn finishes. Press ■ or Esc to stop it now.", "في الانتظار — تُرسل حين ينتهي هذا الدور. اضغط ■ أو Esc لإيقافه الآن.")
+            : uiText("Queued — the other conversation is still working; this starts as soon as it finishes.", "في الانتظار — المحادثةُ الأخرى ما تزال تعمل؛ يبدأ هذا فور انتهائها."));
+        } catch (error) { notice(String(error)); }
         return;
       }
       try {
@@ -2439,12 +2566,12 @@
         // must reach the engine intact, including multiple selected skills.
         const commandName = body.split(/\s/u, 1)[0];
         const outgoing = prepared.conversationMode !== "chat" && COMMANDS.some(c => c.cmd === commandName) ? body.slice(1) : body;
-        if (submitBody(outgoing, prepared)) { prompt.value = ""; palette.style.display = "none"; }
+        if (submitBody(outgoing, prepared)) { prompt.value = ""; palette.style.display = "none"; renderSend(); }
       } catch (error) { notice(String(error)); }
     };
-    el("send").onclick = fire;
+    el("send").onclick = () => { if (el("send").classList.contains("stop")) interruptNow(); else fire(); };
     el("pluschip").onclick = () => { prompt.value = "/"; prompt.focus(); renderPalette(); };
-    prompt.addEventListener("input", () => { palSel = 0; renderPalette(); });
+    prompt.addEventListener("input", () => { palSel = 0; renderPalette(); renderSend(); });
     prompt.addEventListener("keydown", (e) => {
       const open = palette.style.display === "block";
       if (open && e.key === "ArrowDown") { palSel = Math.min(palSel + 1, paletteItems().length - 1); renderPalette(); e.preventDefault(); return; }
@@ -2468,8 +2595,8 @@
         // IDEA 7: الهروب أمام سؤالٍ معلَّق **رفضٌ** لا تجاهل — ولا يقاطع الدور:
         // المقاطعة قرارٌ آخر يُتَّخذ بعد أن يُحسم السؤال، لا بدلاً عن حسمه.
         if (Approval !== null && approvalStore.state.kind === "asked") { approvalAct("deny"); e.preventDefault(); return; }
-        if (working !== undefined) interruptNow();
-        else if (lastPrompt) { prompt.value = lastPrompt; prompt.focus(); }
+        if (working !== undefined && runningHere()) interruptNow();
+        else if (working === undefined && lastPrompt) { prompt.value = lastPrompt; prompt.focus(); renderSend(); }
       }
     });
     for (const chip of document.querySelectorAll("#quickrow .chip")) {
@@ -2853,7 +2980,7 @@
       refresh.requested = true;
       sendFrame({ kind: "settings-get", requestId: refresh.id }).catch(error => failSettingsRefresh(refresh, error));
     };
-    // العطلُ المقيس (2026-09-27، بلاغُ المالك): اختيارُ «Qwen Token Plan» من قائمة النماذج
+    // العطلُ المقيس: اختيارُ «Qwen Token Plan» من قائمة النماذج
     // كان يفتح صفحةَ المزوّدين من رأسها، وبطاقتُه في الصفّ الخامس — والتركيزُ عليها كان
     // يسقط بصمت لأنّ اللوحةَ خامدةٌ (inert) حتى تصل لقطةُ المحرّك. ثمّ بعد حفظ المفتاح
     // لا يُربط النموذجُ الذي اختاره، فيعود ليختاره ثانيةً. الآن: الهبوطُ على البطاقة بعد
@@ -4110,7 +4237,7 @@
       invoke, listen, send: sendFrame, submit: operatorSubmit, openSettings, notice,
       saveShellSettings: async(next)=>{const saved=await invoke('settings_set',{settings:next});applyShellSettings(saved);fillSettingsControls();return saved;},
       providers: Providers, pluginOn,
-      snapshot: () => ({ settings: runtimeSettings, shell: shellSettings, pluginRegistry, pluginCatalog, sessionId: currentSessionId, project: rootDir, working: working !== undefined, turnId: outbox.kind === "offering" ? outbox.turn.id : null, engineUp }),
+      snapshot: () => ({ settings: runtimeSettings, shell: shellSettings, pluginRegistry, pluginCatalog, sessionId: currentSessionId, project: rootDir, working: working !== undefined, workingHere: runningHere(), turnId: outbox.kind === "offering" ? outbox.turn.id : null, turnSession: outbox.kind === "offering" ? (turnSessions.get(outbox.turn.id) ?? currentSessionId) : null, engineUp }),
       // الشريحةُ تُسمّى من الإعدادات والدورُ خامد: السطرُ يتبعها، لا يبقى على نموذجِ دورٍ سابق (مقيس 2026-09-27).
       setModelLabel: (label) => { setChipLabel("modelchip", label); modelName = "AbdoCode"; renderStatus(); },
       artifacts: () => [...activityOutputs.keys()],

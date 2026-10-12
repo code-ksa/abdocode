@@ -11,6 +11,7 @@ import { cpSync, existsSync, lstatSync, readdirSync, realpathSync, rmSync, rmdir
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { encodeLocalJsonFrame, LocalJsonFrameDecoder } from "@abdo/transport-contracts"
+import { isResumeIntent } from "./resume-intent"
 
 export interface ExecOptions {
   readonly task: string
@@ -21,6 +22,13 @@ export interface ExecOptions {
   readonly quiet: boolean
   /** الفجوة #8 محلّيّاً: فرعٌ وشجرةُ عملٍ وحالةُ محرّكٍ منفصلة لهذه المهمّة. */
   readonly worktree?: boolean
+  /**
+   * 10-11 (مقيس على مقارنة CRM): «exec اكمل» بعد دورٍ بلغ سقفه فتح جلسةً جديدة فلم يجد هدفاً يستأنفه وبدأ غريباً.
+   * يكمل آخرَ جلسةٍ في حالة المحرّك (recall كما تفعل القشرة) — صراحةً بـ`--continue`، وتلقائياً حين المهمّةُ نيّةُ استئناف.
+   */
+  readonly continue?: boolean
+  /** 10-11 — أصلُ شجرة العمل: لقطةُ حالة الأب غيرِ المودَعة (parallel-base.ts) بدل HEAD، فيرى العاملُ السقالةَ والعقد. */
+  readonly baseRev?: string
 }
 
 export interface ExecSummary {
@@ -35,9 +43,11 @@ export interface ExecSummary {
   readonly answer: string
   readonly reason?: string
   readonly worktree?: { readonly branch: string; readonly commit?: string; readonly changedFiles: readonly string[] }
+  /** الجلسةُ التي أُكملت (`--continue` أو «اكمل»)، إن وُجدت. */
+  readonly resumedSession?: string
 }
 
-const USAGE = "الصيغة: exec \"<مهمّة>\" [--project <مجلّد>] [--mode read-only|auto|full-access] [--timeout <ثوانٍ>] [--worktree] [--json] [--quiet]"
+const USAGE = "الصيغة: exec \"<مهمّة>\" [--project <مجلّد>] [--mode read-only|auto|full-access] [--timeout <ثوانٍ>] [--worktree] [--continue] [--json] [--quiet]"
 
 /** الوسائطُ بعد `exec` — رفضٌ مسمّى لكلّ ما لا يُفهم، لا تخمين. */
 export function parseExecArgs(args: readonly string[]): ExecOptions | { readonly error: string } {
@@ -45,12 +55,13 @@ export function parseExecArgs(args: readonly string[]): ExecOptions | { readonly
   let project: string | undefined
   let mode: ExecOptions["mode"] = "auto"
   let timeoutMs = 30 * 60_000
-  let json = false, quiet = false, worktree = false
+  let json = false, quiet = false, worktree = false, cont = false
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]!
     if (arg === "--json") json = true
     else if (arg === "--quiet") quiet = true
     else if (arg === "--worktree") worktree = true
+    else if (arg === "--continue") cont = true
     else if (arg === "--project") { project = args[++i]; if (project === undefined) return { error: `--project يحتاج مجلّداً. ${USAGE}` } }
     else if (arg === "--mode") {
       const value = args[++i]
@@ -65,7 +76,9 @@ export function parseExecArgs(args: readonly string[]): ExecOptions | { readonly
   }
   const task = words.join(" ").trim()
   if (task.length === 0) return { error: USAGE }
-  return { task, ...(project === undefined ? {} : { project }), mode, timeoutMs, json, quiet, ...(worktree ? { worktree } : {}) }
+  // شجرةُ عملٍ جديدة لكلّ مهمّة لا جلسةَ سابقةَ فيها — الاستئنافُ التلقائيّ للتشغيل في الحالة نفسها وحده.
+  if (!worktree && isResumeIntent(task)) cont = true
+  return { task, ...(project === undefined ? {} : { project }), mode, timeoutMs, json, quiet, ...(worktree ? { worktree } : {}), ...(cont ? { continue: true } : {}) }
 }
 
 const exitFor = (outcome: string): 0 | 1 | 2 => outcome === "completed" ? 0 : outcome === "checkpointed" || outcome === "unresolved" ? 1 : 2
@@ -87,10 +100,16 @@ export async function runExec(options: ExecOptions, engineArgv: readonly string[
   let finalAnswer: string | undefined
   let end: { kind: string; outcome?: string; why?: string } | undefined
   let ready = false
+  let sessions: { id: string; count: number; current: boolean }[] | undefined
+  let recall: { session?: string; why?: string } | undefined
+  let resumedSession: string | undefined
   const send = (frame: object) => { child.stdin.write(encodeLocalJsonFrame(frame)); void child.stdin.flush() }
   const reading = (async () => {
     for await (const bytes of child.stdout) for (const frame of decoder.push(bytes) as Record<string, unknown>[]) {
       if (frame.kind === "ready") ready = true
+      if (frame.kind === "history" && Array.isArray(frame.sessions)) sessions = frame.sessions as typeof sessions
+      if (frame.kind === "archive") recall = { session: String(frame.session ?? "") }
+      if (frame.kind === "refused" && frame.turnId === undefined && sessions !== undefined && recall === undefined) recall = { why: String(frame.why ?? "") }
       if (frame.turnId !== turnId) continue
       if (frame.kind === "delta") answer += String(frame.text ?? "")
       else if (frame.kind === "tool") { tools.push({ cmd: String(frame.cmd ?? "").split("\n", 1)[0]!.slice(0, 200), ok: null }); progress(`⚙ ${tools.at(-1)!.cmd}`) }
@@ -123,6 +142,18 @@ export async function runExec(options: ExecOptions, engineArgv: readonly string[
     await waitFor(() => ready, started + 60_000)
     if (!ready) reason = "المحرّكُ لم يبلغ «ready» خلال 60 ث"
     else {
+      if (options.continue === true) {
+        send({ kind: "history" })
+        await waitFor(() => sessions !== undefined, Date.now() + 30_000)
+        const prior = [...(sessions ?? [])].reverse().find((s) => !s.current && s.count > 0)
+        if (prior === undefined) progress("↩ لا جلسةَ سابقة في حالة المحرّك — يبدأ جلسةً جديدة")
+        else {
+          send({ kind: "recall", session: prior.id })
+          await waitFor(() => recall !== undefined, Date.now() + 30_000)
+          if (recall?.session === prior.id) { resumedSession = prior.id; progress(`↩ يكمل الجلسة ${prior.id} (${prior.count} دوراً)`) }
+          else progress(`⚠ تعذّر استرجاعُ الجلسة ${prior.id}: ${recall?.why ?? "لا جواب خلال 30 ث"} — يبدأ جلسةً جديدة`)
+        }
+      }
       send({ kind: "submit", mode: options.mode, turn: { id: turnId, body: options.task } })
       await waitFor(() => end !== undefined, started + options.timeoutMs)
       if (end === undefined) reason = child.exitCode !== null ? `خرج المحرّكُ برمز ${child.exitCode} قبل نهاية الدور` : `بلغ الدورُ مهلةَ ${Math.round(options.timeoutMs / 1000)} ث`
@@ -136,6 +167,7 @@ export async function runExec(options: ExecOptions, engineArgv: readonly string[
     task: options.task, outcome, exitCode: end === undefined ? 2 : exitFor(outcome),
     ...(stop === undefined ? {} : { stop }), durationMs: Date.now() - started, tools, approvalsDenied: denied,
     ...(gates === undefined ? {} : { gates }), answer: (finalAnswer ?? answer).trim().slice(-8000),
+    ...(resumedSession === undefined ? {} : { resumedSession }),
     ...(reason !== undefined ? { reason: tail.length > 0 ? `${reason} — ${tail}` : reason } : end?.why !== undefined ? { reason: String(end.why) } : {}),
   }
 }
@@ -233,7 +265,7 @@ export async function runExecInWorktree(options: ExecOptions, engineArgv: readon
   const branch = `abdocode/task-${id}`
   const root = worktreeRoot()
   const dir = join(root, id), state = join(root, `${id}-state`)
-  const added = git(top.out, ["worktree", "add", "-q", "-b", branch, dir, "HEAD"])
+  const added = git(top.out, ["worktree", "add", "-q", "-b", branch, dir, options.baseRev ?? "HEAD"])
   if (!added.ok) return fail(`تعذّر إنشاءُ شجرة العمل: ${added.err.slice(0, 200)}`)
   progress(`🌿 فرعٌ معزول ${branch} في ${dir}`)
   const links = linkIgnoredDeps(top.out, dir, progress)
@@ -256,6 +288,6 @@ export async function runExecInWorktree(options: ExecOptions, engineArgv: readon
     git(top.out, ["worktree", "remove", "--force", dir])
     rmSync(state, { recursive: true, force: true })
     // فرعٌ بلا إيداع ولا تغيير لا يُبقى أثراً.
-    if (git(top.out, ["rev-parse", "--verify", "-q", branch]).ok && git(top.out, ["rev-list", "--count", `HEAD..${branch}`]).out === "0") git(top.out, ["branch", "-q", "-D", branch])
+    if (git(top.out, ["rev-parse", "--verify", "-q", branch]).ok && git(top.out, ["rev-list", "--count", `${options.baseRev ?? "HEAD"}..${branch}`]).out === "0") git(top.out, ["branch", "-q", "-D", branch])
   }
 }

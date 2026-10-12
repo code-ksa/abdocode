@@ -35,6 +35,11 @@ export interface GrepArgs {
   readonly paths: readonly string[]
   readonly ignoreCase: boolean
   readonly context: number
+  /** 10-08: -B/-A منفصلان كما في GNU (كان -A 50 سياقاً متماثلاً مقصوصاً إلى 5 بصمت — فلم يرَ النموذجُ جسدَ السبرنت فأعاد القراءة). */
+  readonly before: number
+  readonly after: number
+  /** السياقُ المطلوب حين تجاوز السقف — يُسمّى في الجواب ولا يُقصّ بصمت. */
+  readonly contextAsked?: number
   readonly type: string
   readonly files: boolean
   readonly count: boolean
@@ -46,13 +51,21 @@ export interface GrepArgs {
   readonly ignored: readonly string[]
 }
 
-const clampContext = (value: string | undefined): number => Math.min(5, Math.max(0, Number.parseInt(value ?? "2", 10) || 0))
+export const GREP_CONTEXT_MAX = 60
+const askedContext = (value: string | undefined): number => Math.max(0, Number.parseInt(value ?? "2", 10) || 0)
 
 /** أعلامُ GNU المفردة التي لا تغيّر البحثَ هنا (أرقامُ الأسطر تُطبع دائماً، والبحثُ عوديٌّ دائماً). */
 const NEUTRAL_LETTERS = new Set(["n", "r", "R", "H", "E", "s", "I"])
 
 export function parseGrepArgs(tokens: readonly string[]): GrepArgs {
-  let ignoreCase = false, context = 0, type = "", files = false, count = false, fixed = false, word = false
+  let ignoreCase = false, before = 0, after = 0, asked = 0, type = "", files = false, count = false, fixed = false, word = false
+  const setContext = (flag: string, value: string | undefined) => {
+    const n = askedContext(value)
+    asked = Math.max(asked, n)
+    const clamped = Math.min(GREP_CONTEXT_MAX, n)
+    if (flag !== "A") before = Math.max(before, clamped)
+    if (flag !== "B") after = Math.max(after, clamped)
+  }
   const positional: string[] = []
   const includes: string[] = []
   const ignored: string[] = []
@@ -63,11 +76,12 @@ export function parseGrepArgs(tokens: readonly string[]): GrepArgs {
     if (flagsDone || !t.startsWith("-") || t === "-") { positional.push(t); continue }
     if (t === "--") { flagsDone = true; continue }
     if (t === "-i" || t === "--ignore-case") ignoreCase = true
-    else if (t === "-C" || t === "-A" || t === "-B") context = Math.max(context, clampContext(tokens[++i]))
+    else if (t === "-C" || t === "-A" || t === "-B") setContext(t[1]!, tokens[++i])
     // -c عدٌّ كما في GNU grep (كان سياقاً فيبتلع النمطَ بعده: `grep -c x f` ⇦ النمطُ «f»).
     else if (t === "-c") count = true
-    else if (/^-[CAB]\d+$/u.test(t)) context = Math.max(context, clampContext(t.slice(2)))
-    else if (/^--context=\d+$/u.test(t)) context = Math.max(context, clampContext(t.split("=")[1]))
+    else if (/^-[CAB]\d+$/u.test(t)) setContext(t[1]!, t.slice(2))
+    else if (/^--context=\d+$/u.test(t)) setContext("C", t.split("=")[1])
+    else if (/^--(?:after|before)-context=\d+$/u.test(t)) setContext(t.startsWith("--after") ? "A" : "B", t.split("=")[1])
     else if (t === "--type") type = (tokens[++i] ?? "").replace(/^\./u, "").toLowerCase()
     else if (t === "--files" || t === "-l" || t === "--files-with-matches") files = true
     else if (t === "--count") count = true
@@ -89,7 +103,8 @@ export function parseGrepArgs(tokens: readonly string[]): GrepArgs {
     } else ignored.push(t)
   }
   const [pattern, ...paths] = positional
-  return { ...(pattern === undefined ? {} : { pattern }), paths, ignoreCase, context, type, files, count, fixed, word, includes, ignored }
+  const context = Math.max(before, after)
+  return { ...(pattern === undefined ? {} : { pattern }), paths, ignoreCase, context, before, after, ...(asked > GREP_CONTEXT_MAX ? { contextAsked: asked } : {}), type, files, count, fixed, word, includes, ignored }
 }
 
 /** النمطُ النهائيّ: `-F` حرفيّ، و`-w` كلمةٌ كاملة. */

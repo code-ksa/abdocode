@@ -13,7 +13,7 @@
  */
 
 import { pidAlive } from "./owner-watch"
-import { existsSync, readFileSync, realpathSync } from "node:fs"
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs"
 import { isAbsolute, join } from "node:path"
 import { systemTool } from "./system-tools"
 import { stripChildEnv } from "@abdo/tools/env-strip"
@@ -59,18 +59,46 @@ export function wrappedServerViolation(cmd: string): string | undefined {
  * منفذُ dev الافتراضيّ من الكومة لا من العادة (مقيس 2026-09-13: «npm run dev» لمشروع Vite انتظر 3000 ثلاثين ثانية ثمّ قتل الخادمَ
  * وهو يستمع على 5173). يُقرأ سكربتُ dev/start في package.json وملفّاتُ الإعداد؛ ما لم يُعرف يبقى 3000.
  */
-export function devPortHint(projectDir: string | undefined): number | undefined {
+export function devPortHint(projectDir: string | undefined, script?: string): number | undefined {
   if (projectDir === undefined) return undefined
+  let scripts: Record<string, string> | undefined
   try {
-    const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")) as { scripts?: Record<string, string> }
-    const script = `${pkg.scripts?.dev ?? ""} ${pkg.scripts?.start ?? ""}`.toLowerCase()
-    if (/\bvite\b/u.test(script)) return 5173
-    if (/\bastro\b/u.test(script)) return 4321
-    if (/\bnext\b|\bremix\b|\bnuxt\b/u.test(script)) return 3000
+    scripts = (JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8")) as { scripts?: Record<string, string> }).scripts
   } catch { /* لا package.json — نقرأ ملفّات الإعداد */ }
+  // 10-11 (مقيس على m11 بالمثبَّت 4.0.139): «npm start» = «node server/server.js» أُعطي منفذَ Vite (5173) لأنّ سكربت dev هو vite،
+  // فحقنت النواةُ PORT=5173 وحجب المحكّمُ «لا إيصالَ يثبت الافتراضيّ 3000» فأنفق النموذجُ حقبةً كاملة يثبته. السكربتُ المسمّى يُقرأ وحده.
+  const own = script !== undefined ? scripts?.[script] : undefined
+  if (own !== undefined) return frameworkPort(own) ?? nodeEntryPort(projectDir, own)
+  if (scripts !== undefined) {
+    const known = frameworkPort(`${scripts.dev ?? ""} ${scripts.start ?? ""}`)
+    if (known !== undefined) return known
+  }
   if (["vite.config.ts", "vite.config.js", "vite.config.mjs", "vite.config.mts"].some((f) => existsSync(join(projectDir, f)))) return 5173
   if (["astro.config.mjs", "astro.config.ts"].some((f) => existsSync(join(projectDir, f)))) return 4321
   return undefined
+}
+
+const frameworkPort = (script: string): number | undefined => {
+  const s = script.toLowerCase()
+  if (/\bvite\b/u.test(s)) return 5173
+  if (/\bastro\b/u.test(s)) return 4321
+  if (/\bnext\b|\bremix\b|\bnuxt\b/u.test(s)) return 3000
+  return undefined
+}
+
+/** منفذُ خادم node الافتراضيّ من ملفّه نفسِه («PORT || 3000»، «? n : 3000») — ما لم يُعرف يبقى للشكل. */
+export function nodeEntryPort(projectDir: string | undefined, command: string): number | undefined {
+  if (projectDir === undefined) return undefined
+  const entry = /^\s*(?:node|bun|tsx)\s+(?:--?\S+\s+)*["']?([^\s"']+\.[cm]?[jt]s)\b/iu.exec(command)?.[1]
+  if (entry === undefined) return undefined
+  try {
+    const source = readFileSync(join(projectDir, entry), "utf8")
+    const at = source.search(/\bPORT\b/u)
+    if (at < 0) return undefined
+    const port = /(?:\|\||\?\?|:)\s*(\d{4,5})\b/u.exec(source.slice(at, at + 240))?.[1]
+    const n = port === undefined ? undefined : Number.parseInt(port, 10)
+    return n !== undefined && n >= 1024 && n < 65535 ? n : undefined
+  } catch { return undefined }
 }
 
 export function parseServerCommand(cmd: string, projectDir?: string): ServerCommand | undefined {
@@ -82,8 +110,15 @@ export function parseServerCommand(cmd: string, projectDir?: string): ServerComm
   const port = trimmed.match(/(?:^|\s)(?:-p|--port)[\s=]+(\d{2,5})\b/u)?.[1]
   return {
     launch: trimmed.split(/\s+/),
-    port: port !== undefined ? Number.parseInt(port, 10) : (devPortHint(projectDir) ?? shape.defaultPort),
+    port: port !== undefined ? Number.parseInt(port, 10) : (hintFor(trimmed, projectDir) ?? shape.defaultPort),
   }
+}
+
+/** منفذُ الأمر من سكربته هو: «npm start» يقرأ scripts.start، و«node server.js» يقرأ ملفَّه — لا سكربتَ dev الجار. */
+const hintFor = (cmd: string, projectDir: string | undefined): number | undefined => {
+  if (/^(?:node|bun|tsx)\s/iu.test(cmd) && !/^bun\s+(?:run\s+)?(?:start|dev)\b/iu.test(cmd)) return nodeEntryPort(projectDir, cmd)
+  const named = /(?:^|\s)(?:run\s+)?(start|dev|preview|serve)\b/iu.exec(cmd.replace(/\s--(?:\s.*)?$/u, ""))?.[1]?.toLowerCase()
+  return devPortHint(projectDir, named)
 }
 
 interface ManagedProcess {
@@ -157,8 +192,27 @@ const listening = async (port: number): Promise<boolean> => {
 /** السبرُ نفسُه للخارج: خادمُ تطويرٍ من launch.json قد يكون حيّاً بيدٍ غيرِ يدنا — يُقال «يعمل» لا «متوقّف». */
 export const portListening = listening
 
-/** فحص شغور المنفذ بربطٍ حقيقيّ لا بتخمين HTTP — خادمٌ غير HTTP يشغل المنفذ أيضاً. */
-const portFree = (port: number): boolean => {
+/** كلُّ المنافذ المُنصتة على الجهاز (أيُّ عنوان: 0.0.0.0، [::]، 127.0.0.1) — قراءةٌ واحدة لـnetstat. */
+export const listeningPorts = (): Set<number> => {
+  const ports = new Set<number>()
+  try {
+    const netstat = Bun.spawnSync([systemTool("netstat"), "-ano", "-p", "tcp"], { stdout: "pipe", stderr: "ignore" })
+    const v6 = Bun.spawnSync([systemTool("netstat"), "-ano", "-p", "tcpv6"], { stdout: "pipe", stderr: "ignore" })
+    for (const line of `${netstat.stdout.toString()}\n${v6.stdout.toString()}`.split("\n")) {
+      const m = /TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+\d+/u.exec(line)
+      if (m !== null) ports.add(Number.parseInt(m[1]!, 10))
+    }
+  } catch { /* قياس متعذّر — يبقى فحصُ الربط وحده */ }
+  return ports
+}
+
+/**
+ * فحص شغور المنفذ بربطٍ حقيقيّ لا بتخمين HTTP — خادمٌ غير HTTP يشغل المنفذ أيضاً.
+ * 10-08 (مقيس: مشروعان في سلسلتين): ربطُ 127.0.0.1:3000 نجح وnext مشروعٍ آخر يُنصت على [::]:3000 — فقيل «حرّ»، وفشل خادمُنا بصمت،
+ * وأجاب الآخرُ عن سبرِ 127.0.0.1 فنُسب إلينا pidُه وقِيس audit على موقعٍ غيرِ موقعنا. الشغورُ = لا مُنصتَ في جدول netstat على أيّ عنوان، والربطُ ينجح.
+ */
+const portFree = (port: number, taken: Set<number> = listeningPorts()): boolean => {
+  if (taken.has(port)) return false
   try {
     const probe = Bun.listen({ hostname: "127.0.0.1", port, socket: { data() { /* فحص فقط */ } } })
     probe.stop(true)
@@ -170,8 +224,9 @@ const portFree = (port: number): boolean => {
 
 /** إيجار منفذ محلي: أول منفذ حر بعد المطلوب — قرار النواة لا تخمين النموذج. */
 const leaseFreePort = (from: number): number | undefined => {
+  const taken = listeningPorts()
   for (let candidate = from; candidate < from + 60; candidate += 1) {
-    if (portFree(candidate)) return candidate
+    if (portFree(candidate, taken)) return candidate
   }
   return undefined
 }
@@ -291,11 +346,36 @@ export function serverAlive(exitCode: number | null, wrapperPid: number | undefi
   return listenerPid !== undefined && listenerPid !== wrapperPid && alive(listenerPid)
 }
 
+/**
+ * 10-10 (مقيس في مهمّة n8n): بعد «npm run build» طلب النموذجُ «run --bg npm run start» فقيل «خادمك يعمل فعلاً — لا حاجة لإعادة تشغيله»،
+ * والخادمُ القائم يقدّم البناءَ القديم (next start يحمّل .next عند إقلاعه) — فدار بين stop وrun وStop-Process المرفوض. مخرجُ بناءٍ أحدثُ من
+ * إقلاع خادم الإنتاج = خادمٌ قديم. Pure على القرص.
+ */
+export function buildNewerThan(cwd: string, since: number): boolean {
+  for (const marker of [".next/BUILD_ID", "dist/index.html", "build/index.html", ".output/server/index.mjs"]) {
+    try { if (statSync(join(cwd, marker)).mtimeMs > since) return true } catch { /* غائب */ }
+  }
+  return false
+}
+
 export class ManagedServers {
   #running: ManagedProcess[] = []
 
-  /** يشغّل خادماً مملوكاً للنواة ويعيد إيصالاً بعد قياس الإنصات. */
+  /** يشغّل خادماً مملوكاً للنواة ويعيد إيصالاً بعد قياس الإنصات — وخادمُ إنتاجٍ أقدمُ من آخر بناءٍ يُعاد تشغيله هنا ويُقال ذلك. */
   async start(command: ServerCommand, cwd: string): Promise<string> {
+    const offset = Math.min(200, Math.max(0, Number.parseInt(process.env.ABDO_WORKER_PORT_OFFSET ?? "0", 10) || 0))
+    const stale = this.#running.find((p) => p.port === command.port + offset && serverMode(p.display) === "prod" && serverMode(command.launch.join(" ")) === "prod" && p.proc.exitCode === null && buildNewerThan(longPathOf(cwd), p.startedAt))
+    let note = ""
+    if (stale !== undefined) {
+      killTree(stale)
+      this.#running = this.#running.filter((p) => p !== stale)
+      for (let i = 0; i < 20 && await listening(stale.port); i += 1) await Bun.sleep(250)
+      note = `↻ أُعيد تشغيلُ «${stale.display}» على :${stale.port} لأنّ البناءَ أحدثُ من إقلاعه — كان يقدّم البناءَ القديم.\n`
+    }
+    return note + await this.#startOnce(command, cwd)
+  }
+
+  async #startOnce(command: ServerCommand, cwd: string): Promise<string> {
     cwd = longPathOf(cwd)
     // 09-30: عاملُ parallel يحمل إزاحةَ منفذه (ABDO_WORKER_PORT_OFFSET) — عاملان يقلعان معاً على 3000 تسابقا فأجاب أحدُهما عن الآخر.
     const workerOffset = Math.min(200, Math.max(0, Number.parseInt(process.env.ABDO_WORKER_PORT_OFFSET ?? "0", 10) || 0))
@@ -357,6 +437,8 @@ export class ManagedServers {
       const reason = error instanceof Error ? error.message : String(error)
       return `فشل تشغيل الخادم «${display}»: تعذّر إطلاقه — ${reason}. تحقّق من توفّر «${launch[0] ?? ""}» في المسار ثم أعد المحاولة.`
     }
+    // مُنصتٌ سابقٌ للإطلاق على المنفذ نفسِه ليس خادمَنا مهما أجاب — يُقاس قبلُ ويُقارن بعد.
+    const foreignBefore = listenerOf(port)
     const managed: ManagedProcess = { proc, port, display, startedAt: Date.now() }
     this.#running.push(managed)
     const tail = tailOf(proc.stdout as ReadableStream<Uint8Array> | null, proc.stderr as ReadableStream<Uint8Array> | null)
@@ -368,6 +450,11 @@ export class ManagedServers {
       if (await listening(port)) {
         // ملكية المُنصت تُقاس لحظة الجاهزية — بعدها قد يموت الوسيط npm.cmd.
         managed.listenerPid = listenerOf(port)
+        if (foreignBefore !== undefined && managed.listenerPid === foreignBefore) {
+          this.#running = this.#running.filter((p) => p.proc.pid !== proc.pid)
+          try { proc.kill() } catch { /* خرج */ }
+          return `فشل تشغيل الخادم «${display}»: المنفذ ${port} يجيب عنه pid ${foreignBefore} الذي كان يُنصت قبل التشغيل — ليس خادمَك، وقياسُه قياسٌ لموقعٍ آخر. أعد التشغيل بمنفذٍ آخر (-- --port <منفذ>) ولا توقف عمليّةً لا تملكها.${tail.receipt()}`
+        }
         return (
           `⚙ الخادم يعمل تحت إدارة النواة: «${display}» على http://127.0.0.1:${port} (pid ${managed.listenerPid ?? proc.pid}).${leaseNote}\n` +
           `افحصه الآن بـprobe / /المسار… (نداءٌ واحد لكلّ الصفحات) لا بحلقة Invoke-WebRequest. سيُوقف تلقائياً عند نهاية الدور — لا توقفه بـStop-Process الأعمى؛ لإيقافه أو إعادة تشغيله: stop ${managed.listenerPid ?? proc.pid}، وسجلّه: logs ${managed.listenerPid ?? proc.pid}.`

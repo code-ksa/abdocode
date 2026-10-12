@@ -3,7 +3,7 @@ const api = typeof chrome !== "undefined" ? chrome : browser
 const INSTALL_URL = "https://github.com/code-ksa/abdocode/releases/latest"
 const render = (s) => {
   const connected = !!(s && s.connected)
-  el("status").textContent = connected ? "متّصلٌ بعبدو كود ✓" : "غير متّصل — اضغط «ابحث عن عبدو كود واقترن» أو الصق الرمز يدويّاً"
+  el("status").textContent = connected ? `متّصلٌ بعبدو كود ✓ (${s.browser || "?"} — الإضافة ${s.version || "?"}؛ كروم وإيدج يتّصلان معاً، والأفعالُ تذهب إلى آخرِ متصفّحٍ تستعمله)` : "غير متّصل — اضغط «ابحث عن عبدو كود واقترن» أو الصق الرمز يدويّاً"
   // نصُّ الشفافية يتبع المتصفّح: منقّحٌ موثوق (كروم/إيدج) أو أحداثٌ اصطناعية (سفاري).
   el("mode").textContent = s && s.trusted === false
     ? "في هذا المتصفّح تُنفَّذ النقرات والكتابة بأحداثٍ داخل الصفحة (لا منقّح)، وقد لا تستجيب بعضُ المواقع لها."

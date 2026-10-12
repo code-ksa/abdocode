@@ -16,11 +16,11 @@ describe("kill by pid — ownership is measured, not assumed", () => {
 
   test("owned pids pass; foreign pids pass only when their command line lives in the project; a failed query is a refusal", () => {
     const owned = new Set([48420])
-    const project = "C:\\Users\\x\\Desktop\\openrouter-clone"
+    const project = "C:\\Users\\x\\Desktop\\tasks-app"
     const lines: Record<number, string | undefined> = {
-      1: '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\x\\Desktop\\openrouter-clone\\node_modules\\next\\dist\\bin\\next" dev',
-      2: '"C:\\Program Files\\nodejs\\node.exe" C:/Users/x/Desktop/OPENROUTER-CLONE/scripts/seed.ts',
-      3: '"C:\\Program Files\\nodejs\\node.exe" C:\\agent-admin\\scripts\\server.js',
+      1: '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\x\\Desktop\\tasks-app\\node_modules\\next\\dist\\bin\\next" dev',
+      2: '"C:\\Program Files\\nodejs\\node.exe" C:/Users/x/Desktop/TASKS-APP/scripts/seed.ts',
+      3: '"C:\\Program Files\\nodejs\\node.exe" C:\\other-project\\scripts\\server.js',
       4: undefined,
     }
     const query = (pid: number) => lines[pid]

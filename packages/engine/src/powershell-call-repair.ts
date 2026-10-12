@@ -25,7 +25,8 @@ export function powershellCallOperatorRepair(command: string): CallRepair | unde
  * `A && B && C` ⇦ `A; if ($?) { B; if ($?) { C } }`، و`A || B` ⇦ `A; if (-not $?) { B }`. تُقسَم السلسلةُ خارج الاقتباس وحده؛
  * والخلطُ بين && و|| (أولويّةُ bash لا تُترجم بأمان) والصدفُ البعيدة (ssh/wsl/bash… تنفّذ هناك بلينكس) تبقى بلا إصلاح فيرفضها الحارس كما كان.
  */
-const REMOTE_SHELL_HEAD = /^\s*(?:ssh|scp|wsl|bash|sh|zsh|plink|docker\s+(?:exec|run|compose))\b/iu
+// 10-08: docker run/compose تُسلسَل محلّيّاً (`docker compose build && docker compose up -d`) فتُترجم؛ exec وحده يُقصد به داخلُ الحاوية.
+const REMOTE_SHELL_HEAD = /^\s*(?:ssh|scp|wsl|bash|sh|zsh|plink|docker\s+exec)\b/iu
 
 const splitTopLevel = (command: string): { readonly parts: string[]; readonly ops: string[] } | undefined => {
   const parts: string[] = []
@@ -65,6 +66,47 @@ export function powershellChainRepair(command: string): CallRepair | undefined {
     command: `${first}${tail}`,
     note: `أُصلح الأمر آليّاً: ${split.ops.length} × «${split.ops[0]}» تُرجمت إلى PowerShell 5.1 (${kinds.has("&&") ? "if ($?)" : "if (-not $?)"}) — المقاطعُ بترتيبها ويقف كلٌّ عند فشل سابقه.`,
   }
+}
+
+/**
+ * 10-08 (مقيس في بروفة النشر): `docker exec test-server mkdir -p /root/.ssh && chmod 700 /root/.ssh` ⇦ PowerShell «The token '&&' is not
+ * a valid statement separator» — وفي bash نفسِه كان chmod سيجري على هذا الجهاز لا في الحاوية. النموذجُ يقصد الحاوية: السلسلةُ تُلفّ
+ * `sh -c '…'` بعد أعلام docker exec واسمِ الحاوية (حتميّ ومعلَن). اقتباسٌ مفرد داخل السلسلة أو `sh -c` قائمٌ ⇦ بلا إصلاح (يردّه الحارس).
+ */
+const DOCKER_EXEC_HEAD = /^\s*docker\s+exec\s+/iu
+const DOCKER_EXEC_VALUE_FLAGS = new Set(["-u", "--user", "-w", "--workdir", "-e", "--env", "--env-file", "--detach-keys"])
+
+export function dockerExecChainRepair(command: string): CallRepair | undefined {
+  if (!DOCKER_EXEC_HEAD.test(command) || !/&&|\|\|/u.test(command)) return undefined
+  const split = splitTopLevel(command)
+  if (split === undefined || split.ops.length === 0 || split.parts.some((part) => part.length === 0)) return undefined
+  const tokens = split.parts[0]!.replace(DOCKER_EXEC_HEAD, "").trim().split(/\s+/u)
+  const flags: string[] = []
+  let i = 0
+  for (; i < tokens.length && tokens[i]!.startsWith("-"); i += 1) {
+    flags.push(tokens[i]!)
+    if (DOCKER_EXEC_VALUE_FLAGS.has(tokens[i]!) && i + 1 < tokens.length) flags.push(tokens[++i]!)
+  }
+  const container = tokens[i]
+  const first = tokens.slice(i + 1).join(" ")
+  if (container === undefined || first.length === 0 || /^(?:sh|bash|ash|zsh)\b/u.test(first)) return undefined
+  let inner = first
+  split.ops.forEach((op, k) => { inner += ` ${op} ${split.parts[k + 1]}` })
+  if (inner.includes("'")) return undefined
+  return {
+    command: `docker exec ${[...flags, container].join(" ")} sh -c '${inner}'`,
+    note: `أُصلح الأمر آليّاً: سلسلةُ «${split.ops[0]}» بعد docker exec لُفّت sh -c '…' — كانت تُرفض في PowerShell 5.1، وفي bash يجري ما بعدها على هذا الجهاز لا في الحاوية.`,
+  }
+}
+
+/** سلسلةُ &&/|| خارج الاقتباس بعد صدفٍ بعيدة لم تُصلَح ⇦ تُردّ بالصيغة المقتبسة. `undefined` = نظيف. */
+export function remoteChainViolation(command: string): string | undefined {
+  const head = REMOTE_SHELL_HEAD.exec(command)
+  if (head === null) return undefined
+  const split = splitTopLevel(command)
+  if (split === undefined || split.ops.length === 0) return undefined
+  const word = head[0].trim().split(/\s+/u).slice(0, 2).join(" ")
+  return `رُفض: «${split.ops[0]}» خارج الاقتباس لا يعمل في PowerShell 5.1، وبعد «${word}» كان سيُشغّل ما بعده على هذا الجهاز لا هناك. اقتبس السلسلةَ كلَّها لتجري هناك: ssh host 'A && B' · docker exec <حاوية> sh -c 'A && B' · wsl bash -lc 'A && B'.`
 }
 
 /**
@@ -116,4 +158,30 @@ export function powershellLiteralPathRepair(command: string): CallRepair | undef
     command: repaired.join(" "),
     note: `أُصلح الأمر آليّاً: «${path}» يحمل [ ] فيعدّه PowerShell نمطَ بدلٍ لا يطابق المجلّد — استُعمل -LiteralPath.`,
   }
+}
+
+/**
+ * 10-09 (مقيس على crm-pipeline بـnemotron-ultra): ثلاثةُ أدوارٍ بلا سبرنتٍ مغلق، وفي سجلّها `ls -la crm.db` و`curl -s -o /dev/null -w
+ * "%{http_code}" http://localhost:3400/…` تُرفض باسم «صيغة Linux» فيعيد النموذجُ الصياغةَ نداءً كاملاً كلَّ مرّة. ما له ترجمةٌ واحدةٌ بلا
+ * التباس يُترجم ويُعلَن (القواعدُ الثلاث نفسُها: ميكانيكيّ، محدود، معلَن): `curl` ⇦ `curl.exe` (curl الحقيقيّةُ المشحونةُ مع ويندوز —
+ * البرنامجُ نفسُه بالوسائط نفسِها، و`-o /dev/null` ⇦ `-o NUL`)، و`ls -la|-l|-a [مسار]` ⇦ `Get-ChildItem -Force [مسار]`، و`2>/dev/null`
+ * و`>/dev/null` ⇦ `$null`، و`mkdir -p <مسار>` ⇦ `New-Item -ItemType Directory -Force <مسار>`. والهدّامُ (`rm -rf`) يبقى رفضاً، والصدفةُ
+ * البعيدة (ssh/wsl/bash/docker) لا تُمسّ: ما بعد رأسها يُنفَّذ في لينكس.
+ */
+const REMOTE_LINUX_HEAD = /^\s*(?:ssh|scp|wsl|bash|sh|zsh|plink|docker\s+(?:exec|run|compose))\b/iu
+export function linuxismRepair(command: string): CallRepair | undefined {
+  if (REMOTE_LINUX_HEAD.test(command)) return undefined
+  const done: string[] = []
+  let cmd = command
+  if (/(?:^|[;|&(]\s*)curl(?=\s)/iu.test(cmd) && !/curl\.exe/iu.test(cmd)) {
+    cmd = cmd.replace(/(^|[;|&(]\s*)curl(?=\s)/giu, "$1curl.exe").replace(/(\s-o\s+)\/dev\/null\b/giu, "$1NUL")
+    done.push("curl ⇦ curl.exe")
+  }
+  const ls = /(^|[;|]\s*)ls\s+-(?:la|al|l|a)\b(\s+[^\s;|&]+)?/iu
+  if (ls.test(cmd)) { cmd = cmd.replace(ls, (_m, lead: string, path?: string) => `${lead}Get-ChildItem -Force${path ?? ""}`); done.push("ls -la ⇦ Get-ChildItem -Force") }
+  const mkdir = /(^|[;|]\s*)mkdir\s+-p\s+([^\s;|&]+)(?=\s*(?:$|[;|]))/iu
+  if (mkdir.test(cmd)) { cmd = cmd.replace(mkdir, (_m, lead: string, path: string) => `${lead}New-Item -ItemType Directory -Force ${path} | Out-Null`); done.push("mkdir -p ⇦ New-Item -ItemType Directory -Force") }
+  if (/[12]?>\s*\/dev\/null/u.test(cmd)) { cmd = cmd.replace(/([12]?>)\s*\/dev\/null/gu, "$1$$null"); done.push("/dev/null ⇦ $null") }
+  if (done.length === 0) return undefined
+  return { command: cmd, note: `أُصلح الأمر آليّاً من صيغة Linux إلى PowerShell 5.1: ${done.join("، ")} — الأمرُ المنفَّذ: ${cmd.slice(0, 200)}` }
 }

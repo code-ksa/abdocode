@@ -108,7 +108,9 @@ const SECRET_ASSIGN = /(?<![A-Za-z])["']?(?:passwords?|passwd|passphrase|passcod
  */
 const SECRET_ARGV_RULES: readonly { readonly head: string; readonly value: string }[] = Object.freeze([
   { head: "(?<![\\w-])-pw\\s*[\"']?", value: "[^\\s\"']{4,}" },
-  { head: "(?<![\\w-])-p\\s*[\"']?", value: "[^\\s\"'-]{6,}" },
+  // 10-08 (مقيس مرّتين في بروفة النشر): `docker run -p 127.0.0.1:2222:22` و`docker exec … mkdir -p /root/.ssh` رُفضا «كلمة مرور» —
+  // `-p` كلمةُ مرورٍ في عائلتي mysql وpostgres وفي `… login` (docker/podman/helm registry) (mysql/mariadb/mysqldump…)؛ وفي غيرها منفذٌ أو «أنشئ الآباء». القاعدةُ تُقرأ بعد أمرٍ من العائلة في المقطع نفسِه.
+  { head: "(?<=\\b(?:mysql|mariadb|mysqldump|mysqladmin|mysqlimport|mysqlsh|mysqlcheck|psql|pg_dump|pg_dumpall|pg_restore|login)(?:\\.exe)?\\b[^|;&\\n]*?)(?<![\\w-])-p\\s*[\"']?", value: "[^\\s\"'-]{6,}" },
   { head: "(?<![\\w-])--password[=\\s]+[\"']?", value: "[^\\s\"']{6,}" },
   { head: "(?<![\\w-])PGPASSWORD=", value: "[^\\s]{6,}" },
   // `curl -u user:pass` / `--user user:pass` — أشيعُ لصقةِ اعتمادٍ في محادثة،
@@ -819,6 +821,10 @@ function valueBeforeLabel(norm: string, labelStart: number): LabelledValue[] {
  * متحدّثُ العربية كلمةَ مرور، وكانت تُسقط القاعدةَ كلَّها. الحشوُ يُتخطّى حتى
  * للأسماء الصارمة: صرامتُها في **الواصل** لا في المسافة بينها وبين قيمتها.
  */
+/** مقتبسٌ ليس بهيئة اعتماد: أطولُ من 256 حرفاً، أو فيه مسافةٌ لغير عبارات المرور، أو أكثرُ من 24 كلمة (عبارةُ الاسترداد ≤24). */
+const quotedProse = (quoted: string, rule: LabelRule): boolean =>
+  quoted.length > 256 || (/\s/u.test(quoted) && (rule.phrase !== true || quoted.split(/\s+/u).length > 24))
+
 function valueAfterLabel(
   norm: string,
   labelEnd: number,
@@ -839,6 +845,9 @@ function valueAfterLabel(
       if (read.quoted) {
         const quoted = read.value.trim()
         if (quoted.length < LABELLED_WORD_MIN || isReferenceValue(quoted) || isPlaceholder(quoted)) return none
+        // 10-08 (مقيس على مهمّة الموقع): «احصل على مفتاح API» وثانويّ «اكتشف …» ⇦ ٢٠٨٩ حرفاً من النثر العربيّ عُدّت مفتاحاً، ففتح كلُّ دورٍ
+        // محرّراً على سطح المكتب. المقتبسُ بعد اسمٍ سرّيّ اعتمادٌ بهيئته: ≤256 حرفاً، وبلا مسافةٍ إلّا لعباراتِ المرور (≤24 كلمةً كعبارة الاسترداد).
+        if (quotedProse(quoted, rule)) return none
         return [{ start: read.start, end: read.end }]
       }
       const value = read.value
@@ -864,6 +873,8 @@ function valueAfterLabel(
     const read = readValueAt(norm, join.next)
     if (read === undefined) return none
     const value = read.value
+    // 10-08: والمقتبسُ بلا رابطٍ صريح كذلك — نثرٌ بين «» بعد «مفتاح API» ليس اعتماداً (مقيس: ٢٠٨٩ حرفاً).
+    if (read.quoted && quotedProse(value.trim(), rule)) return none
     if (isArabicOnly(value) || (isPlainWord(value) && !hasLatin(value) && !hasDigit(value))) {
       // كلمةٌ عربيةٌ صِرفة: حشوٌ يُتخطّى — إن لم تكن كلمةَ بناءٍ أو حالٍ أو اسماً.
       if (join.kind === "weak") return none

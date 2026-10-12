@@ -59,7 +59,7 @@ async function longTask(ladder: boolean) {
   }))
   const child = Bun.spawn([process.execPath, "packages/engine/src/cli.ts", "serve"], {
     cwd: resolve(import.meta.dir, "../../.."),
-    env: { ...process.env, ABDO_SHELL_TOKEN: "t", ABDO_FRAMED_STDIO: "1", ABDO_CODE_SETTINGS: settings, ABDO_CODE_STATE_DIR: state, ABDO_CODE_TRUST_DIR: join(state, "trust"), USERPROFILE: base, HOME: base, APPDATA: base, ABDO_VAULT_HOME: join(base, "vh"), ABDO_REQUIRE_SPRINT_PLAN: "0", ABDO_AGENT_CONTEXT_TOKENS: String(Number(process.env.WINDOW_TOKENS ?? 22_000)) },
+    env: { ...process.env, ABDO_SHELL_TOKEN: "t", ABDO_FRAMED_STDIO: "1", ABDO_CODE_SETTINGS: settings, ABDO_CODE_STATE_DIR: state, ABDO_CODE_TRUST_DIR: join(state, "trust"), USERPROFILE: base, HOME: base, APPDATA: base, ABDO_VAULT_HOME: join(base, "vh"), ABDO_REQUIRE_SPRINT_PLAN: "0", ABDO_AGENT_CONTEXT_TOKENS: String(Number(process.env.WINDOW_TOKENS ?? WINDOW)) },
     stdin: "pipe", stdout: "pipe", stderr: "pipe",
   })
   const stderr = new Response(child.stderr).text(), frames: any[] = [], decoder = new LocalJsonFrameDecoder()
@@ -78,6 +78,10 @@ async function longTask(ladder: boolean) {
     rmSync(base, { recursive: true, force: true })
   }
 }
+
+// 10-08: ميزانيّةُ المدخل = النافذة − حجزُ الخرج (AGENT_EPOCH_OUTPUT_TOKENS، رُفع إلى 16,384 في 10-02)؛ عند 22,000 صارت 5.6k فأسقط السلّمُ
+// تبادلاً بعد القصّ. 24,000 (ميزانيّةُ 7.6k) تُبقي الفرعين كما صُمّما: السلّمُ يقصّ ولا يُسقط، والمسارُ القديم يُسقط ويبقى فوقها.
+const WINDOW = 24_000
 
 test("a long task over the window: the ladder clips and keeps both ends, the old path drops and now says so", async () => {
   const withLadder = await longTask(true)

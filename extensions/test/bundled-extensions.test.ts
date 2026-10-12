@@ -9,7 +9,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 
 const ROOT = resolve(import.meta.dir, "..", "bundled")
-const ORIGINAL = new Set(["abdo-security"])
+const ORIGINAL = new Set(["abdo-security", "abdo-ops"])
 const ids = readdirSync(ROOT, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
 const OWNER_LIST = ["design", "rust-lsp", "productivity", "marketing", "engineering", "data", "finance", "product-mgmt", "pdf-viewer", "sales", "operations", "legal", "ent-search", "small-business", "human-resources", "customer-support", "bio-research", "agent-sdk-dev", "abdo-code-setup", "abdo-md-mgmt", "abdo-security", "code-modernize", "code-review", "code-simplifier", "commit-commands", "cwc-makers", "explain-style", "feature-dev", "frontend-design", "hookify", "learning-style", "math-olympiad", "mcp-server-dev", "mcp-tunnels", "playground", "plugin-dev", "pr-review-kit", "project-artifact", "ralph-loop", "skill-creator", "abdo-skills"]
 

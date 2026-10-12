@@ -29,9 +29,9 @@ test("real acceptance words still fire, in both languages", () => {
 test("cli.ts derives the three predicates from the module, not from inline regexes", () => {
   const cli = readFileSync(join(import.meta.dir, "..", "src", "cli.ts"), "utf8")
   expect(cli).toContain('import { goalAsksForTestWork, goalRequiresBuild, goalRequiresTests, goalRequiresTypecheck } from "./acceptance-goal-words"')
-  expect(cli).toContain("const requiresBuild = !planningOnly && goalRequiresBuild(effectiveGoal)")
-  expect(cli).toContain("const requiresTypecheck = !planningOnly && goalRequiresTypecheck(effectiveGoal)")
-  expect(cli).toContain("const requiresTests = !planningOnly && goalRequiresTests(effectiveGoal)")
+  expect(cli).toContain("const requiresBuild = !planningOnly && !parallelWorker && goalRequiresBuild(effectiveGoal)")
+  expect(cli).toContain("const requiresTypecheck = !planningOnly && !parallelWorker && goalRequiresTypecheck(effectiveGoal)")
+  expect(cli).toContain("const requiresTests = !planningOnly && !parallelWorker && goalRequiresTests(effectiveGoal)")
   expect(cli).not.toContain("/(?:npm\\s+(?:run\\s+)?test|اختبار|اختبارات|tests?\\b)/iu.test(effectiveGoal)")
 })
 

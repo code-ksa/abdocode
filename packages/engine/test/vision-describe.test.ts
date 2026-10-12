@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { renderVisionReport, VISION_EYE_SYSTEM, visionReportUsable, visionRubric } from "../src/vision-describe"
+import { renderVisionReport, VISION_EYE_SYSTEM, visionReportUsable, visionRubric, withDeadline } from "../src/vision-describe"
 
-// 09-29 (أمر المالك): نموذجُ الرؤية يصف والوكيلُ يقرّر — المعيارُ ثابتٌ، والإيصالُ يسمّي من رأى ويقصّ، والجوابُ الرافض ليس وصفاً.
+// 09-29: نموذجُ الرؤية يصف والوكيلُ يقرّر — المعيارُ ثابتٌ، والإيصالُ يسمّي من رأى ويقصّ، والجوابُ الرافض ليس وصفاً.
 
 describe("عينُ الوكيل — vision-describe", () => {
   test("المعيار يحمل الهدفَ والصفحةَ وعددَ البلاطات ويطلب حكماً بثلاث صيغ ويمنع التخمين والأوامر", () => {
@@ -39,9 +39,11 @@ describe("عينُ الوكيل — vision-describe", () => {
 
   test("cli.ts: shot يصف عبر نموذج الرؤية المنفصل ويعيد الوصفَ إيصالاً بلا تعليق اللقطة؛ وتعذّرُه يعيد المسارَ القديم", () => {
     const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
-    expect(cli).toContain('import { renderVisionReport, VISION_EYE_SYSTEM, visionReportUsable, visionRubric } from "./vision-describe"')
+    expect(cli).toContain('import { renderVisionReport, VISION_EYE_SYSTEM, visionReportUsable, visionRubric, withDeadline } from "./vision-describe"')
     expect(cli).toContain("const describeShots = async (")
-    expect(cli).toContain("ask(visionRubric(eyeGoal, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, attachments: { descriptions: [], text: \"\", images:")
+    // 10-11 — بسقف زمن (نداءُ الرؤية علق 600 ث في m11 بعاملَين).
+    expect(cli).toContain("const reply = await withDeadline(ask(visionRubric(eyeGoal, url, tiles), { toolAllowlist: [], reviewSystem: VISION_EYE_SYSTEM, signal: AbortSignal.timeout(VISION_DESCRIBE_MS), attachments: { descriptions: [], text: \"\", images:")
+    expect(cli).toContain(", VISION_DESCRIBE_MS, \"نموذجُ الرؤية\")")
     // لقطةُ الخطأ التلقائيّة تُوصف هي الأخرى بدل أن تُعلَّق لدورٍ لاحق
     expect(cli).toContain('const described = errorRoute.reaches && errorRoute.via === "vision" ? await describeShots([{ mime: "image/jpeg", data }], errorRoute.ref, surfaceUrl, Math.round(data.length * 3 / 4), 1, turnId) : undefined')
     expect(cli).toContain('if (pendingShot !== undefined && route.reaches && route.via === "vision") {')
@@ -52,6 +54,19 @@ describe("عينُ الوكيل — vision-describe", () => {
     expect(cli).toContain("if (route.reaches) { pendingShot = undefined; pendingShots = captured.map((c) => ({ data: c.data, url: surfaceUrl, mime: c.mime })) }")
   })
 
+  // 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.143): الوصفُ علق 600 ث ثمّ أُرفقت اللقطةُ بنداء deepseek الذي لا يقبل الصور فسقط الدورُ كلُّه
+  // والشيفرةُ مكتملة. اللقطةُ مساعدةٌ لا شرط: سقفُ زمنٍ للوصف، ولا إرفاقَ بنموذجٍ لا يرى، ورفضُ الصور يُعاد نداؤه بلا صور.
+  test("cli.ts: a failed description never hands the shot to a model that cannot see, and an image refusal retries without images", () => {
+    const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8").replace(/\r\n/g, "\n")
+    expect(cli).toContain("const VISION_DESCRIBE_MS = Math.max(10_000, Number(process.env.ABDO_VISION_DESCRIBE_MS) || 90_000)")
+    const described = cli.indexOf("        if (described !== undefined) { pendingShot = undefined; return reloadNote + described + where }\n")
+    expect(described).toBeGreaterThan(0)
+    expect(cli.slice(described, described + 700)).toContain("        pendingShot = undefined\n        return `${reloadNote}التُقطت لقطةُ الشاشة")
+    expect(cli).toContain("if (callHooks === hooks || !IMAGE_REFUSED.test(String((error as Error)?.message ?? error))) throw error")
+    expect(cli).toContain("const IMAGE_REFUSED = /لا يقبل الصور|no verified image input")
+    expect(cli).toContain("text = await ask(`${askPrompt}\\n\\n[اللقطةُ لم تُرفق: نموذجُك لا يقبل الصور")
+  })
+
   test("cli.ts: خلاصةُ السبرنتات في نظام الوكيل، وحافّةُ الانتقال قبل ختم الاكتمال (حتى ثلاث مرّات)", () => {
     const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
     expect(cli).toContain("planBrief() + (process.env.ABDO_PARALLEL_WORKER === \"1\" ? \"\" : sprintBrief(PROJECT_DIR))")
@@ -60,4 +75,14 @@ describe("عينُ الوكيل — vision-describe", () => {
     expect(cli).toContain("if (advance !== undefined && sprintAdvances < 3) {")
     expect(cli).toContain("await emitEvent(turn.id, `▶ ${advance.line}`)")
   })
+})
+
+// 10-11 (مقيس: سقفُ الإشارة لم تحترمه طبقةُ النقل فعلق نداءُ الرؤية 300 ث) — الانتظارُ يُقطع بالمهلة نفسِها.
+test("withDeadline: a call that never answers is abandoned at the deadline with a named reason; a fast one passes through", async () => {
+  const started = Date.now()
+  const hung = withDeadline(new Promise<string>(() => {}), 120, "نموذجُ الرؤية")
+  const outcome = await Promise.race([hung.then(() => "resolved", (error: Error) => error.message), Bun.sleep(2000).then(() => "still waiting")])
+  expect(outcome).toBe("نموذجُ الرؤية: لم يُجب خلال 0 ث")
+  expect(Date.now() - started).toBeLessThan(2000)
+  expect(await withDeadline(Promise.resolve("وصف"), 5000, "x")).toBe("وصف")
 })

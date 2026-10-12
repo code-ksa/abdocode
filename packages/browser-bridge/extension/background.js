@@ -4,12 +4,27 @@
 // وإيدج؛ وفي سفاري — حيث لا منقّح للإضافات — تُبعث أحداثٌ اصطناعيةٌ داخل الصفحة ويُعلَن ذلك في الردّ
 // (`mode: "synthetic"`) كي يعرف الوكيلُ والمستخدم. القراءةُ والتمريرُ بسكربتٍ في الصفحة. لا تخزينَ لمحتوى
 // الصفحات، ولا إرسالَ إلا إلى الجسر المحلّيّ.
+// 0.7.0: كروم وإيدج موصولان معاً (كلٌّ يعرّف نفسه ويعلن تركيزَ المستخدم)، المراجعُ تعبر
+// Shadow DOM والإطاراتِ من الأصل نفسه، المنقّحُ يبقى ملتصقاً بالتبويب أثناء العمل، ونسخُ الصفحة (save) ولقطةُ الصفحة كاملةً والكونسولُ والشبكة.
 
 const DEFAULT_PORT = 9367
 const api = typeof chrome !== "undefined" ? chrome : browser
 const TRUSTED_INPUT = !!(api.debugger && typeof api.debugger.attach === "function")
 let socket = null
 let retryTimer = null
+let connecting = false
+// أيُّ متصفّحٍ هذا — الجسرُ يوجّه الأفعالَ إلى آخر متصفّحٍ ركّز عليه المستخدم حين يكون كروم وإيدج موصولَين معاً.
+const BROWSER = (() => {
+  const brands = ((navigator.userAgentData && navigator.userAgentData.brands) || []).map((b) => String(b.brand))
+  if (brands.some((b) => /Edge/.test(b))) return "edge"
+  if (brands.some((b) => /Opera/.test(b))) return "opera"
+  if (brands.some((b) => /Brave/.test(b))) return "brave"
+  const ua = navigator.userAgent
+  if (/Edg\//.test(ua)) return "edge"
+  if (/Firefox\//.test(ua)) return "firefox"
+  if (/Safari\//.test(ua) && !/Chrom/.test(ua)) return "safari"
+  return "chrome"
+})()
 
 const settings = async () => {
   const stored = await api.storage.local.get({ port: DEFAULT_PORT, token: "" })
@@ -59,23 +74,40 @@ const READ_TREE = () => {
     if (t === "textarea") return "textbox"
     if (t === "input") { const type = (el.getAttribute("type") || "text").toLowerCase(); return type === "password" ? "textbox:password" : type === "file" ? "textbox:file" : type === "checkbox" || type === "radio" ? type : type === "submit" || type === "button" ? "button" : "textbox" }
     if (/^h[1-6]$/.test(t)) return "heading"
+    if (el.isContentEditable && !el.getAttribute("role")) return "textbox"
     return el.getAttribute("role") || t
   }
-  for (const el of document.querySelectorAll("a,button,input,textarea,select,h1,h2,h3,h4,h5,h6,[role]")) {
-    if (n >= 200) break
-    const r = el.getBoundingClientRect()
-    if (r.width === 0 || r.height === 0) continue
-    n += 1
-    const ref = "r" + n
-    el.setAttribute("data-abdo-ref", ref)
-    const s = state(el)
-    out.push(s === undefined ? { ref, role: role(el), name: label(el) } : { ref, role: role(el), name: label(el), state: s })
+  // 0.7.0 — المراجعُ تعبر جذورَ Shadow DOM المفتوحة والإطاراتِ من الأصل نفسه (محرّراتٌ ومكوّناتُ ويب كانت لا تُرى)؛ والعنصرُ يُحفظ
+  // في خريطةٍ داخل عالم الإضافة المعزول فيجده كلُّ فعلٍ لاحق حيث كان (querySelector لا يعبر الظلّ ولا الإطار).
+  const SEL = "a,button,input,textarea,select,summary,h1,h2,h3,h4,h5,h6,[role],[contenteditable=''],[contenteditable='true']"
+  const refs = new Map()
+  const visit = (root) => {
+    for (const el of root.querySelectorAll("*")) {
+      if (n >= 200) return
+      if (el.matches(SEL)) {
+        const r = el.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) {
+          n += 1
+          const ref = "r" + n
+          el.setAttribute("data-abdo-ref", ref)
+          refs.set(ref, el)
+          const s = state(el)
+          out.push(s === undefined ? { ref, role: role(el), name: label(el) } : { ref, role: role(el), name: label(el), state: s })
+        }
+      }
+      if (el.shadowRoot) visit(el.shadowRoot)
+      if (el.tagName === "IFRAME" || el.tagName === "FRAME") { let doc = null; try { doc = el.contentDocument } catch { doc = null } if (doc && doc.documentElement) visit(doc) }
+    }
   }
+  for (const old of document.querySelectorAll("[data-abdo-ref]")) old.removeAttribute("data-abdo-ref")
+  visit(document)
+  globalThis.__abdoRefs = refs
+  globalThis.__abdoRef = (ref) => { const el = refs.get(ref); return el && el.isConnected ? el : document.querySelector('[data-abdo-ref="' + ref + '"]') }
   return out
 }
 
 const LOOK = (ref) => {
-  const el = ref ? document.querySelector('[data-abdo-ref="' + ref + '"]') : document.body
+  const el = ref ? (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]')) : document.body
   if (!el) return ""
   const cs = getComputedStyle(el)
   const keys = ["display", "color", "background-color", "font-size", "font-family", "font-weight", "width", "height", "margin", "padding", "border", "text-align", "direction"]
@@ -93,11 +125,15 @@ const LOOK = (ref) => {
 }
 
 const LOCATE = (ref) => {
-  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  const el = (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]'))
   if (!el) return null
   el.scrollIntoView({ block: "center", inline: "center" })
   const r = el.getBoundingClientRect()
-  return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+  let x = r.x + r.width / 2, y = r.y + r.height / 2
+  // داخل إطارٍ من الأصل نفسه: الإحداثيّاتُ نسبةً إلى الإطار — تُضاف إزاحتُه (وإزاحةُ ما فوقه) لتصير إحداثيّاتِ الصفحة التي يضغط فيها المنقّح.
+  let view = el.ownerDocument.defaultView
+  while (view && view.frameElement) { const f = view.frameElement; const fr = f.getBoundingClientRect(); x += fr.left + f.clientLeft; y += fr.top + f.clientTop; view = view.parent }
+  return { x: Math.round(x), y: Math.round(y) }
 }
 
 const SCROLL = (direction, count) => { window.scrollBy(0, (direction === "up" ? -1 : 1) * Math.round(innerHeight * 0.9) * count); return true }
@@ -105,7 +141,7 @@ const SCROLL = (direction, count) => { window.scrollBy(0, (direction === "up" ? 
 // المسارُ الاصطناعيّ (سفاري): نقرةٌ وكتابةٌ ومفاتيحُ بأحداث DOM. الكتابةُ تمرّ بمُعيِّن القيمة الأصليّ كي تراها
 // أُطرُ الواجهة (React وأخواتها) التي تتجاهل `el.value =` المباشر.
 const SYNTH_TAP = (ref) => {
-  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  const el = (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]'))
   if (!el) return null
   el.scrollIntoView({ block: "center", inline: "center" })
   if (typeof el.focus === "function") el.focus()
@@ -115,28 +151,29 @@ const SYNTH_TAP = (ref) => {
 
 // 0.6.4 — قبل الكتابة الموثوقة يُحدَّد ما في الحقل كلُّه فتحلّ الكتابةُ محلَّه (مقيس 09-17: الكتابةُ كانت تُلحَق بالقديم فصار «ششش» «شششششش-قشششياس»).
 const SELECT_FIELD = (ref) => {
-  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  const el = (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]'))
   if (!el) return null
   if (typeof el.focus === "function") el.focus()
-  if (typeof el.select === "function" && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) { el.select(); return { length: String(el.value || "").length } }
-  if (el.isContentEditable) { const sel = window.getSelection(); sel.removeAllRanges(); const range = document.createRange(); range.selectNodeContents(el); sel.addRange(range); return { length: String(el.textContent || "").length } }
+  if (typeof el.select === "function" && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) { el.select(); return { length: String(el.value || "").length } }
+  if (el.isContentEditable) { const doc = el.ownerDocument; const sel = doc.getSelection(); sel.removeAllRanges(); const range = doc.createRange(); range.selectNodeContents(el); sel.addRange(range); return { length: String(el.textContent || "").length } }
   return { length: 0 }
 }
 
 // What the field holds after a fill: its length only (never the value — it can be a password).
 const READ_FIELD = (ref) => {
-  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  const el = (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]'))
   if (!el) return null
-  const v = (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) ? String(el.value || "") : String(el.textContent || "")
+  const v = (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") ? String(el.value || "") : String(el.textContent || "")
   return { length: v.length }
 }
 
 const SYNTH_FILL = (ref, text) => {
-  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  const el = (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]'))
   if (!el) return null
   el.scrollIntoView({ block: "center", inline: "center" })
   if (typeof el.focus === "function") el.focus()
-  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : el instanceof HTMLInputElement ? HTMLInputElement.prototype : null
+  const view = el.ownerDocument.defaultView || window
+  const proto = el.tagName === "TEXTAREA" ? view.HTMLTextAreaElement.prototype : el.tagName === "INPUT" ? view.HTMLInputElement.prototype : null
   const setter = proto && Object.getOwnPropertyDescriptor(proto, "value") && Object.getOwnPropertyDescriptor(proto, "value").set
   if (setter) setter.call(el, text)
   else if (el.isContentEditable) el.textContent = text
@@ -146,9 +183,15 @@ const SYNTH_FILL = (ref, text) => {
   return { mode: "synthetic" }
 }
 
-const SYNTH_KEY = (key) => {
-  const el = document.activeElement || document.body
-  const init = { key, code: key, bubbles: true, cancelable: true }
+const SYNTH_KEY = (key, mods) => {
+  let el = document.activeElement || document.body
+  for (let i = 0; i < 8 && el; i += 1) {
+    if (el.shadowRoot && el.shadowRoot.activeElement) { el = el.shadowRoot.activeElement; continue }
+    if (el.tagName === "IFRAME") { let inner = null; try { inner = el.contentDocument && el.contentDocument.activeElement } catch { inner = null } if (inner) { el = inner; continue } }
+    break
+  }
+  const m = Number(mods) || 0
+  const init = { key, code: key, bubbles: true, cancelable: true, altKey: !!(m & 1), ctrlKey: !!(m & 2), metaKey: !!(m & 4), shiftKey: !!(m & 8) }
   const down = el.dispatchEvent(new KeyboardEvent("keydown", init))
   el.dispatchEvent(new KeyboardEvent("keyup", init))
   if (down && key === "Enter" && el.form && typeof el.form.requestSubmit === "function") el.form.requestSubmit()
@@ -160,6 +203,28 @@ const SYNTH_KEY = (key) => {
     if (next && typeof next.focus === "function") next.focus()
   }
   return { mode: "synthetic" }
+}
+
+// 0.7.0 — «page save» في متصفّح المستخدم: ما يعطيه DevTools «Inspect ⇦ <html> ⇦ Copy element» (outerHTML لعقدة <html> بعد تشغيل
+// السكربتات) مع أوراق الأنماط والسكربتات. الملفّاتُ الخارجيّة يجلبها عاملُ الخدمة (fetchAsset) لا الصفحة: صلاحيّةُ المضيفين تتجاوز CORS.
+// أوراقُ CSS-in-JS (insertRule بلا نصّ) تُقرأ من cssRules، والأوراقُ المتبنّاة (adoptedStyleSheets) كذلك.
+const SAVE_DOC = () => {
+  const clone = document.documentElement.cloneNode(true)
+  const strip = (node) => { node.removeAttribute("data-abdo-ref"); node.removeAttribute("data-abdo-seq") }
+  strip(clone)
+  for (const node of clone.querySelectorAll("[data-abdo-ref],[data-abdo-seq]")) strip(node)
+  const rulesText = (sheet) => { try { return Array.from(sheet.cssRules).map((r) => r.cssText).join("\n") } catch { return "" } }
+  const styles = []
+  for (const sheet of document.styleSheets) {
+    const media = (sheet.media && sheet.media.mediaText) || ""
+    if (sheet.href) { styles.push({ href: sheet.href, media }); continue }
+    const text = (sheet.ownerNode && sheet.ownerNode.textContent) || rulesText(sheet)
+    styles.push({ href: null, media, text })
+  }
+  for (const sheet of document.adoptedStyleSheets || []) styles.push({ href: null, media: "adopted", text: rulesText(sheet) })
+  const scripts = Array.from(document.scripts).map((el) => el.src ? { src: el.src, type: el.type || "" } : { src: null, type: el.type || "", text: el.textContent || "" })
+  const doctype = document.doctype ? "<!DOCTYPE " + document.doctype.name + ">" : "<!DOCTYPE html>"
+  return { url: location.href, title: document.title, viewport: { width: innerWidth, height: innerHeight }, html: doctype + "\n" + clone.outerHTML, styles, scripts }
 }
 
 // S9 (0.6.5) — ماشي المواصفة: شجرةُ العناصر الظاهرة المسطّحة بصناديقها وأنماطها المحسوبة — النصُّ نفسُه في
@@ -214,7 +279,7 @@ const SPEC = (limit, rootRef) => {
 const INSPECT = (mode, target) => {
   const abs = (u) => { try { return new URL(u, location.href).href } catch { return u } }
   if (mode === "dom") {
-    const el = document.querySelector('[data-abdo-ref="' + target + '"]')
+    const el = (globalThis.__abdoRef ? globalThis.__abdoRef(target) : document.querySelector('[data-abdo-ref="' + target + '"]'))
     if (!el) return ""
     const cs = getComputedStyle(el); const r = el.getBoundingClientRect()
     const keys = ["display", "position", "width", "height", "padding", "margin", "gap", "color", "backgroundColor", "backgroundImage", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "textAlign", "borderRadius", "border", "boxShadow", "opacity", "flexDirection", "justifyContent", "alignItems", "gridTemplateColumns"]
@@ -293,7 +358,7 @@ const INSPECT = (mode, target) => {
 
 // ن3 — قائمةٌ منسدلة أصليّة: مطابقةُ الخيار بالنصّ/القيمة (تامّةً ثمّ بادئةً ثمّ احتواءً) ثمّ input/change كما يفعل المتصفّح.
 const SELECT_OPTION = (ref, want) => {
-  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  const el = (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]'))
   if (!el) return null
   const norm = (s) => String(s == null ? "" : s).trim().toLowerCase().replace(/\s+/g, " ")
   if (el.tagName !== "SELECT") return { ok: false, why: "not-select", role: el.tagName.toLowerCase(), options: [] }
@@ -311,20 +376,20 @@ const SELECT_OPTION = (ref, want) => {
 }
 
 const FILE_INPUT_KIND = (ref) => {
-  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  const el = (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]'))
   if (!el) return "missing"
   return el.tagName === "INPUT" && (el.type || "").toLowerCase() === "file" ? "file" : "other"
 }
 
 const READ_FILES = (ref) => {
-  const el = document.querySelector('[data-abdo-ref="' + ref + '"]')
+  const el = (globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]'))
   if (!el || !el.files) return []
   return Array.from(el.files).map((f) => f.name + " (" + f.size + " بايت)")
 }
 
 // ن3 — سحبُ HTML5 بأحداث DragEvent وDataTransfer مشترَك (تكملةٌ للماوس الموثوق أو بديلُه في المسار الاصطناعيّ).
 const SYNTH_DRAG = (fromRef, toRef) => {
-  const a = document.querySelector('[data-abdo-ref="' + fromRef + '"]'), b = document.querySelector('[data-abdo-ref="' + toRef + '"]')
+  const a = (globalThis.__abdoRef ? globalThis.__abdoRef(fromRef) : document.querySelector('[data-abdo-ref="' + fromRef + '"]')), b = (globalThis.__abdoRef ? globalThis.__abdoRef(toRef) : document.querySelector('[data-abdo-ref="' + toRef + '"]'))
   if (!a || !b) return null
   const dt = new DataTransfer()
   const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }))
@@ -341,13 +406,124 @@ const inPage = async (tabId, func, args = []) => {
   return frame && frame.result
 }
 
-const KEY_CODES = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, Delete: 46, Space: 32, Home: 36, End: 35, PageUp: 33, PageDown: 34, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 }
+const KEY_CODES = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, Delete: 46, Space: 32, Home: 36, End: 35, PageUp: 33, PageDown: 34, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Insert: 45 }
+for (let i = 1; i <= 12; i += 1) KEY_CODES["F" + i] = 111 + i
 
+// 0.7.0 — «Control+a» و«Shift+Tab» و«a»: المُعدِّلاتُ بأرقام CDP (Alt=1 Ctrl=2 Meta=4 Shift=8)، والحرفُ يُكتب نصّاً إلا مع Ctrl/Meta (اختصار).
+const parseKey = (spec) => {
+  const parts = String(spec).split("+")
+  const name = parts.pop()
+  let modifiers = 0
+  for (const part of parts) {
+    const k = part.toLowerCase()
+    if (k === "alt") modifiers |= 1
+    else if (k === "control" || k === "ctrl") modifiers |= 2
+    else if (k === "meta" || k === "cmd") modifiers |= 4
+    else if (k === "shift") modifiers |= 8
+    else return null
+  }
+  if (KEY_CODES[name] !== undefined) {
+    const text = modifiers & 6 ? undefined : name === "Enter" ? "\r" : name === "Space" ? " " : undefined
+    return { key: name === "Space" ? " " : name, code: name, vk: KEY_CODES[name], modifiers, text }
+  }
+  if (/^[A-Za-z0-9]$/.test(name)) {
+    const upper = name.toUpperCase()
+    const ch = /[A-Za-z]/.test(name) ? (modifiers & 8 ? upper : name.toLowerCase()) : name
+    return { key: ch, code: /[0-9]/.test(name) ? "Digit" + name : "Key" + upper, vk: upper.charCodeAt(0), modifiers, text: modifiers & 6 ? undefined : ch }
+  }
+  return null
+}
+
+// 0.7.0 — جلسةُ منقّحٍ لكلّ تبويب تبقى ملتصقةً أثناء العمل وتنفكّ بعد ٣٠ ث خمول (كانت تُلصق وتُفكّ مع كلّ نقرة: شارةُ «يجري التنقيح»
+// تومض، وكلُّ فعلٍ يدفع ثمنَ الإلصاق). أثناءَ تسجيل الكونسول/الشبكة تبقى حتى تنتهي مدّةُ التسجيل. إن ألغى المستخدمُ التنقيحَ من شريط
+// المتصفّح فذلك قراره: لا يُعاد الإلصاقُ دقيقةً كاملة، ويُقال السببُ للوكيل.
+const DEBUG_IDLE_MS = 30000
+const CAPTURE_MS = 10 * 60 * 1000
+const sessions = new Map()
+let userCanceledAt = 0
+const detachTab = async (tabId) => {
+  const session = sessions.get(tabId)
+  if (session) { clearTimeout(session.idle); clearTimeout(session.stop) }
+  sessions.delete(tabId)
+  try { await api.debugger.detach({ tabId }) } catch {}
+}
+const attachTab = async (tabId) => {
+  if (Date.now() - userCanceledAt < 60000) throw new Error("the user cancelled debugging from the browser bar less than a minute ago — ask them before acting again")
+  let session = sessions.get(tabId)
+  if (!session) {
+    try { await api.debugger.attach({ tabId }, "1.3") }
+    catch (error) { if (!/already attached/i.test(String((error && error.message) || error))) throw error }
+    session = { idle: null, stop: null, capture: null }
+    sessions.set(tabId, session)
+  }
+  clearTimeout(session.idle)
+  if (!session.capture) session.idle = setTimeout(() => detachTab(tabId), DEBUG_IDLE_MS)
+  return session
+}
 const withDebugger = async (tabId, work) => {
-  const target = { tabId }
-  await api.debugger.attach(target, "1.3")
-  try { return await work((method, params) => api.debugger.sendCommand(target, method, params)) }
-  finally { try { await api.debugger.detach(target) } catch {} }
+  await attachTab(tabId)
+  const send = (method, params) => api.debugger.sendCommand({ tabId }, method, params)
+  try { return await work(send) }
+  catch (error) {
+    // مقبسُ المنقّح انفكّ من تحتنا (أُغلق التبويب في مكانه، أو أُعيد تشغيلُ عامل الخدمة): إلصاقٌ جديد ومحاولةٌ واحدة.
+    if (!/not attached|detached/i.test(String((error && error.message) || error))) throw error
+    sessions.delete(tabId)
+    await attachTab(tabId)
+    return work(send)
+  }
+}
+
+// الكونسول والشبكة: أحداثُ المنقّح تُخزَّن لكلّ تبويبٍ يسجّل (سقفُ ٣٠٠ لكلٍّ منهما، والأقدمُ يسقط ويُعدّ).
+const MAX_CAPTURE = 300
+const captureEvent = (capture, method, p) => {
+  const pushConsole = (entry) => { capture.console.push(entry); if (capture.console.length > MAX_CAPTURE) { capture.console.shift(); capture.dropped += 1 } }
+  const at = (frames) => { const f = frames && frames.callFrames && frames.callFrames[0]; return f ? (f.url || "") + ":" + (f.lineNumber + 1) : "" }
+  if (method === "Runtime.consoleAPICalled") pushConsole({ level: p.type, text: (p.args || []).map((a) => a.value !== undefined ? (typeof a.value === "string" ? a.value : JSON.stringify(a.value)) : (a.description || a.type)).join(" ").slice(0, 600), at: at(p.stackTrace) })
+  else if (method === "Runtime.exceptionThrown") { const d = p.exceptionDetails || {}; pushConsole({ level: "error", text: String((d.exception && d.exception.description) || d.text || "exception").slice(0, 600), at: d.url ? d.url + ":" + ((d.lineNumber || 0) + 1) : at(d.stackTrace) }) }
+  else if (method === "Log.entryAdded") { const e = p.entry || {}; pushConsole({ level: e.level, text: String(e.text || "").slice(0, 600), at: e.url ? e.url + (typeof e.lineNumber === "number" ? ":" + (e.lineNumber + 1) : "") : "" }) }
+  else if (method === "Network.requestWillBeSent") {
+    if (!p.request || /^data:/i.test(p.request.url)) return
+    capture.network.set(p.requestId, { method: p.request.method, url: p.request.url, type: p.type || "", start: p.timestamp })
+    if (capture.network.size > MAX_CAPTURE) { capture.network.delete(capture.network.keys().next().value); capture.dropped += 1 }
+  }
+  else if (method === "Network.responseReceived") { const e = capture.network.get(p.requestId); if (e) { e.status = p.response.status; e.type = p.type || e.type } }
+  else if (method === "Network.loadingFinished") { const e = capture.network.get(p.requestId); if (e) { e.ms = (p.timestamp - e.start) * 1000; e.bytes = p.encodedDataLength } }
+  else if (method === "Network.loadingFailed") { const e = capture.network.get(p.requestId); if (e) { e.failed = p.errorText || (p.canceled ? "canceled" : "failed"); e.ms = (p.timestamp - e.start) * 1000 } }
+}
+if (TRUSTED_INPUT) {
+  api.debugger.onEvent.addListener((source, method, params) => { const session = sessions.get(source.tabId); if (session && session.capture) captureEvent(session.capture, method, params || {}) })
+  api.debugger.onDetach.addListener((source, reason) => {
+    const session = sessions.get(source.tabId)
+    if (session) { clearTimeout(session.idle); clearTimeout(session.stop) }
+    sessions.delete(source.tabId)
+    if (reason === "canceled_by_user") userCanceledAt = Date.now()
+  })
+}
+api.tabs.onRemoved.addListener((tabId) => { const session = sessions.get(tabId); if (session) { clearTimeout(session.idle); clearTimeout(session.stop) } sessions.delete(tabId) })
+
+// ملفّاتُ «save» الخارجيّة: سقفُ ٣MB للملفّ و٢٠MB للنسخة كلّها (كالمتصفّح المملوك)، ستّةٌ في وقتٍ واحد.
+const ASSET_CAP = 3 * 1024 * 1024
+const COPY_CAP = 20 * 1024 * 1024
+const fetchAssets = async (items, key) => {
+  let used = 0
+  const queue = items.filter((item) => item[key])
+  const work = async () => {
+    for (;;) {
+      const item = queue.shift()
+      if (!item) return
+      if (!/^https?:/i.test(item[key])) { item.error = "not http(s)"; continue }
+      if (used >= COPY_CAP) { item.error = "copy budget (20MB) reached"; continue }
+      try {
+        const response = await fetch(item[key], { credentials: "include" })
+        if (!response.ok) { item.error = "HTTP " + response.status; continue }
+        let text = await response.text()
+        if (text.length > ASSET_CAP) { text = text.slice(0, ASSET_CAP); item.truncated = true }
+        used += text.length
+        item.text = text
+      } catch (error) { item.error = String((error && error.message) || error).slice(0, 120) }
+    }
+  }
+  await Promise.all([work(), work(), work(), work(), work(), work()])
 }
 
 // ن5 — انتظارُ اكتمال تحميل تبويبٍ بعد فعلٍ عليه (open/back/forward/new)، بمهلةٍ لا تعلّق.
@@ -371,11 +547,7 @@ const perform = async (action, args) => {
     case "open": {
       if (!/^https?:\/\//i.test(String(args.url))) throw new Error("http/https only")
       await api.tabs.update(tab.id, { url: String(args.url) })
-      await new Promise((resolve) => {
-        const done = (id, info) => { if (id === tab.id && info.status === "complete") { api.tabs.onUpdated.removeListener(done); resolve() } }
-        api.tabs.onUpdated.addListener(done)
-        setTimeout(() => { api.tabs.onUpdated.removeListener(done); resolve() }, 15000)
-      })
+      await settled(tab.id, 25000)
       return true
     }
     case "tap": {
@@ -417,12 +589,13 @@ const perform = async (action, args) => {
       })
     }
     case "key": {
-      const vk = KEY_CODES[args.key]
-      if (vk === undefined) throw new Error("unsupported key")
-      if (!TRUSTED_INPUT) return inPage(tab.id, SYNTH_KEY, [args.key])
+      const k = parseKey(args.key)
+      if (!k) throw new Error("unsupported key")
+      if (!TRUSTED_INPUT) return inPage(tab.id, SYNTH_KEY, [k.key, k.modifiers])
       return withDebugger(tab.id, async (send) => {
-        await send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: args.key, windowsVirtualKeyCode: vk })
-        await send("Input.dispatchKeyEvent", { type: "keyUp", key: args.key, windowsVirtualKeyCode: vk })
+        const base = { key: k.key, code: k.code, windowsVirtualKeyCode: k.vk, modifiers: k.modifiers }
+        await send("Input.dispatchKeyEvent", k.text ? { type: "keyDown", ...base, text: k.text, unmodifiedText: k.text } : { type: "rawKeyDown", ...base })
+        await send("Input.dispatchKeyEvent", { type: "keyUp", ...base })
         return { mode: "trusted" }
       })
     }
@@ -438,7 +611,9 @@ const perform = async (action, args) => {
       if (kind !== "file") return { ok: false, why: "not-file" }
       if (!TRUSTED_INPUT) return { ok: false, why: "upload needs the debugger permission (Chrome/Edge)" }
       return withDebugger(tab.id, async (send) => {
-        const handle = await send("Runtime.evaluate", { expression: "document.querySelector('[data-abdo-ref=\"" + String(args.ref) + "\"]')", returnByValue: false })
+        const want = "[data-abdo-ref=\"" + String(args.ref).replace(/[^A-Za-z0-9]/g, "") + "\"]"
+        const expression = "(() => { const want = '" + want + "'; const walk = (root) => { const hit = root.querySelector(want); if (hit) return hit; for (const el of root.querySelectorAll('*')) { if (el.shadowRoot) { const h = walk(el.shadowRoot); if (h) return h } if (el.tagName === 'IFRAME') { let d = null; try { d = el.contentDocument } catch { d = null } if (d) { const h = walk(d); if (h) return h } } } return null }; return walk(document) })()"
+        const handle = await send("Runtime.evaluate", { expression, returnByValue: false })
         const objectId = handle && handle.result && handle.result.objectId
         if (!objectId) return null
         await send("DOM.enable", {})
@@ -463,13 +638,60 @@ const perform = async (action, args) => {
     // 0.6.1 (مقيس 09-16 على لوحة القياس): captureVisibleTab يردّ «image readback failed» حين تكون نافذةُ المتصفّح خلف نافذةٍ أخرى؛
     // اللقطةُ لا تحقن شيئاً، فتُرفع النافذةُ مرّةً ويُعاد الالتقاط — وإن فشل ثانيةً يصل الخطأُ باسمه.
     case "shot": {
+      // 0.7.0 — الصفحةُ كاملةً بطولها (سقفُ 16384px) عبر المنقّح: captureVisibleTab لا يرى إلا الشاشة.
+      const viaDebugger = (full) => withDebugger(tab.id, async (send) => {
+        const params = { format: "png", captureBeyondViewport: !!full }
+        if (full) {
+          const metrics = await send("Page.getLayoutMetrics", {})
+          const size = metrics.cssContentSize || metrics.contentSize
+          params.clip = { x: 0, y: 0, width: Math.ceil(size.width), height: Math.min(Math.ceil(size.height), 16384), scale: 1 }
+        }
+        const shot = await send("Page.captureScreenshot", params)
+        return "data:image/png;base64," + shot.data
+      })
+      if (args.full) { if (!TRUSTED_INPUT) throw new Error("a full-page shot needs the debugger permission (Chrome/Edge)"); return viaDebugger(true) }
       try { return await api.tabs.captureVisibleTab(tab.windowId, { format: "png" }) }
       catch (first) {
         try { await api.windows.update(tab.windowId, { focused: true }) } catch {}
         await new Promise((resolve) => setTimeout(resolve, 300))
         try { return await api.tabs.captureVisibleTab(tab.windowId, { format: "png" }) }
-        catch (second) { throw new Error(String(second && second.message || second) + " (after raising the window; first: " + String(first && first.message || first) + ")") }
+        catch (second) {
+          if (TRUSTED_INPUT) { try { return await viaDebugger(false) } catch {} }
+          throw new Error(String(second && second.message || second) + " (after raising the window; first: " + String(first && first.message || first) + ")")
+        }
       }
+    }
+    case "save": {
+      const copy = await inPage(tab.id, SAVE_DOC)
+      if (!copy || typeof copy.html !== "string") throw new Error("could not read the page")
+      await fetchAssets(copy.styles, "href")
+      await fetchAssets(copy.scripts, "src")
+      return copy
+    }
+    // 0.7.0 — الكونسول والشبكة: أوّلُ نداءٍ يبدأ التسجيلَ لعشر دقائق (يمتدّ مع كلّ نداء)؛ الكونسولُ يُعاد كاملاً (المتصفّحُ يعيد ما سبق عند
+    // Runtime.enable)، والشبكةُ من لحظة البدء — reload يعيد تحميلَ الصفحة ليلتقط كلَّ طلباتها.
+    case "devtools": {
+      if (!TRUSTED_INPUT) throw new Error("devtools needs the debugger permission (Chrome/Edge)")
+      const session = await attachTab(tab.id)
+      let started = false
+      if (!session.capture) {
+        session.capture = { console: [], network: new Map(), dropped: 0 }
+        clearTimeout(session.idle)
+        started = true
+        for (const domain of ["Runtime.enable", "Log.enable", "Network.enable"]) await api.debugger.sendCommand({ tabId: tab.id }, domain, {})
+      }
+      clearTimeout(session.stop)
+      session.stop = setTimeout(() => { session.capture = null; detachTab(tab.id) }, CAPTURE_MS)
+      if (args.clear) { session.capture.console = []; session.capture.network.clear(); session.capture.dropped = 0 }
+      if (args.reload) {
+        session.capture.network.clear()
+        await api.tabs.reload(tab.id)
+        await settled(tab.id, 25000)
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+      const entries = args.what === "network" ? Array.from(session.capture.network.values()).map(({ start, ...rest }) => rest) : session.capture.console.slice()
+      const now = await api.tabs.get(tab.id).catch(() => tab)
+      return { started, url: now.url, entries: entries.slice(-200), dropped: session.capture.dropped }
     }
     // ن5 (09-16) — التبويبات: قائمةٌ مرقّمة بالفعّال، تبديلٌ/إغلاقٌ برقمٍ من القائمة (لا بمعرّفٍ خفيّ)، وتبويبٌ جديد على رابط http/https.
     case "tabs": {
@@ -540,33 +762,57 @@ const refreshToken = async (port, token) => {
 }
 try { api.alarms.create("abdo-reconnect", { periodInMinutes: 1 }); api.alarms.onAlarm.addListener((alarm) => { if (alarm.name === "abdo-reconnect") connect() }) } catch {}
 
+const tell = (frame) => { try { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(frame)) } catch {} }
+// المستخدمُ ركّز على هذا المتصفّح ⇦ الجسرُ يوجّه الأفعالَ إليه (حين يكون كروم وإيدج موصولَين معاً).
+const notifyFocus = () => tell({ kind: "focus", at: Date.now() })
+try { api.windows.onFocusChanged.addListener((windowId) => { if (windowId !== api.windows.WINDOW_ID_NONE) notifyFocus() }) } catch {}
+try { api.tabs.onActivated.addListener(() => notifyFocus()) } catch {}
+
 const connect = async () => {
+  // 0.7.0 — قفلٌ واحد: المنبّهُ وبدءُ التشغيل وتغيّرُ التخزين كانت تستدعي connect معاً فيُفتح مقبسان، ويمحو إغلاقُ القديم المتغيّرَ الجديد.
+  if (connecting) return
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return
-  const stored = await settings()
-  const port = stored.port
-  if (!stored.token) { setBadge("?"); pairLoop(); return }
-  clearTimeout(pairTimer)
-  const token = await refreshToken(port, stored.token)
-  socket = new WebSocket(`ws://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`)
-  // ب8د — النبضُ كلَّ ٢٠ ث: يُبقي عاملَ الخدمة حيّاً (كروم ≥116 يمدّد عمرَه مع نشاط المقبس) ويجعل «متّصل» في الجسر قياساً لا حالةً.
-  let pingTimer = null
-  socket.onopen = () => { setBadge("on"); clearInterval(pingTimer); pingTimer = setInterval(() => { try { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: "ping", at: Date.now() })) } catch {} }, 20000) }
-  socket.onclose = () => { setBadge(""); clearInterval(pingTimer); socket = null; clearTimeout(retryTimer); retryTimer = setTimeout(connect, 3000) }
-  socket.onerror = () => {}
-  socket.onmessage = async (event) => {
-    let message
-    try { message = JSON.parse(event.data) } catch { return }
-    if (typeof message.id !== "number") return
-    try { socket.send(JSON.stringify({ id: message.id, ok: true, result: await perform(message.action, message.args || {}) })) }
-    catch (error) { socket.send(JSON.stringify({ id: message.id, ok: false, error: String(error && error.message || error).slice(0, 300) })) }
-  }
+  connecting = true
+  try {
+    const stored = await settings()
+    const port = stored.port
+    if (!stored.token) { setBadge("?"); pairLoop(); return }
+    clearTimeout(pairTimer)
+    const token = await refreshToken(port, stored.token)
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`)
+    socket = ws
+    // ب8د — النبضُ كلَّ ٢٠ ث: يُبقي عاملَ الخدمة حيّاً (كروم ≥116 يمدّد عمرَه مع نشاط المقبس) ويجعل «متّصل» في الجسر قياساً لا حالةً.
+    let pingTimer = null
+    ws.onopen = () => {
+      if (socket !== ws) { try { ws.close() } catch {} return }
+      setBadge("on")
+      tell({ kind: "hello", browser: BROWSER, version: api.runtime.getManifest().version, trusted: TRUSTED_INPUT })
+      api.windows.getLastFocused().then((w) => { if (w && w.focused) notifyFocus() }).catch(() => {})
+      clearInterval(pingTimer)
+      pingTimer = setInterval(() => { try { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ kind: "ping", at: Date.now() })) } catch {} }, 20000)
+    }
+    ws.onclose = () => {
+      clearInterval(pingTimer)
+      if (socket !== ws) return
+      setBadge(""); socket = null; clearTimeout(retryTimer); retryTimer = setTimeout(connect, 3000)
+    }
+    ws.onerror = () => {}
+    ws.onmessage = async (event) => {
+      let message
+      try { message = JSON.parse(event.data) } catch { return }
+      if (typeof message.id !== "number") return
+      try { ws.send(JSON.stringify({ id: message.id, ok: true, result: await perform(message.action, message.args || {}) })) }
+      catch (error) { try { ws.send(JSON.stringify({ id: message.id, ok: false, error: String(error && error.message || error).slice(0, 300) })) } catch {} }
+    }
+  } finally { connecting = false }
 }
 
 api.runtime.onInstalled.addListener(connect)
 api.runtime.onStartup.addListener(connect)
-api.storage.onChanged.addListener(() => { if (socket) socket.close(); else connect() })
+// يُعاد الاتّصالُ حين يتغيّر المنفذُ أو الرمز وحدهما — لا مع كلّ كتابةٍ في التخزين.
+api.storage.onChanged.addListener((changes, area) => { if (area !== "local" || !(("token" in changes) || ("port" in changes))) return; if (socket) socket.close(); else connect() })
 api.runtime.onMessage.addListener((message, _sender, reply) => {
-  if (message && message.kind === "status") { reply({ connected: !!socket && socket.readyState === WebSocket.OPEN, trusted: TRUSTED_INPUT }); return true }
+  if (message && message.kind === "status") { reply({ connected: !!socket && socket.readyState === WebSocket.OPEN, trusted: TRUSTED_INPUT, browser: BROWSER, version: api.runtime.getManifest().version }); return true }
   if (message && message.kind === "reconnect") { if (socket) socket.close(); connect(); reply({ ok: true }); return true }
   if (message && message.kind === "pair") { tryPair().then((result) => { if (result.paired) connect(); reply(result) }); return true }
   return false

@@ -119,8 +119,19 @@ export async function registerClient(meta: AuthServerMetadata, options: { client
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ client_name: options.clientName, redirect_uris: options.redirectUris, grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none", ...(options.scope === undefined ? {} : { scope: options.scope }) }),
   })
+  // 10-10 — مقيس: فيجما ردّت 403 بنصٍّ لا JSON فظهر «ردٌّ ليس JSON (403): Forbidden»؛ وغاما ردّت invalid_redirect_uri لأنها لا تقبل عنوانَ
+  // العودة المحلّيّ إلا لعملاءٍ معتمدين. الرفضُ هنا سياسةُ الخدمة لا عطلٌ عندنا — يُقال كذلك ولا يُلتفّ عليه (عنوانُ عميلٍ آخر انتحال).
+  if (!r.ok) {
+    const text = await r.text()
+    let body: Record<string, unknown> = {}
+    try { body = JSON.parse(text) as Record<string, unknown> } catch { /* نصٌّ عارٍ */ }
+    const code = str(body.error)
+    const detail = str(body.error_description) ?? code ?? text.slice(0, 120)
+    if (r.status === 401 || r.status === 403) throw new Error(`الخدمة لا تقبل تسجيلَ تطبيقاتٍ جديدة (HTTP ${r.status}) — تقصر خادمَ MCP لديها على عملاءٍ اعتمدتهم، فلا يُربط من عبدو كود حتى تفتحه لتطبيقات الطرف الثالث`)
+    if (code === "invalid_redirect_uri") throw new Error(`الخدمة ترفض عنوانَ العودة المحلّيّ (${options.redirectUris[0]}) — تقبل عناوينَ عملاءٍ معتمدين وحدها، فلا يُربط من تطبيق سطح مكتب حتى تفتحه (${detail})`)
+    throw new Error(`رُفض تسجيلُ العميل (${r.status}): ${detail}`)
+  }
   const body = await json(r)
-  if (!r.ok) throw new Error(`رُفض تسجيلُ العميل (${r.status}): ${str(body.error_description) ?? str(body.error) ?? ""}`)
   const clientId = str(body.client_id)
   if (clientId === undefined) throw new Error("تسجيلُ العميل عاد بلا client_id")
   return { clientId, ...(str(body.client_secret) === undefined ? {} : { clientSecret: str(body.client_secret) }) }

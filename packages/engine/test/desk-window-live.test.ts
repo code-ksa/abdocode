@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { powershellRunner, runDesktop, type DesktopBound } from "../src/desktop-control"
+import { ORANGE_FIELD, ORANGE_FORM } from "./helpers/orange-window"
 
 // ب6ب — **اللوحُ الحيّ على نافذةٍ نملكها**: الإدخالُ يُقاس بأثره لا بنصّ السكربت المُنتَج.
 // نافذتان حقيقيّتان (WinForms) تكتبان محتوى صندوقهما إلى ملفٍّ كلَّ ١٥٠ms، فنقرأ ما وصل فعلاً:
@@ -17,6 +18,7 @@ const FIXTURE = [
   "Add-Type -AssemblyName System.Windows.Forms",
   "Add-Type -AssemblyName System.Drawing",
   "$f = New-Object System.Windows.Forms.Form",
+  ...ORANGE_FORM,
   "$f.Text = $Title",
   "$f.Width = 620",
   "$f.Height = 340",
@@ -26,6 +28,7 @@ const FIXTURE = [
   "$t = New-Object System.Windows.Forms.TextBox",
   "$t.Multiline = $true",
   "$t.Dock = 'Fill'",
+  `$t.BackColor = ${ORANGE_FIELD}`,
   "$f.Controls.Add($t)",
   "$timer = New-Object System.Windows.Forms.Timer",
   "$timer.Interval = 150",
@@ -43,7 +46,7 @@ const until = async (label: string, ok: () => boolean | Promise<boolean>, ms = 3
   while (!(await ok())) { if (Date.now() > deadline) throw Error(`timed out: ${label}`); await Bun.sleep(200) }
 }
 
-test.skipIf(process.platform !== "win32" || process.env.ABDO_SKIP_DESK_LIVE === "1")("desk types into the window it bound, photographs that window alone, and refuses when another window steals the front", async () => {
+test.skipIf(process.platform !== "win32" || process.env.ABDO_DESK_LIVE !== "1")("desk types into the window it bound, photographs that window alone, and refuses when another window steals the front", async () => {
   const dir = mkdtempSync(join(tmpdir(), "abdo-desk-live-"))
   const script = join(dir, "window.ps1")
   writeFileSync(script, FIXTURE)

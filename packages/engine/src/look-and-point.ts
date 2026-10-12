@@ -36,6 +36,22 @@ export const parsePointReply = (text: string, width: number, height: number): Po
   return { ok: true, x, y, label: String(parsed.label ?? "").slice(0, 80), confidence }
 }
 
+/**
+ * 10-09 — لقطةُ النافذة تُصغَّر قبل نموذج الرؤية (PNG بحجمها الكامل كان يتجاوز سقف الصورة: desk point يُرفض وdesk shot لا يصل
+ * النموذجَ صامتاً). النموذجُ يجيب بإحداثيّات الصورة المصغَّرة، فتُعاد إلى إحداثيّات النافذة هنا — بلا ضربٍ يُطلب من النموذج.
+ */
+export const parseDims = (text: string): { readonly width: number; readonly height: number } | undefined => {
+  const m = /^(\d+)x(\d+)$/u.exec(text.trim())
+  return m === null ? undefined : { width: Number(m[1]), height: Number(m[2]) }
+}
+export const scalePoint = (x: number, y: number, from: { readonly width: number; readonly height: number }, to: { readonly width: number; readonly height: number }): { readonly x: number; readonly y: number } => ({
+  x: Math.min(to.width - 1, Math.max(0, Math.round((x + 0.5) * to.width / from.width - 0.5))),
+  y: Math.min(to.height - 1, Math.max(0, Math.round((y + 0.5) * to.height / from.height - 0.5))),
+})
+/** سطرُ الإيصال حين صُغّرت اللقطة: يقول المقياسَ كي لا تُقرأ إحداثيّاتُ الصورة إحداثيّاتِ نافذة. */
+export const scaledShotLine = (source: string, scaled: string): string =>
+  source === scaled ? "" : `\n(وصلت النموذجَ مصغَّرةً ${source} ⇦ ${scaled} — للنقر على عنصرٍ تراه فيها استعمل desk point <وصفه>: يعيد إحداثيّاتِ النافذة نفسَها؛ desk click يأخذ إحداثيّاتِ النافذة ${source} لا الصورة.)`
+
 /** بصمةُ لقطةٍ (base64) — للمقارنة قبل/بعد، لا للحفظ. */
 export const shotDigest = (base64: string): string => createHash("sha256").update(base64).digest("hex").slice(0, 16)
 

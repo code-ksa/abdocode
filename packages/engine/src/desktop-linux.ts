@@ -142,6 +142,15 @@ def tail(want, extra):
 KEYS = {"enter": "Return", "return": "Return", "tab": "Tab", "esc": "Escape", "escape": "Escape", "backspace": "BackSpace", "delete": "Delete", "del": "Delete",
         "space": "space", "home": "Home", "end": "End", "pageup": "Prior", "pagedown": "Next", "up": "Up", "down": "Down", "left": "Left", "right": "Right",
         "win": "super", "ctrl": "ctrl", "control": "ctrl", "alt": "alt", "shift": "shift", "insert": "Insert", "printscreen": "Print"}
+# 10-11: the full key map of the Windows backend (from the Desktop Remote Control allowlist) as X keysyms; F-keys are case-sensitive keysyms.
+KEYS.update({"f%d" % i: "F%d" % i for i in range(1, 25)})
+KEYS.update({"numpad%d" % i: "KP_%d" % i for i in range(10)})
+KEYS.update({"multiply": "KP_Multiply", "add": "KP_Add", "subtract": "KP_Subtract", "decimal": "KP_Decimal", "divide": "KP_Divide",
+        "capslock": "Caps_Lock", "numlock": "Num_Lock", "scrolllock": "Scroll_Lock", "pause": "Pause", "menu": "Menu", "apps": "Menu", "contextmenu": "Menu",
+        "lwin": "super", "rwin": "Super_R", "semicolon": "semicolon", "equal": "equal", "plus": "equal", "comma": "comma",
+        "minus": "minus", "period": "period", "slash": "slash", "backquote": "grave", "grave": "grave", "bracketleft": "bracketleft", "backslash": "backslash",
+        "bracketright": "bracketright", "quote": "apostrophe", "volumemute": "XF86AudioMute", "volumedown": "XF86AudioLowerVolume", "volumeup": "XF86AudioRaiseVolume",
+        "medianext": "XF86AudioNext", "mediaprev": "XF86AudioPrev", "mediastop": "XF86AudioStop", "mediaplaypause": "XF86AudioPlay", "browserback": "XF86Back", "browserforward": "XF86Forward"})
 
 ROLES = {"push button": "Button", "toggle button": "Button", "text": "Edit", "entry": "Edit", "password text": "Edit", "check box": "CheckBox", "radio button": "RadioButton",
          "combo box": "ComboBox", "list": "List", "list box": "List", "list item": "ListItem", "menu item": "MenuItem", "menu": "Menu", "menu bar": "MenuBar",

@@ -114,6 +114,11 @@ export interface DelegateReport {
   readonly stop: DelegateStop
   /** الجوابُ الخاتم للطفل، مسقوفاً. */
   readonly answer: string
+  /**
+   * 10-11 (مقيس على CRM الثالث: الموجِّه قرأ 29 أداةً في 111 ث على Pro ثمّ لم يكتب خلاصةً مهيكلة فأُهمل كلُّه، وأعادت الحقبةُ الأولى
+   * قراءةَ الملفّات نفسِها) — إيصالاتُ القراءة الناجحة بنصّها، كي يحملها الأبُ بدل إعادة قراءتها. قياسٌ لا روايةُ نموذج.
+   */
+  readonly reads: readonly string[]
 }
 
 export type RunLoopPort = (options: TextAgentLoopOptions) => Promise<TextAgentLoopResult>
@@ -162,6 +167,7 @@ export const runDelegatedAgent = async (options: DelegateOptions): Promise<Deleg
   const commands: string[] = []
   const refusals: string[] = []
   const failures: string[] = []
+  const reads: string[] = []
   let history: TextAgentMessage[] = []
   let answer = ""
   let epochs = 0
@@ -200,6 +206,7 @@ export const runDelegatedAgent = async (options: DelegateOptions): Promise<Deleg
       priorCommands: commands,
       onToolResult: (command, output, verdict) => {
         commands.push(command)
+        if (verdict?.ok !== false && /^(?:read|list|glob|grep)\b/u.test(command)) reads.push(`نتيجة موثقة لـ«${command.split("\n", 1)[0]}»:\n${output}`)
         if (verdict?.ok === false) failures.push(`${command.split("\n", 1)[0]!.slice(0, 90)} — ${verdict.reason}${verdict.detail === undefined ? "" : `: ${verdict.detail.slice(0, 120)}`}`)
         awareness.observe(command, output, epoch, verdict?.ok === true)
       },
@@ -225,6 +232,7 @@ export const runDelegatedAgent = async (options: DelegateOptions): Promise<Deleg
     failures: Object.freeze([...failures]),
     stop,
     answer: answer.slice(0, REPORT_MAX_CHARS),
+    reads: Object.freeze([...reads]),
   })
 }
 

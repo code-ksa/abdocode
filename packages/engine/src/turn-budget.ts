@@ -101,8 +101,8 @@ export class TurnSpendMeter {
   }
 
   /** يُشحن من نتيجة `chargeableUsage` نفسها التي تُكتب في الدفتر — وحدةٌ واحدة وحسابٌ واحد. */
-  charge(entry: Pick<LedgerEntry, "inputTokens" | "outputTokens" | "cachedInputTokens">): void {
-    const cost = effectiveTokens(entry, this.discount)
+  charge(entry: Pick<LedgerEntry, "inputTokens" | "outputTokens" | "cachedInputTokens">, discount: number = this.discount): void {
+    const cost = effectiveTokens(entry, discount)
     this.spent += cost
     this.calls += 1
     if (cost > this.peakCall) this.peakCall = cost

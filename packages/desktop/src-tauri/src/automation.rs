@@ -126,7 +126,32 @@ fn powershell(script: &str) -> Result<String, String> {
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
+/// 10-10 — مقيس على المثبَّت 4.0.119: `automation_status` استغرق 1735 مللي ثانية لأنّ `registered` يُطلق PowerShell (`Get-ScheduledTask`)
+/// في كلّ نداء — والأمرُ متزامن فيُمسك الخيطَ الرئيسيّ، فكان كلُّ نداءٍ للقشرة بعده (حفظُ الإعدادات منها: ~1000 مللي ثانية) ينتظره.
+/// المهمّةُ لا يسجّلها أو يلغيها إلا `register` هنا، فالنتيجةُ تُحفظ وتُحدَّث منه، ومدّةُ صلاحيّةٍ تلتقط تغييراً من خارج التطبيق.
+static REGISTERED_CACHE: std::sync::Mutex<Option<(PathBuf, bool, std::time::Instant)>> = std::sync::Mutex::new(None);
+const REGISTERED_TTL: Duration = Duration::from_secs(300);
+
 fn registered(dir: &Path) -> bool {
+    if let Ok(cache) = REGISTERED_CACHE.lock() {
+        if let Some((cached_dir, value, at)) = cache.as_ref() {
+            if cached_dir == dir && at.elapsed() < REGISTERED_TTL {
+                return *value;
+            }
+        }
+    }
+    let value = registered_uncached(dir);
+    remember_registered(dir, value);
+    value
+}
+
+fn remember_registered(dir: &Path, value: bool) {
+    if let Ok(mut cache) = REGISTERED_CACHE.lock() {
+        *cache = Some((dir.to_path_buf(), value, std::time::Instant::now()));
+    }
+}
+
+fn registered_uncached(dir: &Path) -> bool {
     #[cfg(windows)]
     {
         let name = quote(&task_name(dir));
@@ -154,6 +179,7 @@ fn register(dir: &Path, enabled: bool) -> Result<(), String> {
             format!("$ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskName {name} -ErrorAction SilentlyContinue; if($null -ne $task){{Unregister-ScheduledTask -TaskName {name} -Confirm:$false}}")
         };
         powershell(&script)?;
+        remember_registered(dir, enabled);
         Ok(())
     }
     #[cfg(not(windows))]
@@ -195,10 +221,14 @@ fn snapshot(dir: &Path) -> Result<Status, String> {
     })
 }
 
+/// غيرُ متزامن: يعمل خارج الخيط الرئيسيّ، فلا يحجز نداءاتِ القشرة الأخرى ولو احتاج فحصَ المهمّة المجدولة.
 #[tauri::command]
-pub(crate) fn automation_status(app: tauri::AppHandle, webview: Webview) -> Result<Status, String> {
+pub(crate) async fn automation_status(app: tauri::AppHandle, webview: Webview) -> Result<Status, String> {
     local(&webview)?;
-    snapshot(&directory(&app)?)
+    let dir = directory(&app)?;
+    tauri::async_runtime::spawn_blocking(move || snapshot(&dir))
+        .await
+        .map_err(|e| format!("تعذّرت قراءة حالة الأتمتة: {e}"))?
 }
 #[tauri::command]
 pub(crate) fn automation_enqueue(

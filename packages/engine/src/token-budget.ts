@@ -55,6 +55,18 @@ export function cacheDiscount(): number {
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : DEFAULT_CLOUD_CACHE_DISCOUNT
 }
 
+/**
+ * 10-11 — خصمُ الخبيئة بحسب المزوّد من صفحة أسعاره (cache hit ÷ cache miss). مقيس على مهمّة CRM: 95% من إدخال DeepSeek مخبوء، والخصمُ
+ * العامّ 0.25 حمّله ثمناً أكبرَ من حقيقته بنحو 12× (الحقيقة 0.003/0.15 = 0.02 لـflash و0.022/0.66 = 0.033 لـpro) — فبلغ سقفُ الدور
+ * 2.8M «فعّالاً» في 40 دقيقة بكلفةٍ فعليّةٍ نحو $0.12، وقُطع العملُ أشواطاً يعيد كلٌّ منها التوجّه. ABDO_CLOUD_CACHE_DISCOUNT يغلبه إن ضُبط.
+ */
+const PROVIDER_CACHE_DISCOUNT: Readonly<Record<string, number>> = Object.freeze({ deepseek: 0.034 })
+export function cacheDiscountFor(provider: string | undefined): number {
+  const raw = process.env.ABDO_CLOUD_CACHE_DISCOUNT
+  if (raw !== undefined && raw.trim().length > 0) return cacheDiscount()
+  return (provider === undefined ? undefined : PROVIDER_CACHE_DISCOUNT[provider]) ?? DEFAULT_CLOUD_CACHE_DISCOUNT
+}
+
 /** خصمٌ صريح خارج [0, 1] (أو غير عدد) لا يُضخّم ولا يُسلّب الثمن — يعود للافتراضي. */
 const normalDiscount = (discount: number): number =>
   Number.isFinite(discount) && discount >= 0 && discount <= 1 ? discount : DEFAULT_CLOUD_CACHE_DISCOUNT
@@ -200,7 +212,16 @@ export function ledgerPath(): string {
   return join(homedir(), ".abdo", "cloud-token-ledger.json")
 }
 
+/**
+ * 10-09 (مقيس على المثبَّت 4.0.111): الدفترُ مشتركٌ بين كلّ الجلسات فبلغ 294M والسقفُ 100M — والسبيلُ الوحيد لرفعه متغيّرُ بيئةٍ خفيّ
+ * لا يرثه التطبيقُ إلا بعد إعادة تشغيل Explorer. صار إعداداً يراه المستخدم (`cloudTokenCap`، الإعدادات ← المحليّة) كما صار سقفُ الدور:
+ * الإعدادُ أوّلاً، ثمّ متغيّرُ البيئة، ثمّ الافتراض. والمصدرُ يُسجَّل من المحرّك (لا يقرأ هذا الملفُّ الإعدادات بنفسه).
+ */
+let cloudCapSetting: () => number | undefined = () => undefined
+export function useCloudCapSetting(read: () => number | undefined): void { cloudCapSetting = read }
 export function configuredCloudTokenCap(): number {
+  const fromSetting = cloudCapSetting()
+  if (typeof fromSetting === "number" && Number.isSafeInteger(fromSetting) && fromSetting > 0) return fromSetting
   const raw = Number(process.env.ABDO_CLOUD_TOKEN_CAP ?? DEFAULT_CLOUD_CAP_TOKENS)
   return Number.isSafeInteger(raw) && raw > 0 ? raw : DEFAULT_CLOUD_CAP_TOKENS
 }
@@ -263,7 +284,7 @@ export function cloudBudgetVerdict(estimatedRequestTokens: number, path = ledger
   if (spent + estimatedRequestTokens > cap) {
     return {
       allowed: false, spent, cap,
-      message: `ميزانية السحابة استُنفدت: منفَق ${spent} + مقدَّر ${estimatedRequestTokens} > السقف ${cap} — النداء مرفوض؛ رفع السقف قرار المالك (ABDO_CLOUD_TOKEN_CAP)`,
+      message: `ميزانية السحابة استُنفدت: منفَق ${spent} + مقدَّر ${estimatedRequestTokens} > السقف ${cap} — النداء مرفوض؛ رفعُ السقف قرارُ المالك: الإعدادات ← المحليّة ← «سقف أمان السحابة» (أو ABDO_CLOUD_TOKEN_CAP)`,
     }
   }
   return { allowed: true, spent, cap }

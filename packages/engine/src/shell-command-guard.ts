@@ -91,7 +91,9 @@ export function killByNameViolation(cmd: string): string | undefined {
   const byName =
     /\bStop-Process\b[^|;]*\s-Name\b/iu.test(cmd) ||
     /\btaskkill\b[^|;]*\s\/IM\b/iu.test(cmd) ||
-    /\bGet-Process\b[^|;]*\|\s*Stop-Process\b/iu.test(cmd) ||
+    // 10-09 (مقيس في مقارنة m11): `Get-Process node | Where-Object {…} | Stop-Process -Force` عبر الحارس — كان النمطُ يشترط
+    // Stop-Process بعد الأنبوب الأوّل مباشرةً. أيُّ أنبوبٍ لاحق يقتل (Stop-Process، spps، kill، ‎.Kill()‎) من قائمة Get-Process قتلٌ بالاسم.
+    /\b(?:Get-Process|gps)\b[^;]*\|[^;]*(?:\bStop-Process\b|\bspps\b|\bkill\b|\.Kill\(\))/iu.test(cmd) ||
     /\bpkill\b|\bkillall\b/iu.test(cmd)
   if (!byName) return undefined
   return (
@@ -146,6 +148,66 @@ export function dangerousShellViolation(cmd: string): string | undefined {
   // إعادة توجيه تعطّل التحقق أو تجلب-تنفّذ من الشبكة.
   if (/(?:iwr|Invoke-WebRequest|curl)\b[^\n|]*\|\s*(?:iex|Invoke-Expression|bash|sh)\b/iu.test(cmd)) {
     return "رُفض جلب-وتنفيذ من الشبكة (fetch|iex): تنفيذ شيفرةٍ غير مفحوصة. نزّل إلى ملفٍ، افحصه، ثم شغّله."
+  }
+  return undefined
+}
+
+/**
+ * 10-08 (مقيس على المحرّك من المصدر): `run docker version --format {{.Server.Version}}` ⇦ «unknown shorthand flag: 'i' in -inputFormat».
+ * في PowerShell `{{…}}` غيرُ المقتبسة كتلةُ سكربت، فيمرّرها إلى البرنامج الأصليّ `-encodedCommand … -inputFormat xml` — وقوالبُ Go
+ * (docker/kubectl/gh `--format`) تُكتب هكذا في bash. الحارسُ يجد الكتلةَ خارج الاقتباس ويعيد الأمرَ مصحَّحاً (مقتبساً) لا وصفاً عامّاً.
+ */
+export function unquotedTemplateViolation(cmd: string): string | undefined {
+  let quote: string | undefined
+  const spans: [number, number][] = []
+  for (let i = 0; i < cmd.length; i += 1) {
+    const ch = cmd[i]!
+    if (quote !== undefined) { if (ch === quote) quote = undefined; continue }
+    if (ch === "'" || ch === '"') { quote = ch; continue }
+    if (ch === "{" && cmd[i + 1] === "{") {
+      const close = cmd.indexOf("}}", i + 2)
+      if (close < 0) return undefined
+      let start = i
+      while (start > 0 && !/[\s=]/u.test(cmd[start - 1]!)) start -= 1
+      let end = close + 2
+      while (end < cmd.length && !/\s/u.test(cmd[end]!)) end += 1
+      spans.push([start, end])
+      i = end - 1
+    }
+  }
+  if (spans.length === 0) return undefined
+  let fixed = cmd
+  for (const [start, end] of [...spans].reverse()) fixed = `${fixed.slice(0, start)}'${fixed.slice(start, end).replace(/'/gu, "''")}'${fixed.slice(end)}`
+  return `رُفض: في PowerShell «{{…}}» غيرُ المقتبسة كتلةُ سكربت تصل البرنامجَ «-encodedCommand … -inputFormat» لا قالباً. اقتبسها — أعد: run ${fixed}`
+}
+
+/**
+ * 10-08 (مقيس على nemotron-ultra): بعد إنجازٍ جزئيّ صار النموذجُ «يتكلّم» بالأداة — `run echo "Task completed: …"` ستَّ مرّاتٍ بصيغٍ مختلفة
+ * فلم يمسكها كاشفُ التكرار، وأُحرقت حقبٌ على صدى جُمَل. echo/Write-Host/Write-Output لجملةٍ بلا توجيهٍ ولا أمرٍ آخر كلامٌ لا أداة.
+ */
+export function narrationEchoViolation(cmd: string): string | undefined {
+  const m = /^\s*(?:echo|Write-Host|Write-Output)\s+(["']?)([\s\S]+?)\1\s*$/iu.exec(cmd)
+  if (m === null) return undefined
+  const text = m[2]!
+  if (/[>|;&]|\$\(|\$[A-Za-z_{]/u.test(text)) return undefined
+  if (text.length < 40 || (text.match(/\s/gu)?.length ?? 0) < 5) return undefined
+  return "رُفض: هذا كلامٌ لا أداة (echo لجملة). اكتب جوابَك أو خلاصتَك نصّاً في ردّك؛ وrun للأوامر التي تغيّر شيئاً أو تقيسه."
+}
+
+/**
+ * 10-08 (مقيس في بروفة النشر): `docker run -d -P …` نشر الحاويةَ على 0.0.0.0:32768 — كلُّ جهازٍ في الشبكة يصلها. الحاويةُ المحلّيّة
+ * تُنشر على الحلقة المحلّيّة وحدها: -P/--publish-all، أو -p بلا عنوان، تُردّ بالصيغة الصحيحة. والنشرُ على خادمٍ بعيد يمرّ بـserver run لا هنا.
+ */
+export function dockerPublishViolation(cmd: string): string | undefined {
+  if (!/^\s*(?:docker|podman)(?:\.exe)?\s+(?:container\s+)?(?:run|create)\b/iu.test(cmd)) return undefined
+  if (/(?:^|\s)(?:-P|--publish-all)(?=\s|$)/u.test(cmd)) return "رُفض: -P ينشر كلَّ منافذ الحاوية على كلّ واجهات الشبكة. انشر منفذاً بعينه على الحلقة المحلّيّة: -p 127.0.0.1:<منفذ المضيف>:<منفذ الحاوية>."
+  for (const m of cmd.matchAll(/(?:^|\s)(?:-p|--publish)(?:\s+|=)["']?([^\s"']+)/gu)) {
+    const spec = m[1]!
+    const parts = spec.replace(/\/(?:tcp|udp)$/iu, "").split(":")
+    if (parts.length < 3 || !/^(?:127\.0\.0\.1|localhost|\[?::1\]?)$/iu.test(parts.slice(0, -2).join(":"))) {
+      const ports = parts.slice(-2).join(":")
+      return `رُفض: «-p ${spec}» ينشر الحاويةَ على كلّ واجهات الشبكة (0.0.0.0). على هذا الجهاز تُنشر على الحلقة المحلّيّة وحدها: -p 127.0.0.1:${ports.includes(":") ? ports : `${ports}:${ports}`}.`
+    }
   }
   return undefined
 }

@@ -253,6 +253,8 @@ export function prepareChatRequest(input: {
   readonly topP?: number
   readonly topK?: number
   readonly think?: boolean
+  /** 10-11 — جهدُ التفكير عند DeepSeek (‏`reasoning_effort`: low/high/max؛ الافتراضُ عنده high) — يُرسل حين يكون التفكيرُ مفعَّلاً وحده. */
+  readonly reasoningEffort?: "low" | "high" | "max"
   readonly nativeTools?: boolean
   readonly conversationOnly?: boolean
   /** م9ز — معرِّفُ تثبيت الجلسة (يمرّ إلى الهارنس ثمّ المرمِّز). */
@@ -308,7 +310,11 @@ export function prepareChatRequest(input: {
     // for those exchanges instead of inheriting a vendor default that rejects
     // the next tool result. Text-tool agent turns may still request thinking.
     body: input.provider.id === "deepseek"
-      ? JSON.stringify({ ...JSON.parse(request.body), thinking: { type: input.think === true && input.nativeTools !== true ? "enabled" : "disabled" } })
+      ? JSON.stringify({
+        ...JSON.parse(request.body),
+        thinking: { type: input.think === true && input.nativeTools !== true ? "enabled" : "disabled" },
+        ...(input.think === true && input.nativeTools !== true && input.reasoningEffort !== undefined ? { reasoning_effort: input.reasoningEffort } : {}),
+      })
       : request.body,
     toolBindings: request.toolBindings,
     droppedTools: request.droppedTools,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { tsxSourceViolation } from "../src/tsx-source-guard"
+import { syntaxErrorExcerpt, tsxSourceViolation } from "../src/tsx-source-guard"
 
 const base = { projectDir: "C:\\project", normalizedTarget: "app/components/site-shell.tsx", operation: "write" as const, before: "" }
 
@@ -45,4 +45,25 @@ entryTest("a mounting entry file (createRoot) needs no export", () => {
 })
 entryTest("a component file without export is still rejected", () => {
   entryExpect(tsxSourceViolation({ projectDir: "x", normalizedTarget: "src/Card.tsx", operation: "write", before: "", after: "function Card(){ return <div/> }" })).toContain("بلا export")
+})
+
+// 10-08 (مقيس): «Syntax Error» بلا موضع ⇦ عشرُ إعاداتٍ للملفّ نفسِه. الموضعُ وما حوله يُعرضان، والسطرُ المعيب معلَّم.
+describe("syntax errors carry the line, the column and the lines around them", () => {
+  const shell = (tail: string) => ["\"use client\";", "import { createPortal } from \"react-dom\";", "export function Sidebar({ c }: { c: React.ReactNode }) {", "  return createPortal(", "    <>", "      <div>{c}</div>", tail, "    document.body", "  );", "}"].join("\n")
+  test("a fragment closed as `>,` instead of `</>,` (the measured write) points at the line", () => {
+    const why = tsxSourceViolation({ ...base, normalizedTarget: "src/components/ui/sidebar.tsx", after: shell("    >,") })!
+    expect(why).toContain("صياغة tsx غير صالحة")
+    expect(why).toMatch(/عند السطر \d+:\d+/u)
+    expect(why).toContain("|     >,")
+    expect(why).toMatch(/^> +\d+ \|/mu)
+  })
+  test("a stray «»» after the last line is shown as the failing line", () => {
+    const why = tsxSourceViolation({ ...base, normalizedTarget: "src/components/ui/sidebar.tsx", after: shell("    </>,") + "\n»" })!
+    expect(why).toContain("عند السطر 11:")
+    expect(why).toMatch(/^> 11 \| »$/mu)
+  })
+  test("the twin: valid source has no excerpt, and an error without a position adds nothing", () => {
+    expect(tsxSourceViolation({ ...base, normalizedTarget: "src/components/ui/sidebar.tsx", after: shell("    </>,") })).toBeUndefined()
+    expect(syntaxErrorExcerpt("a\nb", new Error("x"))).toBe("")
+  })
 })

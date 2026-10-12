@@ -27,17 +27,38 @@ export interface SemanticVerdict {
  * وأوّلُ سطور قائمةِ نتائج أداةٍ هي الدليل (الربعُ للرأس) — مقيس 2026-09-17: قصٌّ ذيليٌّ محض أخفى نصفَ نتائج
  * `scripts_find` عن المحكّم فحجب الاكتمالَ وهي أمام المستخدم كاملة.
  */
+// 10-11 (مقيس على m11 بالمثبَّت 4.0.143): «release-check: FAIL — 2/3 مرحلة [... حُذف 13 حرفاً من الوسط ...]» — قصٌّ وفّر 13 حرفاً وأخفى اسمَ المرحلة
+// الفاشلة، فحجب المحكّمُ الاكتمالَ لأنّه لا يرى ما فشل. فيضٌ صغير يُعرض كاملاً، وسطورُ الفشل من الوسط المحذوف تُحمل في علامة القصّ.
+const CLIP_SLACK = 160
+const FAILURE_LINE = /\b(?:FAIL(?:ED|URE)?|ERROR|error:)|[✗✘❌]/u
 export function clipKeepCause(text: string, max: number): string {
-  if (text.length <= max) return text
+  if (text.length <= max + CLIP_SLACK) return text
   const head = Math.floor(max / 4)
   const tail = max - head
-  return `${text.slice(0, head)}\n[... حُذف ${text.length - max} حرفاً من الوسط ...]\n${text.slice(text.length - tail)}`
+  const dropped = text.slice(head, text.length - tail)
+  const failures = dropped.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.length > 0 && FAILURE_LINE.test(line)).slice(0, 3).map((line) => line.slice(0, 200))
+  const kept = failures.length === 0 ? "" : `؛ سطورُ الفشل منه: ${failures.join(" ⏎ ")}`
+  return `${text.slice(0, head)}\n[... حُذف ${text.length - max} حرفاً من الوسط${kept} ...]\n${text.slice(text.length - tail)}`
 }
 
 const GOAL_BUDGET = 4000
 const ANSWER_BUDGET = 4000
 const RECEIPTS_BUDGET = 6000
 const RECEIPT_CLIP = 700
+/**
+ * 10-11 (مقيس على n8n-clone، دورٌ بـ222 أداة): release-check ‏PASS 7/7 نُفّذ في الحقبة 4 و«sprint done 16» بعده، والمحكّمُ رأى آخرَ ثمانية
+ * إيصالاتٍ وحدها فحكم «PASS مذكورٌ بلا إيصال» وحجب الاكتمال — وأخطأ مثلها في S15. آخرُ إيصالٍ لكلّ بوّابةٍ يدخل دائماً (مقصوصاً، سطرُ
+ * الحكم أوّلاً) قبل أن تملأ الأحدثُ ما بقي.
+ */
+const GATE_BUDGET = 3200
+const GATE_CLIP = 360
+// 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.144): المحكّمُ حجب «لا إيصالَ يثبت تشغيلَ عاملَين» — إيصالُ parallel أقدمُ وأطولُ فأزاحته الأحدث.
+// تقريرُ العمّال ودمجُ كلِّ فرعٍ دليلُ «اعمل بعاملين» كما البناءُ دليلُ «ابنِ».
+const GATE_RECEIPT = /^(?:release-check|sprint\s+done\s+\d+|seo|audit|probe|verify-\S+|parallel|merge\s+\S+|run\s+(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|typecheck|lint|test(?::\S+)?|audit)|run\s+npx\s+(?:tsc|vitest|prisma\s+migrate\s+diff))(?=\s|$)/u
+export function gateKey(command: string): string | undefined {
+  const first = command.split("\n", 1)[0]!.trim()
+  return GATE_RECEIPT.exec(first)?.[0].replace(/\s+/gu, " ")
+}
 
 export function buildVerifierPrompt(
   goal: string,
@@ -45,16 +66,29 @@ export function buildVerifierPrompt(
   receipts: readonly { readonly command: string; readonly output: string }[],
   disk?: string,
 ): string {
-  const lines: string[] = []
+  const chosen = new Map<number, string>()
+  const seenGates = new Set<string>()
+  let gateSpent = 0
+  for (let i = receipts.length - 1; i >= 0 && gateSpent < GATE_BUDGET; i--) {
+    const r = receipts[i]!
+    const key = gateKey(r.command)
+    if (key === undefined || seenGates.has(key)) continue
+    seenGates.add(key)
+    const [verdict = "", ...rest] = r.output.split("\n")
+    const entry = `$ ${r.command.split("\n", 1)[0]}\n${verdict.slice(0, 200)}${rest.length > 0 ? `\n${clipKeepCause(rest.join("\n"), GATE_CLIP)}` : ""}`
+    chosen.set(i, entry)
+    gateSpent += entry.length
+  }
   let spent = 0
   for (let i = receipts.length - 1; i >= 0 && spent < RECEIPTS_BUDGET; i--) {
+    if (chosen.has(i)) continue
     const r = receipts[i]!
-    const clipped = clipKeepCause(r.output, RECEIPT_CLIP)
-    const entry = `$ ${r.command.split("\n", 1)[0]}\n${clipped}`
-    lines.unshift(entry)
+    const entry = `$ ${r.command.split("\n", 1)[0]}\n${clipKeepCause(r.output, RECEIPT_CLIP)}`
+    chosen.set(i, entry)
     spent += entry.length
   }
-  if (lines.length < receipts.length) lines.unshift(`[... ${receipts.length - lines.length} إيصالاً أقدم حُذف ...]`)
+  const lines = [...chosen.entries()].sort((a, b) => a[0] - b[0]).map(([, entry]) => entry)
+  if (lines.length < receipts.length) lines.unshift(`[... ${receipts.length - lines.length} إيصالاً أقدم حُذف — وآخرُ إيصالٍ لكلّ بوّابة (release-check/sprint done/build/test/audit…) محفوظٌ أدناه ...]`)
   return [
     "أنت محكّم مستقل. لا تجامل ولا تفترض. احكم فقط مما تراه في الإيصالات.",
     "",

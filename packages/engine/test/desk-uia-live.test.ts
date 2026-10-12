@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { runDesktop, type DesktopBound, type UiContext } from "../src/desktop-control"
 import { FRONT_STOLEN, deskSteady } from "./fixtures/desk-front"
+import { isLightOrange, ORANGE_FIELD, ORANGE_FORM } from "./helpers/orange-window"
 
 // م6/م6ب — **اللوحُ الحيّ على نافذةٍ نملكها** (WinForms، خلفيّةٌ أرجوانيّة، مؤقّتٌ يكتب الحقيقةَ إلى ملفّ كلَّ ١٥٠ms):
 //   (أ) اللقطةُ صادقة على شاشةٍ مُكبَّرة: بكسلٌ داخل النافذة أرجوانيّ (قبل الوعي بالـDPI كانت الصورةُ منطقةً أخرى — مقيس على 150٪).
@@ -17,13 +18,14 @@ const FIXTURE = [
   "Add-Type -AssemblyName System.Windows.Forms",
   "Add-Type -AssemblyName System.Drawing",
   "$f = New-Object System.Windows.Forms.Form",
+  ...ORANGE_FORM,
   "$f.Text = 'AbdoUiaLive'",
   "$f.Width = 600; $f.Height = 420; $f.StartPosition = 'CenterScreen'; $f.TopMost = $true",
-  "$f.BackColor = [System.Drawing.Color]::Magenta",
   "$b = New-Object System.Windows.Forms.Button",
   "$b.Text = 'Probe button'; $b.Left = 50; $b.Top = 50; $b.Width = 200; $b.Height = 60",
   "$t = New-Object System.Windows.Forms.TextBox",
   "$t.Multiline = $true; $t.Left = 50; $t.Top = 130; $t.Width = 480; $t.Height = 200; $t.AccessibleName = 'Notes'",
+  `$t.BackColor = ${ORANGE_FIELD}`,
   "$script:clicks = 0",
   "$b.Add_Click({ $script:clicks++; $t.AppendText(\"CLICKED#$($script:clicks)\") })",
   "$f.Controls.Add($b); $f.Controls.Add($t)",
@@ -36,7 +38,7 @@ const FIXTURE = [
 
 const ps = async (cmd: string): Promise<string> => { const p = Bun.spawn(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd], { stdout: "pipe", stderr: "pipe" }); const o = await new Response(p.stdout).text(); await p.exited; return o.trim() }
 
-test.skipIf(process.platform !== "win32" || process.env.ABDO_SKIP_DESK_LIVE === "1")("desk on a real window: DPI-true screenshot, click and type land, ui/set/press by reference", async () => {
+test.skipIf(process.platform !== "win32" || process.env.ABDO_DESK_LIVE !== "1")("desk on a real window: DPI-true screenshot, click and type land, ui/set/press by reference", async () => {
   const dir = mkdtempSync(join(tmpdir(), "desk-uia-"))
   const script = join(dir, "probe.ps1"), out = join(dir, "truth.txt"), shots = join(dir, "shots")
   writeFileSync(script, FIXTURE)
@@ -73,7 +75,11 @@ test.skipIf(process.platform !== "win32" || process.env.ABDO_SKIP_DESK_LIVE === 
     const s = await deskSteady({ kind: "shot", scope: "auto" }, { shotsDir: shots, bound }, focusProbe, "shot")
     expect(s.ok, s.text).toBe(true)
     const px = await ps(`Add-Type -AssemblyName System.Drawing; $b = [System.Drawing.Bitmap]::FromFile('${s.shot!.path}'); $p = $b.GetPixel(${Math.round(20 * scale)}, ${Math.round(300 * scale)}); "$($b.Width)x$($b.Height) $($p.R),$($p.G),$($p.B)"; $b.Dispose()`)
-    expect(px).toBe(`${bound.right - bound.left}x${bound.bottom - bound.top} 255,0,255`)
+    // 10-12 — النافذةُ تدرّجٌ برتقاليٌّ خفيف: البكسلُ منه يثبت أنّ اللقطةَ لنافذتنا.
+    const [size, rgb] = px.split(" ")
+    expect(size).toBe(`${bound.right - bound.left}x${bound.bottom - bound.top}`)
+    const [cr, cg, cb] = (rgb ?? "").split(",").map(Number)
+    expect(isLightOrange(cr!, cg!, cb!), px).toBe(true)
 
     // (ب) النقرُ يصيب الزرَّ والكتابةُ تصل المربّع
     const c = await deskSteady({ kind: "click", x: Math.round(158 * scale), y: Math.round(111 * scale), button: "left" }, { shotsDir: shots, bound }, focusProbe, "click الزرّ")

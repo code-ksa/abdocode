@@ -1,24 +1,30 @@
 import { expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { runDesktop } from "../src/desktop-control"
+import { ORANGE_FORM } from "./helpers/orange-window"
 
-// م6و — `desk open` حيّاً: يُقلع الرسّام (mspaint) بـShellExecute، ينتظر نافذتَه الجديدة، يربطها ويعيد pid نافذتها؛
-// ثمّ `desk windows` بمجموعة النوافذ السابقة يسمّي نافذةَ الرسّام «جديدة». التنظيف بقتل عمليّة النافذة المربوطة (لا الإقلاع: تطبيقاتُ المتجر تُسلِّم).
+// م6و — `desk open` حيّاً: يُقلع تطبيقاً بـShellExecute، ينتظر نافذتَه الجديدة، يربطها ويعيد pid نافذتها؛
+// 10-12 — «التطبيقُ» نافذتُنا البرتقاليّة الخفيفة يُقلعها مُشغّلُ .vbs (بلا طرفيّة تومض).
+// ثمّ `desk windows` بمجموعة النوافذ السابقة يسمّي النافذةَ «جديدة». التنظيف بقتل عمليّة النافذة المربوطة (لا الإقلاع: تطبيقاتُ المتجر تُسلِّم).
 const ps = async (cmd: string): Promise<string> => { const p = Bun.spawn(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd], { stdout: "pipe", stderr: "pipe" }); const o = await new Response(p.stdout).text(); await p.exited; return o.trim() }
 
-test.skipIf(process.platform !== "win32")("desk open launches an app, binds its new window, and windows marks it as new", async () => {
+test.skipIf(process.platform !== "win32" || process.env.ABDO_DESK_LIVE !== "1")("desk open launches an app, binds its new window, and windows marks it as new", async () => {
   const dir = mkdtempSync(join(tmpdir(), "desk-open-"))
   let boundPid = 0
   try {
     const before = await runDesktop({ kind: "windows" }, { shotsDir: dir })
     expect(before.ok).toBe(true)
     const known = before.windows!.map((w) => w.hwnd)
-    const opened = await runDesktop({ kind: "open", app: "mspaint" }, { shotsDir: dir })
+    const form = join(dir, "orange-app.ps1"), launcher = join(dir, "orange-app.vbs")
+    writeFileSync(form, ["Add-Type -AssemblyName System.Windows.Forms", "$f = New-Object System.Windows.Forms.Form", ...ORANGE_FORM, "$f.Text = 'AbdoCode orange app'", "$f.Width = 520; $f.Height = 320; $f.StartPosition = 'CenterScreen'", "[void]$f.ShowDialog()"].join("\r\n"))
+    writeFileSync(launcher, `CreateObject("WScript.Shell").Run "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""${form}""", 0, False\r\n`)
+    const opened = await runDesktop({ kind: "open", app: launcher }, { shotsDir: dir })
     expect(opened.ok, opened.text).toBe(true)
     expect(opened.bound).toBeDefined()
     expect(opened.bound!.right - opened.bound!.left).toBeGreaterThan(100)
+    expect(opened.bound!.title).toBe("AbdoCode orange app")
     const m = opened.text.match(/pid (\d+)/)
     boundPid = Number(m?.[1] ?? 0)
     expect(boundPid).toBeGreaterThan(0)

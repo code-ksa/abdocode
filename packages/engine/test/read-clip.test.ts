@@ -45,7 +45,8 @@ describe("read clip by lines", () => {
   })
   test("the read tool uses it; the character-count note is gone", () => {
     const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
-    expect(cli).toContain("const shown = clipReadBody(body, readBudget, firstLine, lastLine, file)")
+    // 10-08: the body is masked first when it is a dotenv file (dotenv-mask.ts)
+    expect(cli).toContain("const shown = clipReadBody(dotenv ? maskDotenv(body) : body, readBudget, firstLine, lastLine, file)")
     expect(cli).not.toContain("…[قُصّ: عُرض ${readBudget} من ${body.length} حرفاً]")
   })
 })

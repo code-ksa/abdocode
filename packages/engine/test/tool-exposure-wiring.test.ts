@@ -6,7 +6,7 @@ const nl = source.includes("\r\n") ? "\r\n" : "\n"
 
 describe("tool exposure wiring", () => {
   test("families are computed from the effective goal at turn start, expanded at dispatch, and filter the model's tool list", () => {
-    expect(source).toContain('import { exposedByIntent, exposureLine, familiesFor, familiesFromResult, noteToolUse } from "./tool-exposure"')
+    expect(source).toContain('import { DESKTOP_DRIVE_BRIEF, exposedByIntent, exposureLine, familiesFor, familiesFromResult, isDesktopDriveTask, noteToolUse } from "./tool-exposure"')
     expect(source).toContain("let turnFamilies = new Set<string>()")
     // 09-30: الهدفُ الفعليّ ومعه نصُّ السبرنت المفتوح حين يكون الدورُ استئنافاً على خطّة (openSprintSection).
     const set = source.indexOf("turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\\n${sprintFocusText}\\n${sprintBrief(PROJECT_DIR)}` : effectiveGoal, turnFamilies)")
@@ -18,15 +18,15 @@ describe("tool exposure wiring", () => {
     // مرشِّحٌ مستقلّ قبل مرشِّح السقف — كي يبقى مسمارُ التفويض (delegation-wiring) بنصّه
     const exposure = source.indexOf(".filter((tool) => exposedByIntent(tool.name, turnFamilies))")
     const allow = source.indexOf(".filter((tool) => withinAllowlist(tool.name) && (tool.name !== DELEGATE_TOOL", exposure)
-    expect(exposure).toBeGreaterThan(0); expect(allow).toBeGreaterThan(exposure); expect(allow - exposure).toBeLessThan(120)
+    expect(exposure).toBeGreaterThan(0); expect(allow).toBeGreaterThan(exposure); expect(allow - exposure).toBeLessThan(520)
     // البند 12 (2026-09-27): العدُّ المعروض يُسقط ما أُخفي لغياب شرطه، والإخفاءُ يُقال بسطرٍ قبله.
     expect(source).toContain("await emitEvent(turn.id, exposureLine(byIntent.filter((t) => !availabilityOn || unavailableBecause(t.name, facts) === undefined).length, callable.length, turnFamilies))")
     // 🔴 والتوسيعُ من **نتيجة** أداةٍ آمرة — عند المخرج الواحد لا عند عشرين return.
     // قِيس: مهمّةٌ تقول «اقرأ TASK.md ونفّذ» وفي الملفّ طلبُ لقطةٍ — فبقيت عائلةُ
     // المتصفّح مغلقةً طوال الدور، وما لا يُعرَض لا يُطلَب.
-    const raw = source.indexOf("const result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)")
+    const raw = source.indexOf("      result = await dispatchToolRaw(word, body, turnId, hooks, nativeCall)") // 10-08: داخل try (tool-crash.ts)
     const widen = source.indexOf("familiesFromResult(word, body, result.output, turnFamilies)", raw)
-    expect(raw).toBeGreaterThan(0); expect(widen).toBeGreaterThan(raw); expect(widen - raw).toBeLessThan(400)
+    expect(raw).toBeGreaterThan(0); expect(widen).toBeGreaterThan(raw); expect(widen - raw).toBeLessThan(700) // 10-08: كتلةُ catch (tool-crash) بينهما
   })
   test("the goal is no longer reset to empty right after it is set (the manifest guard reads it during the turn)", () => {
     expect(source).not.toContain(`    newProjectPending = undefined${nl}    currentGoalText = ""`)

@@ -24,7 +24,7 @@ describe("نافذةُ الاقتران", () => {
       expect(pair.status).toBe(423)
       expect(await pair.text()).not.toContain(bridge.token)
       const health = (await (await fetch(`${base}/health`)).json()) as { pairing: boolean; connected: boolean }
-      expect(health).toEqual({ ok: true, connected: false, pairing: false } as never)
+      expect(health).toEqual({ ok: true, connected: false, pairing: false, browsers: [] } as never)
     })
   })
   test("تُفتح عند الإقلاع (الافتراض دقيقتان): /pair يسلّم المنفذَ والرمزَ الصحيحين ويُعلن التسليمَ باسم السائل", async () => {

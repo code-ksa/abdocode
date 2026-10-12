@@ -29,7 +29,18 @@ const requests: readonly TransportRequest[] = [
 describe("R9 transport contracts", () => {
   test("owns and validates every current product shell frame", () => {
     // العددُ يُثبَّت كي لا يدخل إطارٌ صامتاً خارج عقد النقل.
-    expect(SHELL_FRAMES.filter((frame) => frame.dir === "in")).toHaveLength(42) // 09-14: background-list, remote-control-get/regenerate؛ 09-17: dev-servers, dev-server-start/stop؛ 09-18: browser-history؛ 09-27: provider-probe
+    expect(SHELL_FRAMES.filter((frame) => frame.dir === "in")).toHaveLength(46) // 09-14: background-list, remote-control-get/regenerate؛ 09-17: dev-servers, dev-server-start/stop؛ 09-18: browser-history؛ 09-27: provider-probe؛ session-keep؛ 10-10: memory-import-scan/preview/save
+    // استيرادُ الذاكرة: المصدرُ يحدّد حقلَه، والحفظُ بنودٌ مسقوفة، والنطاقُ user|project وحده.
+    expect(validateShellFrame({ kind: "memory-import-scan" })).toEqual({ ok: true })
+    expect(validateShellFrame({ kind: "memory-import-preview", source: "paste", text: "- أفضّل الردود القصيرة", from: "chatgpt" })).toEqual({ ok: true })
+    expect(validateShellFrame({ kind: "memory-import-preview", source: "export", path: "C:\\x\\export.zip", vendor: "chatgpt" })).toEqual({ ok: true })
+    expect(validateShellFrame({ kind: "memory-import-preview", source: "export", path: "C:\\x\\export.zip" }).ok).toBe(false)
+    expect(validateShellFrame({ kind: "memory-import-preview", source: "local" }).ok).toBe(false)
+    expect(validateShellFrame({ kind: "memory-import-preview", source: "disk", text: "x" }).ok).toBe(false)
+    expect(validateShellFrame({ kind: "memory-import-save", items: [{ text: "أفضّل العربية" }], scope: "user" })).toEqual({ ok: true })
+    expect(validateShellFrame({ kind: "memory-import-save", items: [], scope: "user" }).ok).toBe(false)
+    expect(validateShellFrame({ kind: "memory-import-save", items: [{ text: "x" }], scope: "session" }).ok).toBe(false)
+    expect(validateShellFrame({ kind: "memory-note", title: "لغة", text: "العربية", scope: "user" })).toEqual({ ok: true })
     // خوادمُ التطوير في لوحة المتصفّح: الاسمُ بصيغة الإعداد والمنفذُ عددٌ صحيحٌ في مداه — ما عداه يُرفض بالاسم.
     expect(validateShellFrame({ kind: "dev-servers" })).toEqual({ ok: true })
     expect(validateShellFrame({ kind: "dev-server-start", name: "web-app" })).toEqual({ ok: true })

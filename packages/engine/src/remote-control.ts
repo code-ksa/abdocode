@@ -18,6 +18,8 @@ export const REMOTE_BROADCAST_SKIP: ReadonlySet<string> = new Set([
   "bridge-pairing", "remote-control", "ready", "settings", "models", "history", "archive", "usage-summary", "meter-summary",
   "vault-status", "browser-shot", "connectors", "connector-open", "connector-status", "extensions-bundled", "memory-notes",
   "memory-recall", "memory-inferred", "plugins", "grants", "denials", "resumed",
+  // استيرادُ الذاكرة يحمل مساراتِ القرص ونصوصَ التخصيص قبل المراجعة — للقشرة وحدها كـmemory-notes.
+  "memory-import-sources", "memory-import-review", "memory-import-saved",
 ])
 const MAX_DEVICES = 8
 const MAX_FAILED_PAIRINGS = 5

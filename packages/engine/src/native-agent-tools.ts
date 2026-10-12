@@ -40,6 +40,35 @@ const fields: Readonly<Record<string, readonly string[]>> = Object.freeze(
  * أداةٌ صيغتُها «الاسم [اختياريّ]» (‏`page [styles]`، ‏`shot [full]`): حقلُها `input` موجودٌ لكنّه **غيرُ إلزاميّ** —
  * إلزامُه كان يرفض النداءَ العاري `page` (مقيس 2026-09-13)، وحذفُه كان يمنع تمريرَ «full». الخريطةُ من السجلّ لا من قائمةٍ ثانية.
  */
+/**
+ * 10-09 (مقيس على nemotron-ultra بالأدوات الأصليّة، مهمّة m7): كلُّ وسيطٍ متعدّد الأسطر خارج write/edit كان يُرفض بالرمز وحده
+ * «single_line_argument_required» — فرُفضت أدواتُ الكتلة (plan set، medit، patch، team، parallel، codemode) التي **صيغتُها** <<<،
+ * وكرّر النموذجُ النداءَ ثماني عشرة مرّة لأنّ الرمزَ لا يقول ما الخطأ. أدواتُ الكتلة تُشتقّ من صيغتها في السجلّ: حقلُها `input` يقبل
+ * الأسطر، ويُبنى منه أمرُها النصّيّ نفسُه (`plan set <<<\n…`) فيمرّ بالمُوزِّع والحرّاس كما يمرّ من البروتوكول النصّيّ.
+ */
+const blockTools: ReadonlyMap<string, string> = new Map(
+  TOOLS.filter((tool) => tool.agentCallable && RICH[tool.name] === undefined && /<<</u.test(tool.usage))
+    .map((tool) => [tool.name, tool.usage.split("<<<", 1)[0]!.trim().slice(tool.name.length).trim()] as const),
+)
+const blockCommand = (legal: string, input: string): string => {
+  if (/<<</u.test(input)) return `${legal} ${input}`
+  // ما قبل <<< في الصيغة (‏«set» عند plan، «<ملف>» عند medit) هو السطرُ الأوّل؛ والباقي الكتلة.
+  const pre = blockTools.get(legal) ?? ""
+  if (pre === "") return `${legal} <<<\n${input}`
+  // صيغةٌ بكلمةٍ حرفيّة (‏plan set) والنموذجُ أرسل الكتلةَ وحدها: الكلمةُ تُضاف، لا يُؤخذ سطرٌ من الكتلة مكانها.
+  if (!pre.startsWith("<") && !input.trimStart().startsWith(pre)) return `${legal} ${pre} <<<\n${input}`
+  const [head, ...rest] = input.split(/\r?\n/u)
+  return `${legal} ${head!.trim()} <<<\n${rest.join("\n")}`
+}
+/** 10-09 — حزمةُ القراءة الأصليّة: أدواتٌ بلا أثرٍ يُرتَّب، وسقفُها كسقف حزمة البروتوكول النصّيّ. */
+const NATIVE_READ_BATCH: ReadonlySet<string> = new Set(["read", "list", "glob", "grep"])
+const NATIVE_READ_BATCH_MAX = 4
+
+/** الرفضُ يقول للنموذج ما يصلحه — الرمزُ وحده كرّر النداءَ نفسَه. */
+const SINGLE_LINE_HINT: Readonly<Record<string, string>> = Object.freeze({
+  run: "أمرُ run سطرٌ واحد: للبرنامج متعدّد الأسطر اكتب ملفاً بـwrite ثمّ شغّله باستدعاء run مستقلّ",
+})
+
 const optionalInput: ReadonlySet<string> = new Set(
   TOOLS.filter((tool) => tool.agentCallable && RICH[tool.name] === undefined && new RegExp("^" + tool.name + "\\s+\\[[^\\]]*\\]$", "u").test(tool.usage.trim())).map((tool) => tool.name),
 )
@@ -76,7 +105,20 @@ export function nativeToolDefinition(tool: HarnessToolDefinition, intentField = 
 export function nativeToolReply(turn: ModelTurn, names: ReadonlyMap<string, string>, intentField = false): NativeAgentReply | string {
   const reject = (reason: string) => `رُفض إخراج النموذج: ${reason}`
   if (turn.truncated || !["stop", "tool_calls"].includes(turn.finishReason)) return reject("incomplete_native_response")
-  if (turn.calls.length !== 1) return reject("one_native_tool_call_required")
+  if (turn.calls.length === 0) return reject("one_native_tool_call_required")
+  if (turn.calls.length > 1) {
+    // 10-09 — حتى أربعة نداءات قراءةٍ في ردٍّ واحد (كما يفعل Codex وClaude): كلُّ نداءٍ يمرّ بالفحص نفسِه منفرداً، والحزمةُ للقراءة وحدها —
+    // الكتابةُ والتشغيلُ نداءٌ واحد لأنّ ترتيبَ الآثار جزءٌ من معناها.
+    if (turn.calls.length > NATIVE_READ_BATCH_MAX) return reject(`one_native_tool_call_required — حتى ${NATIVE_READ_BATCH_MAX} نداءات قراءة (read/list/glob/grep) معاً، وغيرُها نداءٌ واحد`)
+    const members: { command: string; call: (typeof turn.calls)[number] }[] = []
+    for (const member of turn.calls) {
+      const single = nativeToolReply({ ...turn, calls: [member] }, names, intentField)
+      if (typeof single === "string") return single
+      if (!NATIVE_READ_BATCH.has(names.get(member.name) ?? "")) return reject("one_native_tool_call_required — الحزمةُ للقراءة وحدها (read/list/glob/grep)؛ الكتابةُ والتشغيلُ نداءٌ واحد في الرد")
+      members.push({ command: single.command, call: member })
+    }
+    return { kind: "native", text: turn.text, command: members[0]!.command, call: members[0]!.call, batch: members }
+  }
   const call = turn.calls[0]!
   const legal = names.get(call.name)
   // اسمٌ لم تُعلنه الخريطةُ يُرفض؛ أمّا اسمٌ **أُعلن** وليس في السجلّ فهو أداةٌ
@@ -99,12 +141,17 @@ export function nativeToolReply(turn: ModelTurn, names: ReadonlyMap<string, stri
   if (Object.values(value).some((v) => v.includes("\0") || v.length > 100_000)) return reject("invalid_argument_bytes")
   if (value.path !== undefined && (!value.path.trim() || /[\r\n]/u.test(value.path))) return reject("single_path_required")
   if (legal === "edit" && !value.old_text?.length) return reject("nonempty_old_text_required")
-  if (!["write", "edit"].includes(legal) && Object.values(value).some((v) => !v.trim() || /[\r\n]/u.test(v))) return reject("single_line_argument_required")
+  const block = blockTools.has(legal) && /[\r\n]/u.test(value.input ?? "")
+  if (!["write", "edit"].includes(legal) && !block && Object.values(value).some((v) => !v.trim() || /[\r\n]/u.test(v))) {
+    const multi = Object.entries(value).find(([, v]) => /[\r\n]/u.test(v))
+    return reject(`single_line_argument_required — ${legal}: ${multi === undefined ? "وسيطٌ فارغ؛ املأه" : SINGLE_LINE_HINT[legal] ?? `الحقل ${multi[0]} سطرٌ واحد؛ أدواتُ الكتلة متعدّدةُ الأسطر هي ${[...blockTools.keys()].join("، ")}`}`)
+  }
   // أداةٌ بلا وسائط (‏`status`/`page`/`sever`) أمرُها اسمُها وحده: إلحاقُ
   // `undefined` كان سيصنع أمراً لا يوجد — ولا يُكتشف إلا عند التنفيذ.
   const command = legal === "write" ? `write ${value.path} <<<\n${value.content}`
     : legal === "edit" ? `edit ${value.path} :: ${value.old_text} => ${value.new_text}`
     : keys.length === 0 || (omitted === 1) ? legal
+    : block ? blockCommand(legal, value.input!)
     : `${legal} ${value.path ?? value.pattern ?? value.command ?? value.input}`
   return { kind: "native", text: turn.text, command, call }
 }
@@ -119,7 +166,7 @@ export const nativeAgentLayers = (planning: boolean, planRequired: boolean, inte
     "أنت عبدو كود، مساعد يعمل داخل مشروع المستخدم فقط. هوية المساعد ليست هوية موقع العميل.",
   ]),
   outputFormat: Object.freeze([
-    "استخدم استدعاءات الأدوات المنظمة حصراً، أداة واحدة في الرد. لا تكتب أوامر نفّذ أو أغلفة <<< داخل حقول الأداة.",
+    "استخدم استدعاءات الأدوات المنظمة حصراً، أداة واحدة في الرد — أو حتى أربعة نداءات قراءة (read/list/glob/grep) معاً حين تحتاج عدّة ملفات. لا تكتب أوامر نفّذ أو أغلفة <<< داخل حقول الأداة.",
     intentField ? "كل استدعاء يحمل حقل intent: سطر واحد يقول ما تتوقع أن يفعله؛ الحقل إلزامي." : "",
     "تحقق من البناء والاختبارات وطلبات المستخدم فعليًا. إن بقي عمل اختر الأداة التالية بدل الملخص النهائي. أجب باللغة التي يطلبها المستخدم صراحة؛ وإلا اتبع لغة رسالته.",
   ]),

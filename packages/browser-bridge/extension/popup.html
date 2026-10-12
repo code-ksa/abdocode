@@ -12,6 +12,15 @@
   button { margin-top: 10px; padding: 6px 12px; font: inherit; }
   #status { margin-top: 10px; font-size: 13px; }
   small { display: block; color: #555; margin-top: 8px; line-height: 1.5; }
+  /* 0.6.9 — في لوحة إيدج/كروم الجانبيّة تكون النافذةُ أعرض من النافذة المنبثقة: تملأ العرضَ بحدٍّ معقول. */
+  @media (min-width: 340px) { body { width: auto; max-width: 560px; } }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e8e8e8; background: #17181a; }
+    input { color: #e8e8e8; background: #222428; border: 1px solid #3a3d42; }
+    button { color: #e8e8e8; background: #2a2d32; border: 1px solid #3a3d42; }
+    small { color: #a8abb0; }
+    a { color: #8ab4ff; }
+  }
 </style>
 </head>
 <body>

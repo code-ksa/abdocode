@@ -445,13 +445,14 @@ export function resolveIsolationPrimitive(name: string): string | undefined {
 
 // ------------------------------------------------------------- process control
 
-/** Kill the whole descendant tree, not just the direct child. */
+/**
+ * Kill the whole descendant tree, not just the direct child.
+ *
+ * 2026-10-08 (measured): `run docker info` timed out 31 times and left 31 `docker.exe` alive. The direct child was killed
+ * first, so `taskkill /T` then looked up a pid that no longer existed and could not walk to the grandchildren. On Windows
+ * the tree is taken while its root is still alive; the direct kill is the fallback.
+ */
 export function killProcessTree(proc: { pid: number; kill: (code?: number) => void }): void {
-  try {
-    proc.kill()
-  } catch {
-    /* already gone */
-  }
   try {
     if (process.platform === "win32") {
       // [CL-00A:ALLOW controlled_process_launcher]
@@ -465,6 +466,11 @@ export function killProcessTree(proc: { pid: number; kill: (code?: number) => vo
     }
   } catch {
     /* process already gone */
+  }
+  try {
+    proc.kill()
+  } catch {
+    /* already gone */
   }
 }
 

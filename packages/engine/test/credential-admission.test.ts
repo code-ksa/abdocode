@@ -92,7 +92,7 @@ describe("S11 — الاعتمادُ يُفحص عند القبول قبل أو�
     // 09-29: رفضُ قائمة المزوّدين المخصّصين يُلحق بالتنبيه باسمه — «unresolvable reference» وحدَه أخفى مدخلاً مكرّراً عن المالك.
     expect(cliSource).toContain("if (admission.notice !== undefined) await emitEvent(turn.id, `⚠ ${admission.notice}${customProviderRefusals.length > 0 ? ` — المزوّدون المخصّصون غيرُ مسجّلين: ${customProviderRefusals.join(\"؛ \")}` : \"\"}`)")
     expect(cliSource).toContain("if (admission.selected !== undefined && admission.selected !== selectedModel.ref) selectedModel = selectionOf(admission.selected, selectedModel.lane) ?? selectedModel")
-    expect(cliSource).toContain("const ladder = ownerRungs.filter((rung) => admission.ladder.includes(rung.ref))")
+    expect(cliSource).toContain("const ladder = parallelWorker ? [] : ownerRungs.filter((rung) => admission.ladder.includes(rung.ref))")
     expect(cliSource).toContain("shotRoute(visionAdmitted ? loadSettings() : { ...loadSettings(), visionModel: undefined })")
     // الترتيب جزءٌ من الميزة: القبولُ قبل بثّ model-route وقبل البوّابة الأمامية وأوّل ask.
     const at = cliSource.indexOf("const admission = await admitCredentials(")

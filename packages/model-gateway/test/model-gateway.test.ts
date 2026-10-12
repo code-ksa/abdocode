@@ -15,6 +15,20 @@ describe("owned model gateway codecs", () => {
       tools: [{ name: "read", description: "read", parameters: {} }],
     })).toThrow("not qualified")
   })
+  test("10-08: the OpenAI-compatible shape carries native tools, tool_calls with JSON-string arguments, and tool results by id", () => {
+    const body = JSON.parse(encodeChatRequest({ wire: "openai-compatible", model: "openai/gpt-oss-20b", stream: false,
+      tools: [{ name: "read", description: "read a file", parameters: { type: "object" } }],
+      messages: [{ role: "user", content: "اقرأ" }, { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "read", input: { path: "a" } }] },
+        { role: "tool", content: "source", name: "read", toolCallId: "c1" }],
+    }).body)
+    expect(body.tools[0]).toEqual({ type: "function", function: { name: "read", description: "read a file", parameters: { type: "object" } } })
+    expect(body.messages[1]).toEqual({ role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "read", arguments: '{"path":"a"}' } }] })
+    expect(body.messages[2]).toEqual({ role: "tool", tool_call_id: "c1", content: "source" })
+    // التوأم: طلبٌ نصّيّ بلا أدوات لا يحمل حقلَ tools ولا يتغيّر شكلُ رسائله.
+    const text = JSON.parse(encodeChatRequest({ wire: "openai-compatible", model: "m", stream: false, messages: [{ role: "user", content: "hi" }] }).body)
+    expect(text.tools).toBeUndefined()
+    expect(text.messages).toEqual([{ role: "user", content: "hi" }])
+  })
   test("encodes each provider family without discovery", () => {
     const messages = [{ role: "system" as const, content: "owned" }, { role: "user" as const, content: "hello" }]
     const ollama = encodeChatRequest({

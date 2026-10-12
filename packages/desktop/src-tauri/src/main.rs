@@ -17,6 +17,7 @@ mod automation;
 mod automation_store;
 mod automation_worker;
 mod browser_surface;
+mod clipboard;
 mod desktop_preferences;
 mod extensions;
 mod extension_download;
@@ -30,6 +31,7 @@ mod settings;
 mod terminal_pty;
 mod workspace;
 mod workspace_controls;
+mod single_instance;
 
 const MAX_ENGINE_FRAME_BYTES: usize = 1024 * 1024;
 
@@ -644,7 +646,9 @@ fn vault_write(script: &Path, name: &str, value: &str) -> Result<(), String> {
 #[tauri::command]
 fn vault_set(key: String, value: String) -> Result<(), String> {
     let name = vault_name(&key)?;
-    vault_write(&vault_script()?, &name, &value)
+    let written = vault_write(&vault_script()?, &name, &value);
+    forget_vault_list();
+    written
 }
 
 #[cfg(test)]
@@ -748,14 +752,40 @@ ConvertTo-Json -Compress -InputObject @($buffer.ToArray())
     }
 }
 
+/// 10-10 — مقيس على المثبَّت 4.0.121: كلُّ إطار `settings` يعيد بناءَ بطاقات المزوّدين فيسأل `vault_has` مرّتين (بحث Google)، وكلُّ
+/// سؤالٍ يُطلق عمليّةَ الخزنة (`list`) ≈450 مللي ثانية **على الخيط الرئيسيّ** (أمرٌ متزامن) — فانتظره كلُّ نداءٍ بعده، وصار «حفظ وتطبيق»
+/// ~0.9 ثانية. الآن: غيرُ متزامن (خارج الخيط الرئيسيّ)، وقائمةُ الخزنة تُشارَك ثلاثَ ثوانٍ بين الأسئلة المتزامنة وتُبطَل عند كلّ كتابة.
+static VAULT_LIST_CACHE: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
+const VAULT_LIST_TTL: std::time::Duration = std::time::Duration::from_secs(3);
+
+fn vault_list_shared() -> Result<String, String> {
+    // القفلُ يُمسك طوال القراءة: سؤالان متزامنان ينتظر ثانيهما الأوّلَ فيأخذ قائمتَه بدل عمليّةٍ ثانية.
+    let mut cache = VAULT_LIST_CACHE.lock().map_err(|_| "الخزنة مشغولة".to_string())?;
+    if let Some((list, at)) = cache.as_ref() {
+        if at.elapsed() < VAULT_LIST_TTL {
+            return Ok(list.clone());
+        }
+    }
+    let out = run_vault(&["list"])?;
+    let list = String::from_utf8_lossy(&out.stdout).into_owned();
+    *cache = Some((list.clone(), std::time::Instant::now()));
+    Ok(list)
+}
+
+fn forget_vault_list() {
+    if let Ok(mut cache) = VAULT_LIST_CACHE.lock() {
+        *cache = None;
+    }
+}
+
 /// هل المفتاح موجود؟ — سؤالٌ بنعم/لا للواجهة، **بلا كشف القيمة**.
 #[tauri::command]
-fn vault_has(key: String) -> Result<bool, String> {
+async fn vault_has(key: String) -> Result<bool, String> {
     let name = vault_name(&key)?;
-    let out = run_vault(&["list"])?;
-    Ok(String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .any(|l| l.contains(&name)))
+    let list = tauri::async_runtime::spawn_blocking(vault_list_shared)
+        .await
+        .map_err(|e| format!("تعذّرت قراءة الخزنة: {e}"))??;
+    Ok(list.lines().any(|l| l.contains(&name)))
 }
 
 /// T06 — منتقي مجلد المشروع الأصليّ (rfd). يفتح حوار ويندوز؛ يعيد المسار
@@ -770,6 +800,18 @@ fn pick_directory() -> Option<String> {
                 .ok()
                 .map(|_| p.display().to_string())
         })
+}
+
+/// استيراد الذاكرة (10-10) — منتقي ملفّ تصدير ChatGPT/Claude/Gemini. يعيد المسار فقط؛ المحرّكُ يقرؤه
+/// بسقوفه ويعرض قائمةَ مراجعة قبل أيّ حفظ. إطارُ القشرة مسقوفٌ بـ1MiB فلا يُنقل الملفُّ نفسُه عبره.
+#[tauri::command]
+async fn memory_import_choose() -> Result<Option<String>, String> {
+    let choice = rfd::AsyncFileDialog::new()
+        .set_title("Choose a ChatGPT, Claude or Gemini export")
+        .add_filter("Export (zip, json, html)", &["zip", "json", "html", "htm"])
+        .pick_file()
+        .await;
+    Ok(choice.map(|file| file.path().to_string_lossy().into_owned()))
 }
 
 /// A Git worktree can escape the selected project by design, so its destination
@@ -1212,19 +1254,30 @@ fn pane_print(app: tauri::AppHandle, label: String) -> Result<(), String> {
 }
 
 /// فتح الرابط في متصفّح الجهاز الافتراضيّ — خارج التطبيق بيد المشغّل.
+///
+/// 10-09 — كان `cmd /c start "" <url>`: cmd يقرأ `&` فاصلَ أوامر فيُقطع الرابط بعد أوّل وسيط — قيس حيّاً «Missing required
+/// parameter: client_id» من جوجل لأنّ رابط التفويض وصل حتى `?response_type=code` وحده. ShellExecuteW يسلّم الرابط كاملاً بلا صَدَفة.
 #[tauri::command]
 fn open_external(url: String) -> Result<(), String> {
     pane_url_ok(&url)?;
-    let mut cmd = Command::new("cmd");
-    cmd.args(["/c", "start", "", &url]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
-    cmd.spawn()
-        .map(|_| ())
-        .map_err(|e| format!("تعذّر الفتح الخارجيّ: {e}"))
+    open_url_in_default_browser(&url)
+}
+
+#[cfg(windows)]
+fn open_url_in_default_browser(url: &str) -> Result<(), String> {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (verb, target) = (wide("open"), wide(url));
+    // ShellExecuteW يعيد قيمةً > 32 عند النجاح (توثيق Win32).
+    let code = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) } as isize;
+    if code > 32 { Ok(()) } else { Err(format!("تعذّر الفتح الخارجيّ (ShellExecute {code})")) }
+}
+
+#[cfg(not(windows))]
+fn open_url_in_default_browser(url: &str) -> Result<(), String> {
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    Command::new(opener).arg(url).spawn().map(|_| ()).map_err(|e| format!("تعذّر الفتح الخارجيّ: {e}"))
 }
 
 #[tauri::command]
@@ -1288,6 +1341,10 @@ fn main() {
     if automation::worker_entry() {
         return;
     }
+    // 10-09: the default profile is single-instance — a second launch brings the running window forward and exits.
+    if single_instance::hand_over_to_running_instance() {
+        return;
+    }
     let app = tauri::Builder::default()
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -1300,6 +1357,8 @@ fn main() {
         )
         .invoke_handler(tauri::generate_handler![
             identity,
+            clipboard::clipboard_read_text,
+            clipboard::clipboard_write_text,
             automation::automation_status,
             automation::automation_enqueue,
             automation::automation_schedule_save,
@@ -1363,6 +1422,7 @@ fn main() {
             workspace::workspace_git_create_pull_request,
             workspace_create_worktree,
             pick_directory,
+            memory_import_choose,
             app_window_close,
             app_quit,
             browser_open,

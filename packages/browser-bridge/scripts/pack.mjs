@@ -80,12 +80,14 @@ mkdirSync(dist, { recursive: true })
 const targets = [
   { id: "chrome", dir: "chrome-edge", transform: (m) => m },
   { id: "edge", dir: "chrome-edge", transform: (m) => m },
-  { id: "safari", dir: "safari", transform: (m) => { m.permissions = m.permissions.filter((p) => p !== "debugger"); delete m.minimum_chrome_version; return m } },
+  // 0.6.9: اللوحةُ الجانبيّة (sidePanel) واجهةُ كروم/إيدج وحدهما — تُنزع من حزمتي سفاري وفايرفوكس.
+  { id: "safari", dir: "safari", transform: (m) => { m.permissions = m.permissions.filter((p) => p !== "debugger" && p !== "sidePanel"); delete m.side_panel; delete m.minimum_chrome_version; return m } },
   // فايرفوكس: MV3 بصفحة أحداثٍ (`background.scripts`) لا عاملَ خدمة، ومعرّفٌ صريح في `browser_specific_settings`
   // (يرفض AMO الحزمةَ بلا معرّف)، وبلا `debugger` — لا توجد الواجهةُ أصلاً في فايرفوكس، فيهبط الإدخالُ إلى
   // الأحداث الاصطناعيّة ويُعلنها الردُّ بـ`mode: "synthetic"` كما في سفاري.
   { id: "firefox", dir: "firefox", transform: (m) => {
-    m.permissions = m.permissions.filter((p) => p !== "debugger")
+    m.permissions = m.permissions.filter((p) => p !== "debugger" && p !== "sidePanel")
+    delete m.side_panel
     delete m.minimum_chrome_version
     m.background = { scripts: ["background.js"] }
     // `data_collection_permissions` شرطٌ يفرضه AMO على كلّ حزمة (ردَّ التحقّق حرفياً: "property is missing").

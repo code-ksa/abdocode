@@ -37,6 +37,13 @@ const TURN_KEY = /^turn:([^:]+)$/u
  * ليُصرَّح بها للمشغّل والنموذج. الحالة `answered` (البوابة الأمامية أجابت بلا
  * أدوات) تُتخطّى دائماً — ليست هدفاً ولا تُعاد ولو كانت وحدها.
  */
+/**
+ * 10-10 (مقيس في مهمّة n8n): «اكمل» استأنف «خلي النموذج ديبسيك 4.1 فلاش» هدفاً أصليّاً — طلبُ إعدادٍ جانبيّ قصير ليس هدفَ عمل؛ الهدفُ
+ * ما قبله. Pure.
+ */
+const SETTINGS_ASIDE = /^(?:خلّ?ي|خليه|غيّ?ر|بدّ?ل|فعّ?ل|عطّ?ل|اجعل|حوّ?ل|استعمل|استخدم|set|change|switch|use|make)(?=\s)[^\n]{0,100}(?:النموذج|الموديل|موديل|نموذج|model|الإعداد|إعدادات|settings|اللغة|الثيم|theme|الوضع|وضع|mode)/iu
+export const isSettingsAside = (goal: string): boolean => goal.trim().length <= 160 && SETTINGS_ASIDE.test(goal.trim())
+
 export function pickPriorGoal(facts: readonly { key: string; value: unknown }[]): PriorGoal | undefined {
   let completed: PriorGoal | undefined
   const latest = new Map<string, { candidate: PriorGoal; resumedFrom?: string; index: number }>()
@@ -51,7 +58,7 @@ export function pickPriorGoal(facts: readonly { key: string; value: unknown }[])
     if (typeof value !== "object" || value === null) continue
     const goal = (value as { goal?: unknown }).goal
     if (typeof goal !== "string" || goal.trim().length === 0) continue
-    if (isResumeIntent(goal)) continue
+    if (isResumeIntent(goal) || isSettingsAside(goal)) continue
     const status = (value as { status?: unknown }).status
     const candidate: PriorGoal = { goal, turnId: match[1], ...(typeof status === "string" ? { status } : {}) }
     // دورٌ أجابته البوابة الأمامية بلا أدوات (routerGate) ليس هدف عملٍ قطّ — «اكمل» بعد

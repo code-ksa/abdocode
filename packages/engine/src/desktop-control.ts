@@ -24,14 +24,17 @@ import { join } from "node:path"
 import { frameFromWindow, frameLine, type ViewportFrame } from "./viewport-map"
 
 export type DesktopAction =
-  | { readonly kind: "shot"; readonly scope: "auto" | "screen" }
+  // 10-09 — `region`: desk zoom — مقطعٌ من النافذة المربوطة بدقّته الكاملة (التفاصيلُ الصغيرة تضيع في لقطة النافذة المصغَّرة).
+  | { readonly kind: "shot"; readonly scope: "auto" | "screen"; readonly region?: { readonly x: number; readonly y: number; readonly w: number; readonly h: number } }
   | { readonly kind: "windows" }
   | { readonly kind: "focus"; readonly title: string }
-  | { readonly kind: "click"; readonly x: number; readonly y: number; readonly button: "left" | "right" | "double" }
+  | { readonly kind: "click"; readonly x: number; readonly y: number; readonly button: "left" | "right" | "double" | "triple" | "middle" }
+  // 10-09 — تحريكُ المؤشّر بلا نقر (قوائمُ تنفتح بالمرور، تلميحات) — فعلُ إدخالٍ بحدود النافذة نفسِها.
+  | { readonly kind: "move"; readonly x: number; readonly y: number }
   | { readonly kind: "type"; readonly text: string }
   | { readonly kind: "key"; readonly combo: string }
   // ن6 (09-16) — التمريرُ الأفقيّ (left/right بعجلة HWHEEL) والسحبُ بالماوس: تصميمُ الرسم (فوتوشوب/بليندر) وقوائمُ السياق ولوحاتُ كانبان.
-  | { readonly kind: "scroll"; readonly direction: "up" | "down" | "left" | "right"; readonly count: number }
+  | { readonly kind: "scroll"; readonly direction: "up" | "down" | "left" | "right"; readonly count: number; readonly at?: { readonly x: number; readonly y: number } }
   | { readonly kind: "drag"; readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number }
   // م6ب — شجرةُ الواجهة بـUI Automation: الطريقُ الحتميّ قبل الرؤية على واجهاتٍ لم يرها النموذج (أسماءُ الحقول والأزرار ومستطيلاتُها وأنماطُها).
   | { readonly kind: "ui"; readonly depth: number }
@@ -54,9 +57,9 @@ export interface DesktopBound { readonly hwnd: number; readonly title: string; r
 export interface DesktopRunner { run(script: string, timeoutMs: number): Promise<{ code: number; stdout: string; stderr: string; timedOut?: boolean }> }
 
 /** أفعالُ الإدخال: تحتاج نافذةً مربوطةً وتحقّقاً من المقدّمة قبل الحقن. القراءةُ (لقطة/نوافذ/تركيز) لا. */
-export const INPUT_KINDS: ReadonlySet<DesktopAction["kind"]> = new Set(["click", "type", "key", "scroll", "set", "press", "drag"] as const)
+export const INPUT_KINDS: ReadonlySet<DesktopAction["kind"]> = new Set(["click", "move", "type", "key", "scroll", "set", "press", "drag"] as const)
 
-export const DESKTOP_USAGE = "الصيغة: desk open <برنامج|مسار> | desk wait <نصّ> [ث] | desk shot [screen] | desk windows | desk focus <عنوان النافذة | pid:رقم> | desk ui [عمق] | desk set <مرجع> <نص> | desk press <مرجع> | desk click <x> <y> [right|double] | desk drag <x1> <y1> <x2> <y2> | desk point <وصفُ عنصرٍ في اللقطة> | desk type <نص> | desk key <Enter|Tab|Esc|ctrl+s|alt+f4|win|…> | desk scroll <up|down|left|right> [عدد] | desk layout save [<اسم>] | desk layout list | desk layout forget <اسم> — والإحداثيّاتُ من زاوية النافذة المركَّزة العليا اليسرى (بكسلاتٌ فعليّة كاللقطة)"
+export const DESKTOP_USAGE = "الصيغة: desk open <برنامج|مسار> | desk wait <نصّ> [ث] | desk shot [screen] | desk windows | desk focus <عنوان النافذة | pid:رقم> | desk ui [عمق] | desk set <مرجع> <نص> | desk press <مرجع> | desk click <x> <y> [right|double|triple|middle] | desk move <x> <y> | desk zoom <x> <y> <w> <h> | desk drag <x1> <y1> <x2> <y2> | desk point <وصفُ عنصرٍ في اللقطة> | desk type <نص> | desk key <Enter|Tab|Esc|ctrl+s|alt+f4|win|…> | desk scroll <up|down|left|right> [عدد] [x y] | desk layout save [<اسم>] | desk layout list | desk layout forget <اسم> — والإحداثيّاتُ من زاوية النافذة المركَّزة العليا اليسرى (بكسلاتٌ فعليّة كاللقطة)"
 export const UI_DEFAULT_DEPTH = 8, UI_MAX_DEPTH = 14, UI_ELEMENT_CAP = 400
 export const NEEDS_FOCUS = `لا نافذةَ مربوطة: ركّز نافذةً أوّلاً بـ«desk focus <جزءٌ من العنوان>» — الإدخالُ لا يُرسَل إلى «أيّ نافذةٍ في المقدّمة». ${DESKTOP_USAGE}`
 
@@ -65,7 +68,19 @@ export const KEY_VK: Readonly<Record<string, number>> = Object.freeze({
   enter: 13, return: 13, tab: 9, esc: 27, escape: 27, backspace: 8, delete: 46, del: 46, space: 32, home: 36, end: 35, pageup: 33, pagedown: 34,
   up: 38, down: 40, left: 37, right: 39, win: 91, ctrl: 17, control: 17, alt: 18, shift: 16, insert: 45, printscreen: 44,
   f1: 112, f2: 113, f3: 114, f4: 115, f5: 116, f6: 117, f7: 118, f8: 119, f9: 120, f10: 121, f11: 122, f12: 123,
+  // 10-11 (من برنامج «Desktop Remote Control»: قائمةُ سماحٍ كاملة للوحة) — كانت «ctrl+minus» و«ctrl+/» و«f13» و«numpad5» و«volumeup» تُرفض «مفتاحٌ مجهول».
+  f13: 124, f14: 125, f15: 126, f16: 127, f17: 128, f18: 129, f19: 130, f20: 131, f21: 132, f22: 133, f23: 134, f24: 135,
+  numpad0: 96, numpad1: 97, numpad2: 98, numpad3: 99, numpad4: 100, numpad5: 101, numpad6: 102, numpad7: 103, numpad8: 104, numpad9: 105,
+  multiply: 106, add: 107, subtract: 109, decimal: 110, divide: 111,
+  capslock: 20, numlock: 144, scrolllock: 145, pause: 19, menu: 93, apps: 93, contextmenu: 93, lwin: 91, rwin: 92,
+  semicolon: 186, equal: 187, plus: 187, comma: 188, minus: 189, period: 190, slash: 191, backquote: 192, grave: 192,
+  bracketleft: 219, backslash: 220, bracketright: 221, quote: 222,
+  volumemute: 173, volumedown: 174, volumeup: 175, medianext: 176, mediaprev: 177, mediastop: 178, mediaplaypause: 179, browserback: 166, browserforward: 167,
 })
+/** رموزُ المفاتيح كما تُكتب ⇦ أسماؤها («ctrl+/» = ctrl+slash). «+» فاصلُ التركيب، فاسمُه plus. */
+const SYMBOL_KEY: Readonly<Record<string, string>> = Object.freeze({ "-": "minus", "=": "equal", ",": "comma", ".": "period", "/": "slash", ";": "semicolon", "'": "quote", "[": "bracketleft", "]": "bracketright", "\\": "backslash", "`": "backquote" })
+/** نصُّ desk type بلا محارف تحكّمٍ خفيّة (عدا السطر والجدولة) — قد تضغط مفاتيحَ لم تُقصد. */
+export const cleanTypedText = (text: string): string => text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
 const MODIFIERS = new Set([17, 18, 16, 91])
 
 export function parseDesktopCommand(rest: string): DesktopAction | { readonly error: string } {
@@ -99,23 +114,39 @@ export function parseDesktopCommand(rest: string): DesktopAction | { readonly er
       const x = Number.parseInt(tail[0] ?? "", 10), y = Number.parseInt(tail[1] ?? "", 10)
       // نسبيّةٌ إلى زاوية النافذة: السالبُ خارجها بالتعريف، ولا مستطيلَ سالبَ الأصل يمنع النقر بعد اليوم.
       if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x > 20_000 || y > 20_000) return { error: "desk click يحتاج إحداثيّتين صحيحتين من زاوية النافذة: desk click <x> <y> [right|double]" }
-      const button = tail[2]?.toLowerCase() === "right" ? "right" : tail[2]?.toLowerCase() === "double" ? "double" : "left"
+      const word = tail[2]?.toLowerCase()
+      const button = word === "right" || word === "double" || word === "triple" || word === "middle" ? word : "left"
       return { kind: "click", x, y, button }
     }
-    case "type": return arg.length === 0 ? { error: "desk type يحتاج نصّاً" } : arg.length > 4000 ? { error: "desk type: حتى ٤٠٠٠ حرف" } : { kind: "type", text: arg }
+    case "move": {
+      const x = Number.parseInt(tail[0] ?? "", 10), y = Number.parseInt(tail[1] ?? "", 10)
+      if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x > 20_000 || y > 20_000) return { error: "desk move <x> <y> — إحداثيّتان صحيحتان من زاوية النافذة (يحرّك المؤشّر بلا نقر)" }
+      return { kind: "move", x, y }
+    }
+    case "zoom": {
+      const nums = tail.slice(0, 4).map((t) => Number.parseInt(t, 10))
+      if (nums.length < 4 || nums.some((v) => !Number.isInteger(v) || v < 0 || v > 20_000)) return { error: "desk zoom <x> <y> <w> <h> — مقطعٌ من النافذة المربوطة بإحداثيّاتها (w وh ≥ 8)" }
+      const [x, y, w, h] = nums as [number, number, number, number]
+      if (w < 8 || h < 8) return { error: "desk zoom: العرضُ والارتفاع 8 بكسلات على الأقلّ" }
+      return { kind: "shot", scope: "auto", region: { x, y, w, h } }
+    }
+    case "type": { const text = cleanTypedText(arg); return text.length === 0 ? { error: "desk type يحتاج نصّاً" } : text.length > 4000 ? { error: "desk type: حتى ٤٠٠٠ حرف" } : { kind: "type", text } }
     case "key": {
       const combo = arg.toLowerCase().replace(/\s+/g, "")
       if (combo.length === 0) return { error: DESKTOP_USAGE }
-      const parts = combo.split("+")
+      const parts = combo.split("+").map((p) => SYMBOL_KEY[p] ?? p)
       for (const p of parts) if (!(p in KEY_VK) && !/^[a-z0-9]$/.test(p)) return { error: `مفتاحٌ مجهول «${p.slice(0, 12)}» — ${DESKTOP_USAGE}` }
-      return { kind: "key", combo }
+      return { kind: "key", combo: parts.join("+") }
     }
     case "scroll": {
       const word = (tail[0] ?? "").toLowerCase()
       const direction = word === "up" || word === "down" || word === "left" || word === "right" ? word : undefined
       if (direction === undefined) return { error: "desk scroll <up|down|left|right> [عدد]" }
       const count = Math.min(20, Math.max(1, Number.parseInt(tail[1] ?? "3", 10) || 3))
-      return { kind: "scroll", direction, count }
+      // 10-09 — التمريرُ عند نقطة: العجلةُ تذهب إلى ما تحت المؤشّر (قائمةٌ داخل صفحة، خريطة)، فيُحرَّك إليها أوّلاً.
+      const ax = Number.parseInt(tail[2] ?? "", 10), ay = Number.parseInt(tail[3] ?? "", 10)
+      if (tail[2] !== undefined && (!Number.isInteger(ax) || !Number.isInteger(ay) || ax < 0 || ay < 0 || ax > 20_000 || ay > 20_000)) return { error: "desk scroll <up|down|left|right> [عدد] [x y] — النقطةُ إحداثيّتان صحيحتان من زاوية النافذة" }
+      return tail[2] === undefined ? { kind: "scroll", direction, count } : { kind: "scroll", direction, count, at: { x: ax, y: ay } }
     }
     case "drag": {
       const nums = tail.slice(0, 4).map((t) => Number.parseInt(t, 10))
@@ -197,6 +228,53 @@ public static class AbdoDesk {
   public static void Wheel(int amount) { var i = new INPUT[1]; i[0].type = 0; i[0].u.mi.mouseData = unchecked((uint)amount); i[0].u.mi.dwFlags = 0x0800; Send(i); }
   public static void HWheel(int amount) { var i = new INPUT[1]; i[0].type = 0; i[0].u.mi.mouseData = unchecked((uint)amount); i[0].u.mi.dwFlags = 0x1000; Send(i); }
   [DllImport("user32.dll")] public static extern int GetSystemMetrics(int n);
+  [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
+  // 10-11 (من برنامج «Desktop Remote Control»: releaseAll عند انقطاع الجلسة) — حقنٌ قُطع بين الضغط والإفلات يترك Ctrl أو الزرَّ مضغوطاً على جهاز المستخدم.
+  public static string ReleaseHeld() {
+    var done = new System.Collections.Generic.List<string>();
+    int[] keys = { 16, 17, 18, 91, 92, 160, 161, 162, 163, 164, 165 };
+    foreach (var vk in keys) { if ((GetAsyncKeyState(vk) & 0x8000) != 0) { KeyUp((ushort)vk); done.Add("vk" + vk); } }
+    if ((GetAsyncKeyState(1) & 0x8000) != 0) { MouseButton(4); done.Add("left"); }
+    if ((GetAsyncKeyState(2) & 0x8000) != 0) { MouseButton(16); done.Add("right"); }
+    if ((GetAsyncKeyState(4) & 0x8000) != 0) { MouseButton(64); done.Add("middle"); }
+    return string.Join(",", done);
+  }
+  // 10-11 (مقيس: desk-uia-live يسقط حين يسرق «Claude» المقدّمةَ وسطَ الكتابة — الحروفُ الباقية تذهب إلى النافذة الأخرى).
+  // حقلُ تحريرٍ أصليّ في النافذة المربوطة يُكتب برسالةٍ إليه مباشرةً، فلا تغيّرها المقدّمة؛ وغيرُه بمفاتيح تتوقّف لحظةَ تحرّك المقدّمة.
+  [StructLayout(LayoutKind.Sequential)] public struct GUITHREADINFO { public int cbSize; public int flags; public IntPtr hwndActive; public IntPtr hwndFocus; public IntPtr hwndCapture; public IntPtr hwndMenuOwner; public IntPtr hwndMoveSize; public IntPtr hwndCaret; public RECT rcCaret; }
+  [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint tid, ref GUITHREADINFO g);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")] public static extern IntPtr SendMessageText(IntPtr h, uint msg, IntPtr w, string l);
+  public static IntPtr FocusedEdit(IntPtr want) {
+    uint pid; uint tid = GetWindowThreadProcessId(want, out pid);
+    var g = new GUITHREADINFO(); g.cbSize = Marshal.SizeOf(typeof(GUITHREADINFO));
+    if (!GetGUIThreadInfo(tid, ref g) || g.hwndFocus == IntPtr.Zero) return IntPtr.Zero;
+    var sb = new StringBuilder(256); GetClassName(g.hwndFocus, sb, 256);
+    return sb.ToString().IndexOf("EDIT", StringComparison.OrdinalIgnoreCase) >= 0 ? g.hwndFocus : IntPtr.Zero;
+  }
+  // 10-11 — النقرةُ داخل مستطيل النافذة قد تقع على نافذةِ تطبيقٍ آخر يغطّيها (إشعار، نافذةٌ دائمةُ العلوّ): يُسأل النظامُ مَن يملك البكسل قبل النقر.
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
+  public static uint PidAt(int x, int y) { var p = new POINT(); p.X = x; p.Y = y; var h = WindowFromPoint(p); if (h == IntPtr.Zero) return 0; uint pid; GetWindowThreadProcessId(GetAncestor(h, 2), out pid); return pid; }
+  public static string RootTitleAt(int x, int y) { var p = new POINT(); p.X = x; p.Y = y; var h = WindowFromPoint(p); return h == IntPtr.Zero ? "" : Title(GetAncestor(h, 2)); }
+  public static string ControlAt(int x, int y) { var p = new POINT(); p.X = x; p.Y = y; var h = WindowFromPoint(p); if (h == IntPtr.Zero) return ""; var c = new StringBuilder(128); GetClassName(h, c, 128); return c.ToString() + "|" + Title(h); }
+  // 10-12 (مقيس على Antigravity IDE): نافذةُ Electron تعرض 14 عنصراً حتى يُسأل جهازُ عرضها — WM_GETOBJECT إلى Chrome_RenderWidgetHostHWND يوقظ شجرتَه
+  // كما يفعل قارئُ الشاشة، فيظهر مربّعُ الدردشة وزرُّ الإرسال بأسمائهما.
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc cb, IntPtr l);
+  public static int WakeChromium(IntPtr root) {
+    int n = 0;
+    EnumChildWindows(root, (h, l) => { var c = new StringBuilder(64); GetClassName(h, c, 64); if (c.ToString() == "Chrome_RenderWidgetHostHWND") { SendMessage(h, 0x003D, IntPtr.Zero, new IntPtr(-4)); SendMessage(h, 0x003D, IntPtr.Zero, new IntPtr(-25)); n++; } return true; }, IntPtr.Zero);
+    return n;
+  }
+  public static int TypeGuarded(IntPtr want, string text) {
+    int n = 0;
+    foreach (char ch in text) {
+      if (GetForegroundWindow() != want) return n;
+      if (ch == (char)10) { KeyDown(13); KeyUp(13); } else if (ch == (char)9) { KeyDown(9); KeyUp(9); } else if (ch != (char)13) { Unicode(ch); }
+      n++; System.Threading.Thread.Sleep(8);
+    }
+    return n;
+  }
   // ن6 (مقيس 09-16 على الرسّام في 4.0.40): SetCursorPos بين الضغط والإفلات لا يُرى حركةَ ماوسٍ فرُسمت نقطةٌ لا خطّ —
   // الحركةُ حدثُ إدخالٍ حقيقيّ بإحداثيّاتٍ مطلقة على الشاشة الافتراضيّة (MOVE|ABSOLUTE|VIRTUALDESK).
   public static void MoveAbs(int x, int y) {
@@ -289,6 +367,21 @@ export function desktopScript(action: DesktopAction, shotPath = "", bound?: Desk
     case "shot": {
       const path = shotPath.replace(/'/g, "''")
       // اللقطةُ الافتراضيّة **للنافذة المربوطة وحدها**: سطحُ مكتب المستخدم كلُّه لا يُصوَّر لأنّ الوكيل يريد زرّاً.
+      if (action.region !== undefined) {
+        if (bound === undefined) return `${WIN32_PRELUDE}Out-Json @{ ok = $false; error = 'desk zoom needs a focused window (desk focus)' }
+`
+        const z = action.region
+        return `${WIN32_PRELUDE}Add-Type -AssemblyName System.Drawing
+${foregroundGuard(bound.hwnd, selfPids, true)}$ww = $r.Right - $r.Left; $wh = $r.Bottom - $r.Top
+if (${z.x} -ge $ww -or ${z.y} -ge $wh) { Out-Json @{ ok = $false; error = 'the region starts outside the window'; width = $ww; height = $wh }; exit 0 }
+$w = [Math]::Min(${z.w}, $ww - ${z.x}); $h = [Math]::Min(${z.h}, $wh - ${z.y})
+$bmp = New-Object System.Drawing.Bitmap $w, $h
+$g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($r.Left + ${z.x}, $r.Top + ${z.y}, 0, 0, $bmp.Size); $g.Dispose()
+$bmp.Save('${path}', [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+${FRAME_PROBE}$frame = Win-Frame $want; $frame.ok = $true; $frame.scope = 'window'; $frame.width = $w; $frame.height = $h; $frame.title = [AbdoDesk]::Title($want); $frame.path = '${path}'; $frame.region = @{ x = ${z.x}; y = ${z.y}; w = $w; h = $h }
+Out-Json $frame
+`
+      }
       if (bound !== undefined && action.scope !== "screen") {
         return `${WIN32_PRELUDE}Add-Type -AssemblyName System.Drawing
 ${foregroundGuard(bound.hwnd, selfPids, true)}$w = $r.Right - $r.Left; $h = $r.Bottom - $r.Top
@@ -313,9 +406,31 @@ Out-Json @{ ok = $true; scope = 'screen'; width = $b.Width; height = $b.Height; 
     // م6و — الإقلاعُ بـShellExecute (لا بصدفة Git التي تحوّل notepad إلى سكربت غلاف)، ثمّ انتظارُ النافذة الجديدة وربطُها وتسميةُ ما ظهر معها.
     case "open": return `${WIN32_PRELUDE}${WINDOWS_LIST}$before = @{}; foreach ($w in $list) { $before[[string]$w.hwnd] = $true }
 $app = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(action.app)}'))
+# 10-12 (مقيس: «desk open Antigravity» فتح نافذةً فارغةً جديدة ونافذةُ المشروع ولوحةُ Gemini مصغّرةٌ خلفها). كما يفعل الإنسان: التطبيقُ المفتوح يُنتقل إليه
+# (يُستعاد إن كان مصغّراً)، ونافذةُ مشروعٍ مفتوح («… - Antigravity IDE - ملفّ») أَولى من نافذةٍ فارغة. اسمٌ بلا مسار وحده؛ المسارُ يُقلَع كما طُلب.
+$reuseNeedle = [IO.Path]::GetFileNameWithoutExtension($app).ToLowerInvariant()
+if ($app -notmatch '[\\/]' -and $reuseNeedle.Length -ge 3) {
+  $mine = @($list | Where-Object { $_.title.ToLowerInvariant().Contains($reuseNeedle) })
+  if ($mine.Count -gt 0) {
+    $pick = $mine | Sort-Object @{ Expression = { if ($_.title.Contains(' - ')) { 0 } else { 1 } } }, @{ Expression = { ($_.right - $_.left) * ($_.bottom - $_.top) }; Descending = $true } | Select-Object -First 1
+    [void][AbdoDesk]::ShowWindow([IntPtr]$pick.hwnd, 9); Start-Sleep -Milliseconds 250
+    $raised = [AbdoDesk]::Focus([IntPtr]$pick.hwnd); Start-Sleep -Milliseconds 200
+    $fg = [AbdoDesk]::GetForegroundWindow()
+${FRAME_PROBE}    $frame = Win-Frame ([IntPtr]$pick.hwnd); $frame.ok = $true; $frame.focused = (([int64]$fg) -eq ([int64]$pick.hwnd)); $frame.existing = $true; $frame.reused = $true; $frame.hwnd = $pick.hwnd; $frame.title = [AbdoDesk]::Title([IntPtr]$pick.hwnd); $frame.launchedPid = 0; $frame.others = @()
+    Out-Json $frame; exit 0
+  }
+}
 $launchPid = 0; $err = ''
 try { $p = Start-Process -FilePath $app -PassThru -ErrorAction Stop; if ($p) { $launchPid = [int]$p.Id } } catch { $err = $_.Exception.Message
   if ($app -notmatch '\\.[A-Za-z0-9]{1,4}$' -and $app -notmatch '[\\\\/]') { try { $p = Start-Process -FilePath ($app + '.exe') -PassThru -ErrorAction Stop; if ($p) { $launchPid = [int]$p.Id }; $err = '' } catch { $err = $_.Exception.Message } } }
+# 10-12 — تطبيقٌ مثبَّتٌ ليس في PATH (Antigravity، Cursor، تطبيقاتُ المتجر) يُفتح باسمه في قائمة ابدأ.
+$startName = ''
+if ($err.Length -gt 0 -and $app -notmatch '[\\\\/]') {
+  $wantApp = ($app -replace '\\.exe$', '').ToLowerInvariant(); $found = $null
+  try { $apps = @(Get-StartApps); $found = $apps | Where-Object { $_.Name.ToLowerInvariant() -eq $wantApp } | Select-Object -First 1
+    if ($null -eq $found) { $found = $apps | Where-Object { $_.Name.ToLowerInvariant().Contains($wantApp) } | Sort-Object { $_.Name.Length } | Select-Object -First 1 } } catch { }
+  if ($null -ne $found) { try { Start-Process ('shell:AppsFolder\\' + $found.AppID) -ErrorAction Stop; $err = ''; $startName = [string]$found.Name } catch { $err = $_.Exception.Message } }
+}
 if ($err.Length -gt 0) { Out-Json @{ ok = $false; error = ('could not start: ' + $err) }; exit 0 }
 $fresh = @(); $deadline = (Get-Date).AddSeconds(8)
 while ((Get-Date) -lt $deadline) {
@@ -323,7 +438,7 @@ while ((Get-Date) -lt $deadline) {
 ${WINDOWS_LIST}  $fresh = @($list | Where-Object { -not $before.ContainsKey([string]$_.hwnd) })
   if ($fresh.Count -gt 0) { Start-Sleep -Milliseconds 400; break }
 }
-$needle = [IO.Path]::GetFileNameWithoutExtension($app).ToLowerInvariant()
+$needle = if ($startName.Length -gt 0) { $startName.ToLowerInvariant() } else { [IO.Path]::GetFileNameWithoutExtension($app).ToLowerInvariant() }
 $existing = $false
 if ($fresh.Count -eq 0) {
   # تطبيقٌ ذو نافذةٍ واحدة (مفكرةُ ويندوز ١١ تفتح تبويباً في نافذتها القائمة): تُربط النافذةُ القائمة بـpid الإقلاع أو بالاسم.
@@ -369,31 +484,50 @@ if (-not $placed) { $frame.error = 'SetWindowPos refused (elevated or system win
 Out-Json $frame
 `
     case "click": {
-      const down = action.button === "right" ? "0x0008" : "0x0002", up = action.button === "right" ? "0x0010" : "0x0004"
-      const times = action.button === "double" ? 2 : 1
+      const down = action.button === "right" ? "0x0008" : action.button === "middle" ? "0x0020" : "0x0002", up = action.button === "right" ? "0x0010" : action.button === "middle" ? "0x0040" : "0x0004"
+      const times = action.button === "double" ? 2 : action.button === "triple" ? 3 : 1
       return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}$sx = $r.Left + ${action.x}; $sy = $r.Top + ${action.y}
 if (${action.x} -ge ($r.Right - $r.Left) -or ${action.y} -ge ($r.Bottom - $r.Top)) { Out-Json @{ ok = $false; error = 'point is outside the window now'; width = ($r.Right - $r.Left); height = ($r.Bottom - $r.Top) }; exit 0 }
+$wantPid = [uint32]0; [void][AbdoDesk]::GetWindowThreadProcessId($want, [ref]$wantPid)
+if ([AbdoDesk]::PidAt($sx, $sy) -ne $wantPid) { Out-Json @{ ok = $false; error = 'covered'; cover = [AbdoDesk]::RootTitleAt($sx, $sy) }; exit 0 }
+$hitCtl = [AbdoDesk]::ControlAt($sx, $sy)
 [void][AbdoDesk]::SetCursorPos($sx, $sy); Start-Sleep -Milliseconds 40
 $p = New-Object AbdoDesk+POINT
 if (-not [AbdoDesk]::GetCursorPos([ref]$p)) { Out-Json @{ ok = $false; error = 'cursor position unreadable' }; exit 0 }
 if ($p.X -ne $sx -or $p.Y -ne $sy) { Out-Json @{ ok = $false; error = 'the cursor did not reach the point'; x = $p.X; y = $p.Y }; exit 0 }
 ${Array.from({ length: times }, () => `[AbdoDesk]::MouseButton(${down}); [AbdoDesk]::MouseButton(${up})`).join("; Start-Sleep -Milliseconds 60; ")}
-${injectionTail(`; x = $sx; y = $sy; button = '${action.button}'`)}`
+${injectionTail(`; x = $sx; y = $sy; button = '${action.button}'; hit = $hitCtl`)}`
     }
+    case "move": return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}$sx = $r.Left + ${action.x}; $sy = $r.Top + ${action.y}
+if (${action.x} -ge ($r.Right - $r.Left) -or ${action.y} -ge ($r.Bottom - $r.Top)) { Out-Json @{ ok = $false; error = 'point is outside the window now'; width = ($r.Right - $r.Left); height = ($r.Bottom - $r.Top) }; exit 0 }
+[void][AbdoDesk]::SetCursorPos($sx, $sy); [AbdoDesk]::MoveAbs($sx, $sy); Start-Sleep -Milliseconds 60
+$p = New-Object AbdoDesk+POINT
+if (-not [AbdoDesk]::GetCursorPos([ref]$p)) { Out-Json @{ ok = $false; error = 'cursor position unreadable' }; exit 0 }
+if ($p.X -ne $sx -or $p.Y -ne $sy) { Out-Json @{ ok = $false; error = 'the cursor did not reach the point'; x = $p.X; y = $p.Y }; exit 0 }
+${injectionTail(`; x = $sx; y = $sy`)}`
     case "type": return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}$text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(action.text)}'))
-foreach ($ch in $text.ToCharArray()) { if ($ch -eq "\`n") { [AbdoDesk]::KeyDown(13); [AbdoDesk]::KeyUp(13) } elseif ($ch -ne "\`r") { [AbdoDesk]::Unicode($ch) }; Start-Sleep -Milliseconds 8 }
-${injectionTail("; chars = $text.Length")}`
+$edit = [AbdoDesk]::FocusedEdit($want)
+if ($edit -ne [IntPtr]::Zero) { [void][AbdoDesk]::SendMessageText($edit, 0x00C2, [IntPtr]1, ($text -replace "(?<!\`r)\`n", "\`r\`n")); $typed = $text.Length; $how = 'edit-message' }
+else { $typed = [AbdoDesk]::TypeGuarded($want, $text); $how = 'keys' }
+$after = [AbdoDesk]::GetForegroundWindow()
+$blocked = [AbdoDesk]::Accepted() -lt [AbdoDesk]::Asked()
+$moved = ($how -eq 'keys') -and (([int64]$after) -ne ([int64]$want))
+Out-Json @{ ok = ((-not $blocked) -and (-not $moved) -and ($typed -eq $text.Length)); blocked = $blocked; moved = $moved; asked = [AbdoDesk]::Asked(); accepted = [AbdoDesk]::Accepted(); foreground = [AbdoDesk]::Title($after); chars = $text.Length; typed = $typed; how = $how }
+`
     case "key": {
       const parts = action.combo.split("+")
       const vks = parts.map(vkOf)
       const mods = vks.filter((v) => MODIFIERS.has(v)), keys = vks.filter((v) => !MODIFIERS.has(v))
-      return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}${mods.map((v) => `[AbdoDesk]::KeyDown(${v})`).join("; ")}${mods.length ? "; " : ""}${keys.map((v) => `[AbdoDesk]::KeyDown(${v}); [AbdoDesk]::KeyUp(${v})`).join("; ")}${mods.length ? "; " : ""}${[...mods].reverse().map((v) => `[AbdoDesk]::KeyUp(${v})`).join("; ")}
+      return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}try { ${mods.map((v) => `[AbdoDesk]::KeyDown(${v})`).join("; ")}${mods.length ? "; " : ""}${keys.map((v) => `[AbdoDesk]::KeyDown(${v}); [AbdoDesk]::KeyUp(${v})`).join("; ")} } finally { ${[...mods].reverse().map((v) => `[AbdoDesk]::KeyUp(${v})`).join("; ")}${mods.length ? "; " : ""}$null = 0 }
 ${injectionTail(`; combo = '${action.combo}'`)}`
     }
     case "scroll": {
       // ن6 — العجلةُ الأفقيّة (HWHEEL): موجبٌ يميناً، سالبٌ يساراً؛ العموديّةُ كما كانت.
       const wheel = action.direction === "up" ? "Wheel(120)" : action.direction === "down" ? "Wheel(-120)" : action.direction === "right" ? "HWheel(120)" : "HWheel(-120)"
-      return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}for ($i = 0; $i -lt ${action.count}; $i++) { [AbdoDesk]::${wheel}; Start-Sleep -Milliseconds 30 }
+      const at = action.at === undefined ? "" : `if (${action.at.x} -ge ($r.Right - $r.Left) -or ${action.at.y} -ge ($r.Bottom - $r.Top)) { Out-Json @{ ok = $false; error = 'point is outside the window now'; width = ($r.Right - $r.Left); height = ($r.Bottom - $r.Top) }; exit 0 }
+[void][AbdoDesk]::SetCursorPos($r.Left + ${action.at.x}, $r.Top + ${action.at.y}); [AbdoDesk]::MoveAbs($r.Left + ${action.at.x}, $r.Top + ${action.at.y}); Start-Sleep -Milliseconds 40
+`
+      return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}${at}for ($i = 0; $i -lt ${action.count}; $i++) { [AbdoDesk]::${wheel}; Start-Sleep -Milliseconds 30 }
 ${injectionTail(`; direction = '${action.direction}'; count = ${action.count}`)}`
     }
     // ن6 — السحب: ضغطٌ عند البداية، اثنتا عشرة حركةً على الخطّ، إفلاتٌ عند النهاية — والنقطتان داخل النافذة لحظةَ الحقن.
@@ -406,16 +540,25 @@ if (-not [AbdoDesk]::GetCursorPos([ref]$p)) { Out-Json @{ ok = $false; error = '
 if ($p.X -ne $sx -or $p.Y -ne $sy) { Out-Json @{ ok = $false; error = 'the cursor did not reach the start point'; x = $p.X; y = $p.Y }; exit 0 }
 [AbdoDesk]::MoveAbs($sx, $sy); Start-Sleep -Milliseconds 30
 [AbdoDesk]::MouseButton(0x0002); Start-Sleep -Milliseconds 60
+try {
 for ($i = 1; $i -le 12; $i++) { [AbdoDesk]::MoveAbs([int]($sx + ($ex - $sx) * $i / 12), [int]($sy + ($ey - $sy) * $i / 12)); Start-Sleep -Milliseconds 25 }
 [AbdoDesk]::MoveAbs($ex, $ey); Start-Sleep -Milliseconds 30
-[AbdoDesk]::MouseButton(0x0004); Start-Sleep -Milliseconds 40
+} finally { [AbdoDesk]::MouseButton(0x0004) }
+Start-Sleep -Milliseconds 40
 ${injectionTail(`; x1 = $sx; y1 = $sy; x2 = $ex; y2 = $ey`)}`
     // م6ب — UI Automation: الطريقُ الحتميّ على واجهةٍ لم يرها النموذج — الأسماءُ والأنماطُ من النظام لا من الصورة، فلا DPI ولا لغةَ نافذةٍ تُزيحه.
     case "ui": return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}${UIA_PRELUDE}
 Walk-Ui $rootEl 1 ${action.depth} ${UI_ELEMENT_CAP}
+# 10-12 (مقيس على Antigravity IDE): تطبيقُ Electron/Chromium لا يبني شجرتَه إلا بعد أوّل سؤال — القراءةُ الأولى 13 عنصراً بلا مربّع الدردشة،
+# والثانيةُ 212 فيها «Message input» و«Send message». نافذةُ Chromium بشجرةٍ ضئيلة تُقرأ مرّةً ثانية بعد أن تستيقظ.
+$rootClass = New-Object Text.StringBuilder 256; [void][AbdoDesk]::GetClassName($want, $rootClass, 256)
+# 10-12 (مقيس: النموذجُ ينادي «desk ui» بالعمق الافتراضيّ 8، ومربّعُ دردشة Electron أعمقُ منه — 14 عنصراً حتى بعد الإيقاظ). نافذةُ Chromium تُقرأ ثانيةً بالعمق الكامل،
+# ويُعاد العمقُ المستعمل فتطابقه مراجعُ set/press.
+$woke = $false; $depthUsed = ${action.depth}
+if ($items.Count -lt 40 -and $rootClass.ToString() -like 'Chrome_WidgetWin*') { [void][AbdoDesk]::WakeChromium($want); Start-Sleep -Milliseconds 1800; $depthUsed = ${UI_MAX_DEPTH}; $items.Clear(); Walk-Ui $rootEl 1 $depthUsed ${UI_ELEMENT_CAP}; $woke = $true }
 $out = New-Object System.Collections.Generic.List[object]
 for ($i = 0; $i -lt $items.Count; $i++) { $out.Add((Describe-Ui $items[$i] ($i + 1) $r)) }
-Out-Json @{ ok = $true; count = $items.Count; capped = ($items.Count -ge ${UI_ELEMENT_CAP}); elements = @($out.ToArray()); width = ($r.Right - $r.Left); height = ($r.Bottom - $r.Top) }
+Out-Json @{ ok = $true; count = $items.Count; capped = ($items.Count -ge ${UI_ELEMENT_CAP}); woke = $woke; depth = $depthUsed; elements = @($out.ToArray()); width = ($r.Right - $r.Left); height = ($r.Bottom - $r.Top) }
 `
     case "set": return `${WIN32_PRELUDE}${foregroundGuard(bound!.hwnd, selfPids)}${UIA_PRELUDE}${locateUi(action.ref, ui!)}
 $text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(action.text)}'))
@@ -425,14 +568,15 @@ else { try { $el.SetFocus() } catch { }; Start-Sleep -Milliseconds 80
   # الاستبدالُ لا الإلحاق: عنصرٌ بمقبضٍ أصليّ (Win32/WinForms) يُحدَّد كلُّه بـEM_SETSEL (Ctrl+A لا يعمل في TextBox متعدّد الأسطر — مقيس)، وغيرُه (WPF/Chromium) بـCtrl+A.
   $nh = [int64]$cur.NativeWindowHandle
   # الاستبدالُ مضمون: EM_SETSEL(0,-1) لأيّ مقبضٍ أصليّ؛ وإلا Ctrl+A ثمّ End+Shift+Home ثمّ Delete (Ctrl+A وحده لا يحدّد في TextBox قديم).
-  if ($nh -ne 0) { [void][AbdoDesk]::SendMessage([IntPtr]$nh, 0x00B1, [IntPtr]::Zero, (New-Object IntPtr (-1))) }
+  # 10-11 — المقبضُ الأصليّ يُستبدل نصُّه برسالة WM_SETTEXT (استبدالٌ تامّ لا تمسّه المقدّمة)؛ وغيرُه يُحدَّد ويُكتب بمفاتيح تتوقّف إن تحرّكت المقدّمة.
+  if ($nh -ne 0) { [void][AbdoDesk]::SendMessageText([IntPtr]$nh, 0x000C, [IntPtr]::Zero, ($text -replace "(?<!\`r)\`n", "\`r\`n")); $how = 'native-settext' }
   else {
     [AbdoDesk]::KeyDown(17); [AbdoDesk]::KeyDown(65); [AbdoDesk]::KeyUp(65); [AbdoDesk]::KeyUp(17); Start-Sleep -Milliseconds 30
     [AbdoDesk]::KeyDown(35); [AbdoDesk]::KeyUp(35); Start-Sleep -Milliseconds 20
     [AbdoDesk]::KeyDown(16); [AbdoDesk]::KeyDown(36); [AbdoDesk]::KeyUp(36); [AbdoDesk]::KeyUp(16); Start-Sleep -Milliseconds 20
     [AbdoDesk]::KeyDown(46); [AbdoDesk]::KeyUp(46)
-  }
-  Start-Sleep -Milliseconds 40; foreach ($ch in $text.ToCharArray()) { if ($ch -eq "\`n") { [AbdoDesk]::KeyDown(13); [AbdoDesk]::KeyUp(13) } elseif ($ch -ne "\`r") { [AbdoDesk]::Unicode($ch) }; Start-Sleep -Milliseconds 8 }; $how = 'typed' }
+    Start-Sleep -Milliseconds 40; [void][AbdoDesk]::TypeGuarded($want, $text); $how = 'typed'
+  } }
 Start-Sleep -Milliseconds 150
 $readback = $null; $vp2 = $null
 if (-not $cur.IsPassword) { if ($el.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp2)) { $readback = [string]$vp2.Current.Value } elseif ($nowType -eq 'Edit') { $readback = [string]$el.Current.Name } }
@@ -465,17 +609,20 @@ const UIA_PRELUDE = `Add-Type -AssemblyName UIAutomationClient; Add-Type -Assemb
 $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
 $rootEl = [System.Windows.Automation.AutomationElement]::FromHandle($want)
 $items = New-Object System.Collections.Generic.List[object]
+# 10-12 (مقيس على Antigravity IDE — Electron): القراءةُ الثانية بعد أن فعّل Chromium شجرتَه سقطت كلُّها «You cannot call a method on a null-valued
+# expression» — عناصرُ تُبنى وتزول أثناء المشي وأخرى بلا نوع. عنصرٌ يتعذّر يُترك مكانُه (المراجعُ فهرسٌ ثابت) ولا يُسقط القراءة.
 function Walk-Ui($el, $depth, $maxDepth, $cap) {
-  $c = $walker.GetFirstChild($el)
+  $c = $null; try { $c = $walker.GetFirstChild($el) } catch { return }
   while ($null -ne $c -and $items.Count -lt $cap) {
     $items.Add($c)
     if ($depth -lt $maxDepth) { Walk-Ui $c ($depth + 1) $maxDepth $cap }
-    $c = $walker.GetNextSibling($c)
+    try { $c = $walker.GetNextSibling($c) } catch { $c = $null }
   }
 }
 # نوعُ العنصر: UIA2 المُدار يرى عناصرَ WinForms/Win32 القديمة «Pane» بلا أنماط (مقيس: زرٌّ ومربّعُ نصّ صارا Pane) — صنفُ النافذة الأصليّ يسمّيها.
 function Ui-Type($cur) {
-  $t = $cur.ControlType.ProgrammaticName.Replace('ControlType.', '')
+  $ct = $cur.ControlType
+  $t = if ($null -eq $ct -or $null -eq $ct.ProgrammaticName) { 'Custom' } else { ([string]$ct.ProgrammaticName).Replace('ControlType.', '') }
   if ($t -ne 'Pane' -and $t -ne 'Custom' -and $t -ne 'Window') { return $t }
   $cn = ([string]$cur.ClassName).ToUpperInvariant()
   if ($cn -match 'EDIT|RICHEDIT|TEXTBOX') { return 'Edit' }
@@ -490,9 +637,12 @@ function Ui-Type($cur) {
   return $t
 }
 function Describe-Ui($el, $i, $wr) {
+  try { return (Describe-UiCore $el $i $wr) } catch { return @{ ref = $i; type = 'Unavailable'; name = ''; id = ''; x = -1; y = -1; w = 0; h = 0; patterns = @(); value = $null; enabled = $false; password = $false } }
+}
+function Describe-UiCore($el, $i, $wr) {
   $cur = $el.Current
   $b = $cur.BoundingRectangle
-  $pats = @(); foreach ($p in $el.GetSupportedPatterns()) { $pats += $p.ProgrammaticName.Replace('PatternIdentifiers.Pattern', '') }
+  $pats = @(); foreach ($p in @($el.GetSupportedPatterns())) { if ($null -ne $p -and $null -ne $p.ProgrammaticName) { $pats += ([string]$p.ProgrammaticName).Replace('PatternIdentifiers.Pattern', '') } }
   $type = Ui-Type $cur
   $val = $null
   if (-not $cur.IsPassword) {
@@ -520,7 +670,13 @@ $el = $items[$idx]; $cur = $el.Current
 $expType = '${expType.replace(/'/g, "''")}'; $expName = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(expName)}'))
 $nowType = Ui-Type $cur
 $nameOk = ($nowType -eq 'Edit') -or ([string]$cur.Name -eq $expName)
-if ($nowType -ne $expType -or -not $nameOk) { Out-Json @{ ok = $false; error = 'the UI changed since desk ui - run desk ui again'; nowType = $nowType; nowName = [string]$cur.Name }; exit 0 }
+# 10-12 (مقيس على Antigravity: بعد الكتابة انزاحت الشجرةُ عنصرين فرُفض «desk press u205» وأعاد النموذجُ القراءة). العنصرُ الذي تحرّك يُعرف
+# بنوعه واسمه: إن طابقهما عنصرٌ واحدٌ وحده في الشجرة الآن استُعمل؛ وإلّا رفضٌ كما كان.
+if ($nowType -ne $expType -or -not $nameOk) {
+  $alt = @(); if ($expName.Length -gt 0) { for ($j = 0; $j -lt $items.Count; $j++) { try { $c2 = $items[$j].Current; if ((Ui-Type $c2) -eq $expType -and [string]$c2.Name -eq $expName) { $alt += $j } } catch { } } }
+  if ($alt.Count -eq 1) { $el = $items[$alt[0]]; $cur = $el.Current; $nowType = Ui-Type $cur }
+  else { Out-Json @{ ok = $false; error = 'the UI changed since desk ui - run desk ui again'; nowType = $nowType; nowName = [string]$cur.Name }; exit 0 }
+}
 `
 }
 
@@ -564,7 +720,7 @@ const lastJson = (stdout: string): Record<string, unknown> | undefined => {
 
 /** S8 — قياسُ نافذةٍ كما يعيده مسبارُ الإطار: المستطيلُ والتكبيرُ والشاشةُ والعمليّة. */
 export interface WindowMeasure { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number; readonly maximized: boolean; readonly monitor: string; readonly process: string }
-export interface DesktopResult { readonly text: string; readonly shot?: { readonly path: string; readonly scope: "window" | "screen" }; readonly windows?: readonly WindowInfo[]; readonly bound?: DesktopBound; readonly elements?: readonly UiElement[]; readonly ok: boolean; readonly frame?: ViewportFrame; readonly measure?: WindowMeasure }
+export interface DesktopResult { readonly text: string; readonly shot?: { readonly path: string; readonly scope: "window" | "screen" }; readonly windows?: readonly WindowInfo[]; readonly bound?: DesktopBound; readonly elements?: readonly UiElement[]; readonly uiDepth?: number; readonly ok: boolean; readonly frame?: ViewportFrame; readonly measure?: WindowMeasure }
 
 /** إطارُ المنفذ من حقول المسبار (لقطة/تركيز/فتح/قياس): غيابُ الحقول ⇦ إطارُ النافذة كلِّها بمقياس 1 لا خطأ. */
 const frameOf = (json: Record<string, unknown>): ViewportFrame => {
@@ -647,6 +803,38 @@ export const defaultSelfPids = (): readonly number[] => [process.pid, process.pp
 
 export const NEEDS_UI ="لا شجرةَ واجهةٍ بعد: شغّل «desk ui» أوّلاً ثمّ استعمل مراجعَه (u1، u2…) في set/press."
 
+/** أفعالٌ تضغط ثمّ تُفلت — انقطاعُها وسطَها يترك ضغطاً. */
+export const HOLDING_KINDS: ReadonlySet<DesktopAction["kind"]> = new Set(["key", "drag", "click", "type"] as const)
+export const RELEASE_HELD_SCRIPT = `${WIN32_PRELUDE}$released = [AbdoDesk]::ReleaseHeld()
+Out-Json @{ ok = $true; released = $released }
+`
+/** يحرّر ما بقي مضغوطاً (Ctrl/Alt/Shift/Win وأزرار الفأرة) ويعيد جملةً تقوله، أو "" إن لم يبقَ شيء. */
+/** «Button|Probe button» ⇦ « على [Button «Probe button»]» — ما أصابته النقرةُ بلا لقطة (النوافذُ الأصليّة لكلّ عنصرٍ مقبضه؛ وغيرُها اسمُ صنفها). */
+export const hitLabel = (hit: unknown): string => {
+  if (typeof hit !== "string" || hit.length === 0) return ""
+  const [cls = "", text = ""] = hit.split("|")
+  const kind = /button/iu.test(cls) ? "Button" : /edit/iu.test(cls) ? "Edit" : /combo/iu.test(cls) ? "ComboBox" : /list/iu.test(cls) ? "List" : cls.slice(0, 40)
+  return ` — أصابت [${kind}${text.trim().length > 0 ? ` «${text.trim().slice(0, 60)}»` : ""}]`
+}
+
+/** مداخلُ الكتابة الظاهرة (Edit/ComboBox بموضعٍ على الشاشة) وأزرارُ الإرسال — سطران في رأس إيصال desk ui، أو "" إن لم يوجد شيء. */
+export const uiTargets = (elements: readonly UiElement[]): string => {
+  // مربّعُ الدردشة أوّلاً (message/ask/prompt/chat)، ومحرّرُ الشيفرة والطرفيّةُ يُوسمان — كي لا يُكتب الطلبُ في ملفٍّ أو يُنفَّذ أمراً.
+  const chatLike = (e: UiElement): number => /message|ask anything|prompt|chat|رسالة|اسأل|اكتب/iu.test(e.name) ? 0 : /editor|terminal|محرّر|طرفيّة/iu.test(e.name) ? 2 : 1
+  const inputs = elements.filter((e) => (e.type === "Edit" || e.type === "ComboBox") && e.x >= 0 && e.w > 0 && e.enabled).sort((a, b) => chatLike(a) - chatLike(b)).slice(0, 6)
+  const sends = elements.filter((e) => e.type === "Button" && e.x >= 0 && /\b(?:send|submit|ok|run)\b|إرسال|أرسل|ارسل|تنفيذ/iu.test(e.name)).slice(0, 4)
+  if (inputs.length + sends.length === 0) return ""
+  return `${inputs.length > 0 ? `\nللكتابة: ${inputs.map((e) => `${renderUiElement(e)}${chatLike(e) === 2 ? " (محرّرُ شيفرةٍ/طرفيّة — ليس مربّعَ دردشة)" : ""}`).join(" · ")}` : ""}${sends.length > 0 ? `\nللإرسال: ${sends.map(renderUiElement).join(" · ")}` : ""}`
+}
+
+export async function releaseHeldInput(runner: DesktopRunner): Promise<string> {
+  try {
+    const r = await runner.run(RELEASE_HELD_SCRIPT, 15_000)
+    const held = lastJson(r.stdout)?.released
+    return typeof held === "string" && held.length > 0 ? ` حُرِّر ما بقي مضغوطاً بعد الانقطاع: ${held}.` : ""
+  } catch { return "" }
+}
+
 export async function runDesktop(action: DesktopAction, options: { shotsDir: string; runner?: DesktopRunner; bound?: DesktopBound; ui?: UiContext; selfPids?: readonly number[]; knownHwnds?: readonly number[]; timeoutMs?: number; keepShots?: number; script?: typeof desktopScript }): Promise<DesktopResult> {
   const runner = options.runner ?? powershellRunner
   // ب2 — مولّدُ السكربت هو ما يفرّق القناتين؛ الحرّاسُ قبله والمفسِّرُ بعده مشتركان بايتاً (لا نسخةَ ثانية للحكم).
@@ -670,8 +858,10 @@ export async function runDesktop(action: DesktopAction, options: { shotsDir: str
   }
   const out = await runner.run(script(action, shotPath, bound, options.ui, options.selfPids ?? defaultSelfPids()), options.timeoutMs ?? timeoutFor(action))
   const json = lastJson(out.stdout)
+  // 10-11 (من برنامج «Desktop Remote Control»: releaseAll) — حقنٌ انقطع أو فشل وسطَه قد يترك مفتاحاً أو زرّاً مضغوطاً: يُحرَّر ويُقال.
+  const released = HOLDING_KINDS.has(action.kind) && (out.timedOut === true || json?.ok !== true) ? await releaseHeldInput(runner) : ""
   // انقطاعٌ بالمهلة وسط حقنٍ ليس فشلاً نظيفاً: بعضُ الإدخال قد يكون وصل، فيُقال ذلك بدل «فشل» يغري بإعادةٍ تُكرّره.
-  if (out.timedOut === true && INPUT_KINDS.has(action.kind)) return { ok: false, text: `انقطع ${action.kind} بعد المهلة: **قد يكون جزءٌ من الإدخال وصل** نافذة «${bound!.title.slice(0, 60)}» — تحقّق من حالتها قبل الإعادة (لا تُعِد الأمر كما هو).` }
+  if (out.timedOut === true && INPUT_KINDS.has(action.kind)) return { ok: false, text: `انقطع ${action.kind} بعد المهلة: **قد يكون جزءٌ من الإدخال وصل** نافذة «${bound!.title.slice(0, 60)}» — تحقّق من حالتها قبل الإعادة (لا تُعِد الأمر كما هو).${released}` }
   if (json === undefined || json.ok !== true) {
     const reason = typeof json?.error === "string" && json.error.length > 0 ? json.error : (out.stderr.trim().split("\n")[0] ?? "").trim() || `exit ${out.code}`
     const foreground = typeof json?.foreground === "string" && json.foreground.length > 0 ? ` (المقدّمةُ الآن: «${json.foreground.slice(0, 60)}»)` : ""
@@ -682,14 +872,20 @@ export async function runDesktop(action: DesktopAction, options: { shotsDir: str
       const seen = (json.windows as Array<{ title?: unknown; pid?: unknown }>).map((w) => `«${String(w.title ?? "").slice(0, 60)}» pid ${Number(w.pid)}`).join("، ")
       return { ok: false, text: `لا نافذةَ يطابق عنوانُها «${action.title.slice(0, 60)}». النوافذُ الظاهرة الآن (${json.count}): ${seen} — اختر جزءاً من عنوانٍ منها أو «desk focus pid:<رقم>».` }
     }
+    // 10-11 — الكتابةُ المحروسة تتوقّف لحظةَ تحرّك المقدّمة: يُقال كم حرفاً وصل ولم يُكتب شيءٌ في النافذة الأخرى.
+    if (action.kind === "type" && typeof json?.typed === "number" && typeof json?.chars === "number" && json.typed < json.chars) return { ok: false, text: `كُتب ${json.typed} من ${json.chars} حرفاً ثمّ توقّفت الكتابةُ لأنّ المقدّمةَ تحرّكت${foreground} — لم يُكتب شيءٌ في النافذة الأخرى. أعد التركيز واكتب الباقي: «${action.text.slice(Number(json.typed)).slice(0, 60)}».${released}` }
+    if (json?.error === "covered") return { ok: false, text: `رُفضت النقرة (${action.kind === "click" ? `${action.x},${action.y}` : ""}): تغطّيها نافذةُ تطبيقٍ آخر «${String(json.cover ?? "").slice(0, 60)}» — كانت ستقع هناك لا في «${bound!.title.slice(0, 60)}». أزِح النافذةَ أو ركّز من جديد ثمّ أعد.` }
     if (json?.moved === true) return { ok: false, text: `تحرّكت المقدّمةُ أثناء ${action.kind}: قد يكون جزءٌ من الإدخال وصل النافذةَ المربوطة${foreground} — أعد التركيز وتحقّق قبل الإعادة.` }
-    return { ok: false, text: `فشل ${action.kind}: ${reason.slice(0, 200)}${foreground}` }
+    return { ok: false, text: `فشل ${action.kind}: ${reason.slice(0, 200)}${foreground}${released}` }
   }
   switch (action.kind) {
     case "shot": {
       const scope = json.scope === "window" ? "window" : "screen"
       const where = scope === "window" ? `نافذة «${String(json.title ?? bound?.title ?? "").slice(0, 60)}»` : "كامل الشاشة"
-      const hint = scope === "window" ? "الإحداثيّاتُ من زاوية الصورة العليا اليسرى = زاويةُ النافذة." : "للنظر فقط: النقرُ والكتابةُ يحتاجان نافذةً مركَّزة (desk focus)."
+      const region = json.region as { x?: unknown; y?: unknown; w?: unknown; h?: unknown } | undefined
+      const hint = region !== undefined && region !== null
+        ? `مقطعٌ مكبَّرٌ من النافذة يبدأ عند (${Number(region.x)},${Number(region.y)}) بحجم ${Number(region.w)}×${Number(region.h)} وبدقّته الكاملة: أضف (${Number(region.x)},${Number(region.y)}) إلى إحداثيّات ما تراه فيه قبل desk click.`
+        : scope === "window" ? "الإحداثيّاتُ من زاوية الصورة العليا اليسرى = زاويةُ النافذة." : "للنظر فقط: النقرُ والكتابةُ يحتاجان نافذةً مركَّزة (desk focus)."
       // S7 — اللقطةُ تقول في أيّ وضعٍ وإطارٍ ومقياسٍ أُخذت، فيحسب النموذجُ النقرةَ بلا رؤيةٍ ثانية.
       const frame = scope === "window" ? frameOf(json) : undefined
       const mode = frame !== undefined ? frameLine(frame) : `الوضع: الشاشة كلُّها، الإطار ${json.width}×${json.height} @ (${json.left},${json.top}) — إحداثيّاتُ اللقطة شاشيّة: اطرح أصلَ النافذة قبل desk click`
@@ -726,10 +922,11 @@ export async function runDesktop(action: DesktopAction, options: { shotsDir: str
       const next: DesktopBound = { hwnd: Number(json.hwnd), title: String(json.title ?? ""), left: Number(json.left), top: Number(json.top), right: Number(json.right), bottom: Number(json.bottom) }
       return { ok: true, bound: next, measure: measureOf(json), frame: frameOf(json), text: `ركّزتُ نافذة «${next.title.slice(0, 80)}» (${next.right - next.left}×${next.bottom - next.top}) — الإدخالُ يذهب إليها وحدها، والإحداثيّاتُ من زاويتها العليا اليسرى.` }
     }
-    case "click": return { ok: true, text: `نقرتُ ${action.button} على (${action.x},${action.y}) داخل «${String(json.foreground ?? "").slice(0, 60)}».` }
-    case "type": return { ok: true, text: `كتبتُ ${json.chars} حرفاً في «${String(json.foreground ?? "").slice(0, 80)}».` }
+    case "click": return { ok: true, text: `نقرتُ ${action.button} على (${action.x},${action.y}) داخل «${String(json.foreground ?? "").slice(0, 60)}»${hitLabel(json.hit)}.` }
+    case "move": return { ok: true, text: `حرّكتُ المؤشّرَ إلى (${action.x},${action.y}) بلا نقر داخل «${String(json.foreground ?? "").slice(0, 60)}» — ما ينفتح بالمرور يظهر في desk shot أو desk ui.` }
+    case "type": return { ok: true, text: `كتبتُ ${json.chars} حرفاً في «${String(json.foreground ?? "").slice(0, 80)}»${json.how === "edit-message" ? " — برسالةٍ إلى الحقل المركَّز مباشرةً (لا تمسّها المقدّمة)" : ""}.` }
     case "key": return { ok: true, text: `ضغطتُ ${action.combo} في «${String(json.foreground ?? "").slice(0, 80)}».` }
-    case "scroll": return { ok: true, text: `مرّرتُ ${action.direction} ×${action.count} في «${String(json.foreground ?? "").slice(0, 60)}».` }
+    case "scroll": return { ok: true, text: `مرّرتُ ${action.direction} ×${action.count}${action.at === undefined ? "" : ` عند (${action.at.x},${action.at.y})`} في «${String(json.foreground ?? "").slice(0, 60)}».` }
     case "drag": return { ok: true, text: `سحبتُ من (${action.x1},${action.y1}) إلى (${action.x2},${action.y2}) داخل «${String(json.foreground ?? "").slice(0, 60)}» — تحقّق بـdesk ui أو desk shot.` }
     case "ui": {
       const raw = (Array.isArray(json.elements) ? json.elements : []) as Array<Record<string, unknown>>
@@ -738,11 +935,16 @@ export async function runDesktop(action: DesktopAction, options: { shotsDir: str
         patterns: (Array.isArray(e.patterns) ? e.patterns : []).map(String), ...(typeof e.value === "string" ? { value: e.value } : {}), enabled: e.enabled !== false, password: e.password === true,
       }))
       const shown = elements.filter(uiElementWorthShowing)
-      const head = `شجرةُ واجهة «${bound!.title.slice(0, 60)}» (${json.width}×${json.height}): ${elements.length} عنصراً${json.capped === true ? " (بلغ السقف — زد التركيزَ على جزءٍ أو قلّل العمق)" : ""}، منها ${shown.length} ذاتُ معنى. المرجعُ يُستعمل في «desk set uN نصّ» و«desk press uN»؛ الإحداثيّاتُ من زاوية النافذة كاللقطة.`
-      return { ok: true, elements, text: elements.length === 0 ? `${head}\nلا عناصرَ يعلنها التطبيق (واجهةٌ مرسومة كـcanvas؟) — استعمل desk shot ونموذجَ الرؤية ثمّ desk click.` : `${head}\n${shown.map(renderUiElement).join("\n")}` }
+      const uiDepth = Number.isInteger(Number(json.depth)) && Number(json.depth) > 0 ? Number(json.depth) : undefined
+      const wokeNote = json.woke === true ? " (نافذةُ Chromium/Electron: أُوقظت شجرتُها وقُرئت بالعمق الكامل)" : ""
+      const head = `شجرةُ واجهة «${bound!.title.slice(0, 60)}» (${json.width}×${json.height}): ${elements.length} عنصراً${json.capped === true ? " (بلغ السقف — زد التركيزَ على جزءٍ أو قلّل العمق)" : ""}، منها ${shown.length} ذاتُ معنى${wokeNote}. المرجعُ يُستعمل في «desk set uN نصّ» و«desk press uN»؛ الإحداثيّاتُ من زاوية النافذة كاللقطة.`
+      // 10-12 (مقيس على Antigravity: 219 عنصراً، و«Message input» قرب آخرها فلم يصل النموذج — ضغط «Toggle Agent» فأغلق اللوحة). مداخلُ الكتابة
+      // الظاهرة وأزرارُ الإرسال تُقال أوّلاً، قبل الشجرة كلّها.
+      const targets = uiTargets(elements)
+      return { ok: true, elements, ...(uiDepth === undefined ? {} : { uiDepth }), text: elements.length === 0 ? `${head}\nلا عناصرَ يعلنها التطبيق (واجهةٌ مرسومة كـcanvas؟) — استعمل desk shot ونموذجَ الرؤية ثمّ desk click.` : `${head}${targets}\n${shown.map(renderUiElement).join("\n")}` }
     }
     case "set": {
-      const how = json.how === "value-pattern" ? "بنمط القيمة" : "بالكتابة"
+      const how = json.how === "value-pattern" ? "بنمط القيمة" : json.how === "native-settext" ? "برسالة WM_SETTEXT إلى الحقل" : "بالكتابة"
       const where = `«${String(json.name ?? "").slice(0, 60)}» [${String(json.type ?? "")}]`
       if (json.password === true) return { ok: true, text: `ضبطتُ ${where} ${how} — حقلُ كلمة مرور، لا قراءةَ راجعة.` }
       if (json.verified === true) return { ok: true, text: `ضبطتُ ${where} ${how} — والقراءةُ الراجعة مطابقة.` }

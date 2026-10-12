@@ -211,7 +211,7 @@ interface Sink {
 const approvalContribution = (env: Shell, sink: Sink, clicks: string[]): SlotContribution =>
   ApprovalMount.seat({
     document: env.document,
-    act: (choice) => clicks.push(choice),
+    act: (choice, scope) => clicks.push(scope === undefined ? choice : `${choice}:${scope}`),
     reveal: () => clicks.push("reveal"),
     composer: env.composer,
     attach: (node) => {
@@ -272,9 +272,15 @@ describe("slot host — teardown measured, not asserted", () => {
 
     expect(env.host.register(approvalContribution(env, sink, clicks))).toBeUndefined()
     const mounted = { nodes: countNodes(env.root), listeners: countListeners(env.root) }
-    expect(mounted.nodes - before.nodes).toBe(9) // الغلاف + المقعد + 3 + 4
-    expect(mounted.listeners).toBe(3) // ✓ · ✕ · المعاينة
-    expect(env.host.liveListeners()).toBe(3)
+    expect(mounted.nodes - before.nodes).toBe(10) // الغلاف + المقعد + 3 + 5
+    expect(mounted.listeners).toBe(4) // ✓ · «لهذه الأداة في الجلسة» · ✕ · المعاينة
+    expect(env.host.liveListeners()).toBe(4)
+    // 10-09 — زرُّ الجلسة مخفيٌّ حتى يعلن المحرّكُ نطاقَ «tool»، ونقرتُه موافقةٌ بنطاق الأداة (منحٌ قائم) لا موافقةٌ عاديّة.
+    const find = (node: FakeNode, cls: string): FakeNode | undefined => node.className === cls ? node : node.children.map((c) => find(c, cls)).find((x) => x !== undefined)
+    const session = find(sink.node as unknown as FakeNode, "apv-session")!
+    expect(session.hidden).toBe(true)
+    for (const l of session.listeners) (l.handler as () => void)()
+    expect(clicks).toEqual(["approve:tool"])
     expect(sink.node!.id).toBe("approvalseat")
     expect(serialize(env.anchors["composer.bar"]!)).toContain("#approvalseat")
     // الاستيلاء يضع صنفاً على المؤلِّف — عقدةٌ خارج الغلاف، ودليلُ الفكّ الحقيقي.

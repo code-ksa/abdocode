@@ -6,7 +6,7 @@
  * الحاليّ — فلو رُدّ الكود القديم سقط هذا الاختبار.
  */
 import { describe, expect, test } from "bun:test"
-import { EDIT_ALL_FLAG, applyEdit, countOccurrences, parseEditCommand, resolveAmbiguousEdit } from "../src/edit-match"
+import { EDIT_ALL_FLAG, EDIT_USAGE, applyEdit, countOccurrences, heredocEditHint, isUsagePlaceholder, parseEditCommand, resolveAmbiguousEdit } from "../src/edit-match"
 import { writeTargetOf } from "../src/turn-memory"
 
 const FILE = ["const a = value", "const b = value", "const c = value"].join("\n")
@@ -137,4 +137,26 @@ test("09-29: the «=>» ambiguity is resolved against the file when exactly one 
   expect(resolveAmbiguousEdit(cmd, "nothing here")).toBeUndefined()
   // الأطولُ يحسم: «a => b» يظهر مرّةً وهو أطول من «a» — الفاصلُ هو السهم الثاني
   expect(resolveAmbiguousEdit("f.ts :: a => b => c", "a => b => c\n")).toEqual({ target: "f.ts", oldText: "a => b", newText: "c", all: false })
+})
+
+describe("10-08: the catalogue example copied verbatim and a whole file without «=>» are named, not answered with the bare usage line", () => {
+  test("the placeholder is recognised with or without shadda; real text is not", () => {
+    expect(isUsagePlaceholder("القديم الأوّل")).toBe(true)
+    expect(isUsagePlaceholder("الجديد الأول")).toBe(true)
+    expect(isUsagePlaceholder("القديم الثاني")).toBe(true)
+    expect(isUsagePlaceholder("const old = 1")).toBe(false)
+  })
+  test("edit with <<< (the measured command) names the tool, the copied example and the write route", () => {
+    const why = parseEditCommand("src/app/layout.tsx <<<\nالقديم الأول\n=>\nالجديد الأول\n@@\nimport x from \"y\"\nexport default 1")
+    expect(typeof why).toBe("string")
+    expect(why).toContain("edit لا يقبل «<<<»")
+    expect(why).toContain("الحزمة 1 نصُّ المثال من الكتالوج حرفياً")
+    expect(why).toContain("الحزمة 2 بلا سطر «=>» (2 سطراً")
+    expect(why).toContain("write src/app/layout.tsx <<<")
+  })
+  test("the twins: a real medit body has no hint, and edit without <<< keeps the usage line", () => {
+    expect(heredocEditHint("medit", " notes.md <<<\nline one\n=>\nLINE ONE\n@@\nline three\n=>\nLINE THREE")).toBeUndefined()
+    expect(parseEditCommand("notes.md line one")).toBe(EDIT_USAGE)
+    expect(parseEditCommand("notes.md :: a => b")).toMatchObject({ target: "notes.md", oldText: "a", newText: "b" })
+  })
 })

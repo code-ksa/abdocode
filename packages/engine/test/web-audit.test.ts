@@ -77,6 +77,40 @@ describe("web audit — site level", () => {
     expect(failing.text).toContain("broken-links")
   })
 
+  // 10-09 — measured: the account button is 32px wide with 63px of content, so its avatar paints over the help icon; text-overlap never saw it
+  // (neither icon has its own text). Live on that page the new check flagged exactly that button out of 38 controls, and the cut brand name.
+  test("a control whose content spills over its neighbour is an error; an ellipsis-cut header text is a warning", () => {
+    expect(checks({ controlSpills: ["button.icon-button 63x31>31x31"] })).toEqual(["error:control-spill"])
+    expect(checks({ truncatedTexts: ["span.min-w-0 «Saudi AI API MARKETPLACE» 193>166"] })).toEqual(["warn:text-truncated"])
+    expect(checks({ controlSpills: [], truncatedTexts: [] })).toEqual([])
+    expect(MEASURE_SCRIPT).toContain("controlSpills, truncatedTexts")
+    // cli must carry both fields into analyzePage — a check whose fields were dropped in cli once passed green.
+    const cli = readFileSync(join(import.meta.dir, "..", "src", "cli.ts"), "utf8")
+    expect(cli).toContain("controlSpills: list(m.controlSpills)")
+    expect(cli).toContain("truncatedTexts: list(m.truncatedTexts)")
+  })
+
+  // The in-page predicate itself, not just its name: the real MEASURE_SCRIPT runs against a minimal fake DOM (globals passed as parameters).
+  test("in the page: the 32px button with 63px of content and the ellipsis-cut brand are reported; a fitting button and a clipped one are not", () => {
+    type Fake = Record<string, unknown> & { cs?: Record<string, string> }
+    const rect = { left: 0, right: 100, top: 0, bottom: 30, width: 100, height: 30 }
+    const el = (o: Fake): Fake => ({ tagName: "BUTTON", id: "", className: "", childNodes: [], innerText: "", textContent: "", parentElement: null,
+      getBoundingClientRect: () => rect, getAttribute: () => null, querySelectorAll: () => [], closest: () => null, contains: () => false, ...o })
+    const text = (t: string) => ({ nodeType: 3, textContent: t })
+    const spill = el({ className: "icon-button flex", clientWidth: 31, clientHeight: 31, scrollWidth: 63, scrollHeight: 31 })
+    const fits = el({ className: "ok", clientWidth: 80, clientHeight: 31, scrollWidth: 80, scrollHeight: 31 })
+    const clipped = el({ className: "clip", clientWidth: 31, clientHeight: 31, scrollWidth: 90, scrollHeight: 31, cs: { overflowX: "hidden", overflowY: "hidden" } })
+    const brand = el({ tagName: "SPAN", className: "min-w-0 truncate", childNodes: [text("Saudi AI API MARKETPLACE")], textContent: "Saudi AI API MARKETPLACE", clientWidth: 166, scrollWidth: 193, cs: { textOverflow: "ellipsis" } })
+    const title = el({ tagName: "SPAN", className: "t", childNodes: [text("Models")], textContent: "Models", clientWidth: 60, scrollWidth: 60, cs: { textOverflow: "ellipsis" } })
+    const de = { style: { fontSize: "" }, offsetWidth: 1920, scrollWidth: 1920, clientWidth: 1920, getBoundingClientRect: () => ({ ...rect, right: 1920, width: 1920 }), getAttribute: (a: string) => (a === "dir" ? "rtl" : "ar") }
+    const document = { documentElement: de, body: { innerText: "" }, styleSheets: [], getElementById: () => null, querySelector: () => null,
+      querySelectorAll: (sel: string) => (sel.startsWith("button, a, [role=button], [role=tab]") ? [spill, fits, clipped] : sel.startsWith("header *") ? [brand, title] : []) }
+    const getComputedStyle = (e: Fake) => ({ display: "block", visibility: "visible", opacity: "1", position: "static", overflowX: "visible", overflowY: "visible", textOverflow: "clip", color: "rgb(0, 0, 0)", direction: "rtl", ...(e.cs ?? {}) })
+    const out = JSON.parse(new Function("document", "getComputedStyle", "CSS", `return ${MEASURE_SCRIPT}`)(document, getComputedStyle, { escape: (x: string) => x }))
+    expect(out.controlSpills).toEqual(["button.icon-button 63x31>31x31"])
+    expect(out.truncatedTexts).toEqual(["span.min-w-0 «Saudi AI API MARKETPLACE» 193>166"])
+  })
+
   test("the in-page script is plain JavaScript that returns JSON with every measured field", () => {
     expect(() => new Function(`return ${MEASURE_SCRIPT}`)).not.toThrow()
     for (const field of ["overflow", "lang", "dir", "inlineDvh", "links", "textLength", "h1Count", "imgNoAlt", "unnamedControls", "unlabeledFields", "overlaps"]) expect(MEASURE_SCRIPT).toContain(field)

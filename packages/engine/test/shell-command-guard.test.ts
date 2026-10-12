@@ -10,12 +10,19 @@ describe("kill-by-name guard — catalog 1.3", () => {
     expect(killByNameViolation("Stop-Process -Name node -Force")).toBeDefined()
     expect(killByNameViolation("taskkill /IM node.exe /F")).toBeDefined()
     expect(killByNameViolation("pkill node")).toBeDefined()
+    // 10-09 — نفّذه عبدو كود فعلاً في مقارنة m11 (فلترٌ بين الأنبوبين تخطّى النمط القديم)، وأقاربُه:
+    expect(killByNameViolation('Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*node*" } | Stop-Process -Force')).toBeDefined()
+    expect(killByNameViolation("Get-Process node | ForEach-Object { $_.Kill() }")).toBeDefined()
+    expect(killByNameViolation("gps node | spps")).toBeDefined()
+    expect(killByNameViolation("Get-Process -Name node | Where-Object CPU -gt 10 | kill")).toBeDefined()
   })
 
   test("allows measured single-pid stops and unrelated commands", () => {
     expect(killByNameViolation("Stop-Process -Id 1234 -Force")).toBeUndefined()
     expect(killByNameViolation("taskkill /PID 1234 /T /F")).toBeUndefined()
     expect(killByNameViolation("Get-Process -Name node")).toBeUndefined()
+    expect(killByNameViolation("Get-Process node | Select-Object Id, Path, StartTime")).toBeUndefined()
+    expect(killByNameViolation("Get-Process node; Stop-Process -Id 1234")).toBeUndefined()
     expect(killByNameViolation("npm run build")).toBeUndefined()
   })
 })

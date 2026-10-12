@@ -83,6 +83,11 @@ const systemRoots = (env: ProtectedEnv): readonly { readonly path: string; reado
   push(env.ProgramFiles, "program-files", "مُثبَّتاتُ الجهاز لكلّ المستخدمين")
   push(env["ProgramFiles(x86)"], "program-files", "مُثبَّتاتُ الجهاز لكلّ المستخدمين")
   push(env.ProgramData, "program-data", "بياناتُ برامجَ مشتركةٌ بين المستخدمين")
+  // 10-08 (مقيس على abdo-router): ضاق النموذجُ بمفتاح server فولّد مفتاحاً في ~/.ssh بنفسه — والمجلّدُ نفسُه يحمل مفاتيحَ الإنتاج
+  // (id_rsa، agent_admin_ed25519) وconfig: كتابةٌ فوق أحدها تقطع وصولَ المستخدم إلى خوادمه. مفاتيحُ النشر تُحفظ بـserver add في الخزنة.
+  const home = env.USERPROFILE ?? env.HOME
+  push(home === undefined ? undefined : `${home}/.ssh`, "user-ssh", "مفاتيحُ SSH للمستخدم وإعدادُه (ومنها مفاتيحُ الإنتاج) — كتابةٌ فيه قد تقطع وصولَه إلى خوادمه؛ مفتاحُ النشر يُولَّد ويُحفظ بـserver add في الخزنة")
+  push(home === undefined ? undefined : `${home}/.gnupg`, "user-gnupg", "مفاتيحُ GPG للمستخدم — لا تُكتب من أداة")
   // بيتُ الخزنة: لا يُكتب من أداةٍ أبداً — الطريقُ إليه أمرُ الخزنة وحده.
   if (typeof env.APPDATA === "string" && env.APPDATA.trim().length > 0) {
     rows.push({ path: `${env.APPDATA}/abdocode`, rule: "vault-home", why: "بيتُ الخزنة — يُكتب بأمر الخزنة وحده لا بأداةِ ملفّات" })
@@ -108,8 +113,11 @@ export function protectedPathVerdict(
   projectDir: string,
   env: ProtectedEnv,
 ): ProtectedVerdict {
-  const path = typeof target === "string" ? target.trim() : ""
-  if (path.length === 0) return Object.freeze({ allowed: false, why: "مسارٌ فارغ", rule: "empty" })
+  const raw = typeof target === "string" ? target.trim() : ""
+  if (raw.length === 0) return Object.freeze({ allowed: false, why: "مسارٌ فارغ", rule: "empty" })
+  // ~ و$env:USERPROFILE و%USERPROFILE% تُمدّ إلى بيت المستخدم قبل الحكم — وإلّا التفّ عليه «~/.ssh».
+  const home = env.USERPROFILE ?? env.HOME
+  const path = home === undefined ? raw : raw.replace(/^(?:~|\$env:USERPROFILE|\$HOME|%USERPROFILE%)(?=[\\/]|$)/iu, home)
 
   for (const row of INSIDE_PROJECT) {
     if (isInside(path, `${projectDir}/${row.suffix}`)) {
@@ -132,7 +140,7 @@ export function protectedPathVerdict(
  * **مسارٌ محميّ**. فالقراءةُ من `C:\Windows` مشروعةٌ تماماً، والمنعُ الأعمى
  * لكلّ ذكرٍ لها يجعل الحارسَ يُطفأ في أوّل يوم.
  */
-const WRITE_VERBS = /\b(?:Remove-Item|Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Rename-Item|Set-Acl|icacls|attrib|del|erase|rd|rmdir|mkdir|takeown)\b|>>?\s*(?![>&])/iu
+const WRITE_VERBS = /\b(?:Remove-Item|Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Rename-Item|Set-Acl|icacls|attrib|del|erase|rd|rmdir|mkdir|takeown|ssh-keygen|cp|mv|rm|touch|tee)\b|>>?\s*(?![>&])/iu
 
 /**
  * مساراتٌ يذكرها أمر. استخراجٌ **تقريبيّ** عن قصد: هدفُه التقاطُ ما يُكتب
@@ -145,8 +153,8 @@ export const pathsInCommand = (cmd: string): readonly string[] => {
     const value = m[1] ?? m[2] ?? m[3]
     if (typeof value === 'string' && value.length > 0) found.add(value)
   }
-  // بيتُ المستخدم.
-  for (const m of cmd.matchAll(/(~[\\/][^\s"';|&,)]*)/gu)) found.add(m[1]!)
+  // بيتُ المستخدم — بـ~ و$env:USERPROFILE و$HOME و%USERPROFILE%.
+  for (const m of cmd.matchAll(/((?:~|\$env:USERPROFILE|\$HOME|%USERPROFILE%)[\\/][^\s"';|&,)]*)/giu)) found.add(m[1]!)
   return Object.freeze([...found])
 }
 
@@ -163,7 +171,10 @@ export function protectedCommandVerdict(
   projectDir: string,
   env: ProtectedEnv,
 ): ProtectedVerdict {
-  if (!WRITE_VERBS.test(cmd)) return ALLOWED
+  // 10-08 (مقيس): `Start-Process 'C:\Program Files\Docker\…\Docker Desktop.exe'; … docker info 2>$null` رُفض «في أمرٍ يكتب» — والكتابةُ
+  // الوحيدةُ إعادةُ توجيهٍ إلى العدم. التوجيهُ إلى $null/NUL//dev/null (و2>&1) لا يكتب شيئاً فلا يُحسب فعلَ كتابة.
+  const effective = cmd.replace(/\d?>{1,2}\s*(?:\$null|NUL|\/dev\/null)(?![\w.:\\/-])|\d?>&\d/giu, " ")
+  if (!WRITE_VERBS.test(effective)) return ALLOWED
   for (const candidate of pathsInCommand(cmd)) {
     const said = protectedPathVerdict(candidate, projectDir, env)
     if (!said.allowed) {
@@ -179,5 +190,5 @@ export function protectedCommandVerdict(
 
 /** أسماءُ القواعد — للاختبار وللسجلّ، فلا تُكتب سلاسلُ أسماءٍ في موضعين. */
 export const PROTECTED_RULES = Object.freeze([
-  "empty", "git-hooks", "git-config", "system-root", "program-files", "program-data", "vault-home",
+  "empty", "git-hooks", "git-config", "system-root", "program-files", "program-data", "vault-home", "user-ssh", "user-gnupg",
 ] as const)

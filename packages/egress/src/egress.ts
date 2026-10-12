@@ -190,7 +190,7 @@ export class EgressDeniedError extends Error {
     super(
       `egress refused: ${host} — ${reason}.\n` +
         `This build only contacts destinations it declares. If this host is legitimate, ` +
-        `declare it in packages/core/src/security/egress.ts with a reason, or configure ` +
+        `declare it in packages/egress/src/egress.ts with a reason, or configure ` +
         `the provider that needs it.`,
     )
     this.name = "EgressDeniedError"

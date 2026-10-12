@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "Abdo Code",
-  "version": "0.6.8",
+  "version": "0.7.0",
   "description": "__MSG_appDesc__",
   "default_locale": "ar",
   "icons": {
@@ -16,7 +16,8 @@
     "scripting",
     "debugger",
     "storage",
-    "alarms"
+    "alarms",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -32,6 +33,15 @@
       "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+A" },
+      "description": "__MSG_cmdOpen__"
     }
   },
   "minimum_chrome_version": "116"

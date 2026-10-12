@@ -3711,15 +3711,15 @@ const pluginTranslations = {
 "englishDescription": "When a request exceeds the model window, clip the largest old messages (head, tail and a visible marker) before dropping any whole exchange, and state what was clipped and dropped with numbers. Disabled means the oldest exchanges are dropped whole, as before (and that is stated too). Applies immediately."
   },
 "contextBreakdown": {
-"label": "تفكيكُ نافذة السياق",
+"label": "تفكيكُ نافذة السياق · فكرة هيرمس",
 "description": "سطرٌ واحد في تفاصيل التنفيذ لكلّ دور: كم يأخذ النظامُ والكتالوجُ والتاريخُ (ومنه نتائجُ الأدوات) والطلبُ والمرفقات من نافذة النموذج — بالمقدِّر نفسِه الذي يقرّر القصّ. المعطَّل = لا سطر. يسري فوراً.",
-"englishLabel": "Context window breakdown",
+"englishLabel": "Context window breakdown · Hermes idea",
 "englishDescription": "One line per turn in Execution details: how much of the model window the system text, tool catalogue, history (and its tool results), the request and attachments take — measured by the same estimator that decides clipping. Disabled means no line. Applies immediately."
   },
 "toolAvailability": {
-"label": "إخفاءُ الأدوات التي ينقصها شرطها",
+"label": "إخفاءُ الأدوات التي ينقصها شرطها · فكرة هيرمس",
 "description": "أداةٌ لا يمكن أن تنجح الآن لا تُعرض على النموذج: تحكّمُ سطح المكتب مطفأ ⇦ لا desk، والمشروعُ بلا git ⇦ لا git وأخواتها — ويُقال ما أُخفي ولماذا مرّةً في الدور. المعطَّل = تُعرض كلُّها ويرفضها المُوزِّع عند النداء. يسري فوراً.",
-"englishLabel": "Hide tools whose prerequisite is missing",
+"englishLabel": "Hide tools whose prerequisite is missing · Hermes idea",
 "englishDescription": "A tool that cannot succeed right now is not shown to the model: desktop control off hides desk, a project without git hides git and its siblings, and the turn says once what was hidden and why. Disabled means every tool is shown and the dispatcher refuses it when called. Applies immediately."
   },
 "imageGen": {
@@ -3765,39 +3765,39 @@ const pluginTranslations = {
 "englishDescription": "If the agent edits code in a project that defines a test command (package.json, pytest or Cargo) and then declares it is done before the tests pass after its last edit, the host runs them itself and hands the output back so the model can fix it — up to three times, after which the turn stops honestly instead of reporting complete. Documentation-only edits do not trigger it. Disabled means tests run only when the task text asks for them. Applies from the next turn."
   },
 "emptyGuard": {
-"label": "محاولةٌ ثانية للردّ الفارغ",
+"label": "محاولةٌ ثانية للردّ الفارغ · فكرة هيرمس",
 "description": "حين يردّ النموذج فراغاً بلا جوابٍ ولا أداة يُعاد النداء مرّةً واحدة بتنبيهٍ قصير قبل أن يتوقّف الدور باسمه. المعطَّل = يتوقّف الدور فوراً بسببٍ مسمّى («ردّ النموذج فراغاً») ولا يُعاد السياق. في الحالتين لا يُحسب الفراغُ إنجازاً. يسري من الدور التالي.",
-"englishLabel": "Retry an empty reply once",
+"englishLabel": "Retry an empty reply once · Hermes idea",
 "englishDescription": "When the model replies with nothing — no answer and no tool — ask once more with a short nudge before the turn stops by name. Disabled means the turn stops at once with a named reason (the model replied with nothing) and the context is not resent. Either way an empty reply never counts as done. Applies from the next turn."
   },
 "providerProbe": {
-"label": "اختبارُ المفتاح بعد حفظه",
+"label": "اختبارُ المفتاح بعد حفظه · فكرة هيرمس",
 "description": "بعد حفظ مفتاح مزوّدٍ يُرسل نداءٌ صغيرٌ واحد (16 توكن إخراج) عبر عامل Rust نفسِه، فتقول البطاقةُ «يعمل» أو سببَ الرفض المسمّى بدل «محفوظ» وحدها. المعطَّل = يبقى زرُّ «اختبار الاتصال» وحده، ولا نداءَ بلا ضغطة. يسري فوراً.",
-"englishLabel": "Test a key after saving it",
+"englishLabel": "Test a key after saving it · Hermes idea",
 "englishDescription": "After a provider key is saved, send one small request (16 output tokens) through the same Rust worker, so the card says the key works or names why it was rejected, instead of only saved. Disabled means only the Test connection button remains, and nothing is sent without a click. Applies immediately."
   },
 "denialBreaker": {
-"label": "قاطعُ الرفض المتكرّر",
+"label": "قاطعُ الرفض المتكرّر · فكرة هيرمس",
 "description": "طلبٌ رُفض ثلاث مرّاتٍ في هذه الجلسة يُقطع بلا سؤالٍ رابع. العطلُ الذي يعالجه: نموذجٌ يعيد ما رُفض بصيغةٍ أخرى فيُسأل المشغّلُ السؤالَ نفسَه مراراً حتى يملّ فيوافق — وإرهاقُ الموافقة بابٌ خلفيٌّ بلا كود. **يبدأ مطفأً** لأنّه يقرّر نيابةً عن المشغّل؛ أمّا **عرضُ التاريخ** (كم مرّةً رُفض هذا الطلب) فيصحب كلَّ سؤالٍ بلا مفتاح، لأنّ إخفاء تاريخٍ يملكه النظامُ عمّن يقرّر ليس حياداً. والعدُّ للجلسة وحدها ولا يُكتب على قرص، والمحوُ من «الصلاحيات» يعيد السؤال.",
-"englishLabel": "Repeated denial breaker",
+"englishLabel": "Repeated denial breaker · Hermes idea",
 "englishDescription": "Stop requesting an operation after three denials in the current session. Disabled by default. Denial history is always shown; counts stay in memory and can be reset in Permissions."
   },
 "unattendedDeny": {
-"label": "الصمتُ رفضٌ بعد مهلة",
+"label": "الصمتُ رفضٌ بعد مهلة · فكرة هيرمس",
 "description": "سؤالُ موافقةٍ لا يجيبه أحدٌ ينتهي رفضاً بعد مهلة، بدل أن يعلّق الدورَ إلى الأبد. المهلةُ من الإعدادات (approvalTimeoutSeconds، من 10 ثوانٍ إلى أربع ساعات، والافتراض عشر دقائق)، والانتهاءُ يُعلَن بإطارٍ فتُحدَّث كتلةُ السؤال في القشرة ويُكتب في الدفتر. **مشتغلٌ افتراضاً** لأنّه ينفّذ قاعدةً مكتوبةً في البوّابة نفسِها منذ البداية — «الصمت ليس إذناً» — ولم يكن لها آليّة: الدورُ كان يقف بلا نهاية. المعطَّل = الانتظارُ بلا حدّ كما كان.",
-"englishLabel": "Approval timeout denial",
+"englishLabel": "Approval timeout denial · Hermes idea",
 "englishDescription": "Deny unanswered approval requests after a configurable timeout. Default: 600 seconds; allowed range: 10–14400 seconds. Enabled by default; silence never grants permission."
   },
 "standingGrants": {
-"label": "منحٌ قائمٌ لهذه الجلسة",
+"label": "منحٌ قائمٌ لهذه الجلسة · فكرة هيرمس",
 "description": "إذنٌ مكتوبُ النطاق يُقال مرّةً بدل أن يُسأل عشراً: «هذه الأداة» أو «كلّ أدوات هذا الخادم»، لصنفٍ واحدٍ بعينه. مقيَّدٌ بالصنف والهدف معاً (منحُ read لا يفتح command)، ولا منحَ عامّاً (أوسعُه بادئةُ مزوّدٍ منتهيةٌ بنقطة)، ولا يُكتب على قرصٍ ولا ينجو من إعادة تشغيل، ويُعلَن عند كلّ استعمال، ويُنقض بنقرة. **يبدأ مطفأً** لأنّه يخفّف بوّابةً: الحارسُ يبدأ مشتغلاً، والتخفيفُ يبدأ مطفأً. المعطَّل = كلُّ نداءٍ يُسأل كما كان.",
-"englishLabel": "Session-scoped grants",
+"englishLabel": "Session-scoped grants · Hermes idea",
 "englishDescription": "Grant a named tool or provider namespace access for one operation class and target. Grants are announced when used, revocable, and kept in memory for this session only. Disabled by default."
   },
 "inboundGuard": {
-"label": "حارس الوارد",
+"label": "حارس الوارد · فكرة هيرمس",
 "description": "نصُّ الأدوات — صفحةٌ، أو نتيجةُ بحث، أو ملفٌّ، أو أداةُ خادم MCP — يُفحص بقواعدَ مسمّاةٍ قبل أن يبلغ النموذج: تجاوزُ التعليمات، وانتحالُ الهويّة، وطلبُ التسريب، وتزويرُ إطارِ أداة، ومحارفُ الإخفاء. والفعلُ **وسمٌ لا مقصّ**: لا يُحذف نصُّ أحد، بل يُعلَن ما أُطلق ويُسبَق النصُّ بسطرِ «بياناتٌ لا أوامر»؛ ووسومُ الأدوار وحدها تُبطَّل لأنّها محاكاةُ بروتوكولٍ لا نصٌّ للقارئ. الكشفُ على نسخةٍ مطبَّعةٍ (تشكيل وتطويل وهمزات وأرقام وصفرُ عرض) وبمتغيّراتٍ (بدائلُ الأرقام، وضمُّ المسافات) — والنظيفُ يخرج مطابقاً بايتاً ببايت، فلا كلفةَ في الحالة الغالبة. المعطَّل = النصُّ يمرّ كما هو.",
-"englishLabel": "Inbound content guard",
+"englishLabel": "Inbound content guard · Hermes idea",
 "englishDescription": "Inspect incoming tool, web, file, and MCP content for embedded instructions, impersonation, secret requests, and protocol spoofing. Mark suspicious content as data; preserve ordinary content and neutralize role-tag spoofing."
   },
 "mcpClient": {
@@ -3807,9 +3807,9 @@ const pluginTranslations = {
 "englishDescription": "Connect explicitly to MCP servers over stdio JSON-RPC and expose their tools with server-prefixed names. Every tool uses the same approval gate; a server read-only hint does not establish permission. Disabled means the client is not loaded."
   },
 "delegation": {
-"label": "التفويض إلى وكيل دور",
+"label": "التفويض إلى وكيل دور · فكرة Verdent",
 "description": "أداةُ delegate: مهمّةٌ تُسلَّم لوكيلٍ سقفُه أدواته المعلَنة، بحِقبٍ وإيصالاتٍ ووعيٍ خاصّة به، وبسقفِ إنفاقِ الدور وبوّابتِه ونمطِه نفسها. المعطَّل = الأداة لا تُعلَن ولا تُوزَّع (رفضٌ بالاسم)، والعمقُ مسقوفٌ بواحد في الحالتين.",
-"englishLabel": "Sequential delegation",
+"englishLabel": "Sequential delegation · Verdent idea",
 "englishDescription": "Delegate a bounded task to one child at a time, with its declared tools, evidence, parent budget, and approval policy. Delegation depth is limited to one. Disabled means the tool is not available."
   },
 "reviewer": {
@@ -3849,9 +3849,9 @@ const pluginTranslations = {
 "englishDescription": "Keep execution inside explicit request boundaries and surface violations for review."
   },
 "verifier": {
-"label": "المحكّم الدلالي للتسليم",
+"label": "المحكّم الدلالي للتسليم · فكرة OpenJev",
 "description": "بعد نجاح البوابات الميكانيكية، نموذج يحكم: هل فُعل المطلوب فعلاً؟ حكم رباعي، ولا فشل مفتوحاً. قيد التأهيل الحي.",
-"englishLabel": "Outcome verifier",
+"englishLabel": "Outcome verifier · OpenJev idea",
 "englishDescription": "Verify that the result has evidence for the requested outcome. Missing evidence remains unresolved."
   },
 "toolVerdict": {
@@ -3879,9 +3879,9 @@ const pluginTranslations = {
 "englishDescription": "Compact completed execution history while retaining decisions and unresolved steps."
   },
 "cacheAccounting": {
-"label": "حساب الكاش في الميزانية",
+"label": "حساب الكاش في الميزانية · فكرة هيرمس",
 "description": "التوكنز المخبوءة عند المزوّد تُحسب بخصمها لا كاملة. يسري من الدور القادم.",
-"englishLabel": "Cache accounting",
+"englishLabel": "Cache accounting · Hermes idea",
 "englishDescription": "Display input, cached-input, and output usage from provider receipts."
   },
 "semanticFrame": {
@@ -3973,6 +3973,24 @@ const pluginTranslations = {
 "description": "أداتا server وdeploy: يضع المستخدمُ خادمَه (user@host، ومسار النشر) فيولّد عبدو كود مفتاحَ SSH في الخزنة ويعيد المفتاحَ العامّ ليُضاف مرّةً على الخادم، ثمّ يتّصل ويقيس، وينفّذ أوامرَ عليه، وينشر المشروعَ: حزمةٌ بلا node_modules و.git ومخرجات البناء و.env ⇦ releases/<وقت> ⇦ current ⇦ البناءُ والتشغيل ⇦ فحصُ الرابط، مع خمسة إصداراتٍ للرجوع. المفتاحُ لا يُكتب إلا ملفّاً مؤقّتاً خاصّاً طوالَ النداء، ومفاتيحُ المضيف تُثبَّت في known_hosts خاصٍّ بعبدو كود، وكلُّ لمسةٍ للخادم تُعرض للموافقة. المعطَّل = ترفض الأداتان باسمهما. يسري فوراً.",
 "englishLabel": "Servers and deploy (server / deploy)",
 "englishDescription": "The server and deploy tools: the user adds their server (user@host and a deploy path); AbdoCode generates an SSH key in the vault and shows the public key to add once on the server, then connects and measures, runs commands, and deploys the project: an archive without node_modules, .git, build output or .env files, unpacked into releases/<time>, current pointed at it, build and start commands, then a URL check, keeping five releases for rollback. The key is only ever a private temporary file for one call, host keys are pinned in AbdoCode's own known_hosts, and every server action asks for approval. Off = both tools refuse by name. Applies immediately.",
+  },
+"nativeTools": {
+"label": "استدعاءُ الأدوات الأصليّ للنماذج المقيسة",
+"description": "النماذجُ التي قيس أنّها تستدعي الأدواتِ بقناتها الأصليّة (عائلة nemotron-3 عبر NIM) تعمل بها بدل كتابة «نفّذ: write … <<<» نصّاً: محتوى الملفّ يصل حقلاً في JSON فلا يرفضه حارسُ الصياغة على سياجٍ أو سطرٍ زائد. مقيس على المهامّ نفسِها مقابل OpenCode بالنموذج نفسِه: من 1471 ثانية إلى 234 (21/21)، ومن 1047 إلى 167 (27/27). المعطَّل = البروتوكول النصّيّ لكلّ نموذجٍ سحابيّ كما كان؛ وABDO_AGENT_PROTOCOL=text|native يغلب المفتاح. يسري من الدور القادم.",
+"englishLabel": "Native tool calls for measured models",
+"englishDescription": "Models measured to call tools through their native channel (the nemotron-3 family on NIM) use it instead of writing the text call «write … <<<»: file content arrives as a JSON field, so the syntax guard never refuses it over a stray fence or line. Measured on the same tasks against OpenCode with the same model: from 1471 s to 234 s (21/21), and from 1047 s to 167 s (27/27). Off = the text protocol for every cloud model, as before; ABDO_AGENT_PROTOCOL=text|native overrides the switch. Applies from the next turn.",
+  },
+"opsSkills": {
+"label": "مهاراتُ التشغيل (خوادم، نشر، Git، اختبار، تحقّق)",
+"description": "حزمةُ abdo-ops أساسيّة بلا تثبيت: خوادم أوبونتو، Node 24، الحزم، النشر بإصداراتٍ ورجوع، الإيداع، الدفع، الاختبار بتوأمٍ وطفرة، والتحقّق قبل ادّعاء الإنجاز. يراها الوكيلُ بأسمائها ووصفها في كلّ دورٍ ويحمّل المناسبةَ بنفسه (skill abdo-ops/<المهارة>) — تعليماتٌ لا صلاحيات، وكلُّ لمسةٍ لخادمٍ أو دفعٍ تبقى بموافقة. المعطَّل = لا تُعلَن ولا تُحمَّل إلا إن ثُبّتت الحزمةُ من الامتدادات. يسري فوراً.",
+"englishLabel": "Ops skills (servers, deploy, Git, testing, verification)",
+"englishDescription": "The abdo-ops bundle is built in, no install needed: Ubuntu servers, Node 24, packages, deploys with releases and rollback, commits, pushes, testing with twins and mutations, and verification before claiming done. The agent sees them by name and description every turn and loads the fitting one itself (skill abdo-ops/<skill>) — instructions, not permissions; every server action and push still asks for approval. Off = they are neither advertised nor loaded unless the bundle is installed from Extensions. Applies immediately.",
+  },
+"secretHostBinding": {
+"label": "ربطُ السرّ بمضيفه · فكرة هيرمس",
+"description": "مفتاحُ المزوّد في الخزنة يُربط بمضيف أوّلِ طلبٍ يحمله، وطلبٌ بالمفتاح نفسِه إلى مضيفٍ آخر يُرفض قبل أن يخرج ويُسمّى المضيفان — فتعديلُ عنوان مزوّدٍ مخصّص لا يرسل مفتاحَك إلى خادمٍ لم يُرسَل إليه قطّ. لا يُخزَّن سرّ: اسمُ المقبض والمضيفُ وحدهما. الإطفاءُ يمحو الروابط، وإعادةُ التشغيل تربط من جديد عند أوّل طلب. المعطَّل = يُرسل المفتاحُ إلى أيّ عنوانٍ في إعداد المزوّد كما كان. يسري فوراً.",
+"englishLabel": "Bind each key to its host · Hermes idea",
+"englishDescription": "A provider key in the vault is bound to the host of the first request that carries it; a request with the same key to another host is refused before it leaves, naming both hosts — so editing a custom provider's address never sends your key to a server it was never sent to. No secret is stored: only the handle name and the host. Turning it off clears the bindings; turning it back on binds again on the first request. Off = the key goes to whatever address the provider settings name, as before. Applies immediately.",
   },
 "resumeIntent": {
 "label": "آلية اكمل من حيث توقفت",

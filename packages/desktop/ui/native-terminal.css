@@ -340,10 +340,10 @@
 .nt-screen {
   position: absolute;
   overflow: hidden;
-  background: #fff;
+  background: var(--nt-background, #fff);
   min-width: 0;
   min-height: 0;
-  padding: 9px 8px;
+  padding: 6px 4px 0 10px;
   inset: 0;
 }
 
@@ -389,6 +389,67 @@
   overflow: auto;
   flex: 1;
   min-height: 0;
+  font-family: Cascadia Mono, Cascadia Code, Consolas, monospace;
+  font-size: 12px;
+}
+
+.nt-status {
+  font-family: Cascadia Mono, Consolas, monospace;
+}
+
+.native-terminal {
+  position: relative;
+}
+
+.nt-menu {
+  position: absolute;
+  z-index: 30;
+  border: 1px solid var(--line, #e2e2e0);
+  background: var(--card, #fff);
+  color: var(--text, #202020);
+  border-radius: 8px;
+  min-width: 190px;
+  padding: 4px;
+  font-size: 12px;
+  box-shadow: 0 8px 24px #00000024;
+}
+
+.nt-menu[hidden] {
+  display: none;
+}
+
+.nt-menu button {
+  display: flex;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: start;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  justify-content: space-between;
+  align-items:  center;
+  gap: 18px;
+  width: 100%;
+  padding: 6px 9px;
+}
+
+.nt-menu button:hover:not(:disabled) {
+  background: var(--hover, #f0f0ee);
+}
+
+.nt-menu button:disabled {
+  opacity: .42;
+  cursor: default;
+}
+
+.nt-menu kbd {
+  color: var(--muted, #8b8b86);
+  font: 11px Cascadia Mono, Consolas, monospace;
+}
+
+.nt-screen .xterm .xterm-screen {
+  cursor: text;
 }
 
 .nt-agent-command {

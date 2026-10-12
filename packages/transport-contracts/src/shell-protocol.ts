@@ -39,9 +39,14 @@ export const SHELL_FRAMES: readonly FrameSpec[] = [
   inbound("history", "طلب الجلسات مجموعةً"),
   inbound("recall", "استئناف جلسةٍ بأدوارها", ["session"], ["session"]),
   inbound("session-new", "حدُّ جلسةٍ جديد", ["conversationMode"]),
+  inbound("session-keep", "حفظ المحادثة الجديدة الفارغة في السجلّ — رسالةٌ تنتظر فيها والدورُ يعمل في أخرى"),
   inbound("memory-list", "قراءة ملاحظات المالك للمشروع والجلسة"),
-  inbound("memory-note", "حفظ ملاحظة مالك صريحة — بصنفٍ اختياريّ: profile|topic|area|person", ["title", "text", "scope", "sensitive", "category"], ["title", "text"]),
+  inbound("memory-note", "حفظ ملاحظة مالك صريحة — بصنفٍ اختياريّ: profile|topic|area|person، ونطاقٍ: project|session|user (كلّ المشاريع)", ["title", "text", "scope", "sensitive", "category"], ["title", "text"]),
   inbound("memory-forget", "إبطال ملاحظة مالك صريحة", ["id"], ["id"]),
+  // استيرادُ الذاكرة والتخصيصات (10-10): فحصٌ ⇦ معاينةٌ تحجب وتزيل التكرار ⇦ حفظٌ بنقرة المراجعة وحدها — إلى ملاحظات المالك نفسِها.
+  inbound("memory-import-scan", "استيراد الذاكرة: سردُ ملفّات الوكلاء المحلّيّة (Claude Code، Codex، Gemini CLI، Qwen، Cursor، Windsurf، Cline، Copilot) بمساراتها وأحجامها — بلا قراءة محتوى", [], [], true),
+  inbound("memory-import-preview", "استيراد الذاكرة: قراءةُ مصدرٍ (local: مساراتٌ من نتيجة الفحص | export: ملفُّ تصدير ChatGPT/Claude/Gemini | paste: نصٌّ ملصوق) وحجبُ أسراره وإزالةُ تكراره — قائمةُ مراجعة لا كتابة", ["source", "paths", "path", "vendor", "text", "from", "maskEmails"], ["source"]),
+  inbound("memory-import-save", "استيراد الذاكرة: حفظُ البنود التي أبقاها المستخدم في ملاحظات المالك — scope: user (كلّ المشاريع) أو project", ["items", "scope", "maskEmails"], ["items"]),
   inbound("settings-get", "قراءة الإعدادات", ["requestId"]),
   inbound("usage-get", "قراءة خلاصة دفتر الاستهلاك السحابي المحلي", ["requestId"]),
   inbound("meter-get", "قراءة خلاصة العدّاد المحلي لكلّ نداء — مجاميعُ بلا أسماء", ["requestId"]),
@@ -89,10 +94,14 @@ export const SHELL_FRAMES: readonly FrameSpec[] = [
   { kind: "tool-result", dir: "out", required: ["turnId", "output"], summary: "ناتج أداة" },
   { kind: "history", dir: "out", required: ["sessions"], summary: "الجلسات" },
   { kind: "archive", dir: "out", required: ["session", "turns"], summary: "أدوار جلسة" },
+  { kind: "session-kept", dir: "out", required: ["id"], summary: "حُفظت المحادثة الجديدة في السجلّ" },
   { kind: "session", dir: "out", required: ["id"], summary: "جلسة جديدة" },
   { kind: "memory-notes", dir: "out", required: ["facts"], summary: "ملاحظات المالك النشطة" },
   { kind: "memory-saved", dir: "out", required: ["id", "title", "scope"], summary: "حُفظت ملاحظة مالك" },
   { kind: "memory-forgotten", dir: "out", required: ["id"], summary: "أُبطلت ملاحظة مالك" },
+  { kind: "memory-import-sources", dir: "out", required: ["sources"], summary: "ملفّاتُ الوكلاء المحلّيّة القابلة للاستيراد: {id, agent, path, bytes, where} — بلا محتوى" },
+  { kind: "memory-import-review", dir: "out", required: ["items", "found"], summary: "قائمةُ مراجعة الاستيراد: بنودٌ محجوبةُ الأسرار بلا تكرار {id, text, agent, origin, redactions, sensitive, category} وما وُجد وما غاب — لم يُكتب شيء" },
+  { kind: "memory-import-saved", dir: "out", required: ["saved", "skipped"], summary: "نتيجةُ حفظ الاستيراد: ما حُفظ في ملاحظات المالك وما تُخطّي بسببه" },
   { kind: "memory-inferred", dir: "out", required: ["id", "topic", "note", "confidence", "turnId"], summary: "ذاكرةٌ مستنتَجة من تصحيحٍ في رسالة المستخدم — غير مؤكَّدة حتى يؤكّدها" },
   { kind: "memory-recall", dir: "out", required: ["turnId", "method", "candidates", "selected"], summary: "كيف اختيرت ذكريات الدور: semantic|cached|fallback|local، وكم مرشّحاً وكم مختاراً" },
   { kind: "models", dir: "out", required: ["groups"], summary: "كتالوج النماذج" },
@@ -209,8 +218,25 @@ export const validateShellFrame = (value: unknown): ShellValidation => {
   } else if (kind === "memory-note") {
     if (!boundedString(value.title, 120) || /[\u0000-\u001f\u007f]/u.test(value.title as string)) return invalidField(kind, "title")
     if (!boundedString(value.text, 8_000) || (value.text as string).includes("\0")) return invalidField(kind, "text")
-    if (value.scope !== undefined && value.scope !== "project" && value.scope !== "session") return invalidField(kind, "scope")
+    if (value.scope !== undefined && value.scope !== "project" && value.scope !== "session" && value.scope !== "user") return invalidField(kind, "scope")
     if (value.sensitive !== undefined && typeof value.sensitive !== "boolean") return invalidField(kind, "sensitive")
+  } else if (kind === "memory-import-preview") {
+    if (value.source !== "local" && value.source !== "export" && value.source !== "paste") return invalidField(kind, "source")
+    if (value.paths !== undefined && (!Array.isArray(value.paths) || value.paths.length === 0 || value.paths.length > 400 || value.paths.some((path) => !boundedString(path, 32_767)))) return invalidField(kind, "paths")
+    if (value.path !== undefined && !boundedString(value.path, 32_767)) return invalidField(kind, "path")
+    if (value.vendor !== undefined && value.vendor !== "chatgpt" && value.vendor !== "claude" && value.vendor !== "gemini") return invalidField(kind, "vendor")
+    if (value.text !== undefined && !boundedString(value.text, 200_000)) return invalidField(kind, "text")
+    if (value.from !== undefined && (!boundedString(value.from, 32) || !/^[a-z-]+$/u.test(value.from as string))) return invalidField(kind, "from")
+    if (value.maskEmails !== undefined && typeof value.maskEmails !== "boolean") return invalidField(kind, "maskEmails")
+    // المصدرُ يحدّد حقلَه: غيابُه رفضٌ مسمّى لا معاينةٌ فارغة.
+    if (value.source === "local" && value.paths === undefined) return invalidField(kind, "paths")
+    if (value.source === "export" && value.path === undefined) return invalidField(kind, "path")
+    if (value.source === "export" && value.vendor === undefined) return invalidField(kind, "vendor")
+    if (value.source === "paste" && value.text === undefined) return invalidField(kind, "text")
+  } else if (kind === "memory-import-save") {
+    if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > 200 || value.items.some((item) => !plainRecord(item) || !boundedString(item.text, 2_000))) return invalidField(kind, "items")
+    if (value.scope !== undefined && value.scope !== "user" && value.scope !== "project") return invalidField(kind, "scope")
+    if (value.maskEmails !== undefined && typeof value.maskEmails !== "boolean") return invalidField(kind, "maskEmails")
   } else if (kind === "memory-forget") {
     if (!boundedString(value.id, 128)) return invalidField(kind, "id")
   } else if (kind === "steer") {

@@ -57,7 +57,7 @@ describe("ن5 — wiring pins across the five layers", () => {
     expect(cli.indexOf('`إغلاقُ التبويب «${tab.title || tab.url}»`')).toBeLessThan(cli.indexOf("await surface.closeTab(tab.id)"))
     expect(cli.indexOf('if (!browserSiteAllowed(SETTINGS_FILE, url)) return "Navigation blocked by saved site permissions — المشغّل: browser allow <نطاق>"\n        const verdict = Surface.judge({ generation: surfaceGeneration }, { kind: "navigate", url, origin: "operator" })')).toBeGreaterThan(0)
     expect(cli).toContain('const navTarget = target === "open" ? rest.trim() : target === "tabs" && /^new\\s+\\S/u.test(rest.trim()) ? rest.trim().split(/\\s+/u)[1]! : undefined')
-    expect(cli).toContain("|network|console|tabs)|dismiss|desk)")
+    expect(cli).toContain("|network|console|tabs)|dismiss|desk|logs)") // 10-08: logs متقلّبٌ أيضاً
     const catalogue = read("..", "tools", "src", "catalogue.ts")
     expect(catalogue).toContain('{ name: "tabs", effect: "read", usage: "tabs [list | switch <رقم> | close <رقم> | new <رابط>]"')
     expect(catalogue).toContain('{ name: "back", effect: "network", usage: "back"')
@@ -73,6 +73,6 @@ describe("ن5 — wiring pins across the five layers", () => {
     expect(background).toContain('if (!/^https?:\\/\\//i.test(String(args.url))) throw new Error("http/https only")')
     const mcp = read("src", "shells", "mcp-catalogue.ts")
     expect(mcp).toContain('"select", "upload", "drag", "tabs", "back", "forward"]')
-    expect(JSON.parse(read("..", "browser-bridge", "extension", "manifest.json")).version).toBe("0.6.8") // S9: inspect spec
+    expect(JSON.parse(read("..", "browser-bridge", "extension", "manifest.json")).version).toBe("0.7.0") // S9: inspect spec
   })
 })

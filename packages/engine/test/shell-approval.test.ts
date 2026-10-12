@@ -3,6 +3,14 @@ import { approvalDecidedLine } from "../src/approval-ledger"
 import { Approval } from "../src/shells/approval"
 
 const ask = (turnId = "t1") => ({ kind: "approval", turnId, request: "write app/page.tsx", class: "write", mode: "read-only" })
+
+// 10-09 — the scopes the engine declared ride the store, so the seat shows «allow this tool for the session» only when offered.
+test("the seat state carries the engine's scopes; none declared ⇒ none shown; deciding keeps them", () => {
+  const offered = Approval.fold(Approval.empty(), { ...ask(), scopes: ["tool", 7, "namespace"] }).store
+  expect(offered.state).toMatchObject({ kind: "asked", scopes: ["tool", "namespace"] })
+  expect(Approval.fold(Approval.empty(), ask()).store.state).toMatchObject({ scopes: [] })
+  expect(Approval.choose(offered, "approve").store.state).toMatchObject({ kind: "deciding", scopes: ["tool", "namespace"] })
+})
 const decided = (turnId: string, request: string, decision: "approved" | "denied" | "interrupted") =>
   ({ kind: "event", turnId, seq: 3, payload: approvalDecidedLine({ request, decision }) })
 

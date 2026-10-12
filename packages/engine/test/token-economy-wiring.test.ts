@@ -55,7 +55,7 @@ describe("token economy wiring in the live cli path", () => {
     const transport = body.indexOf("REACH.model({ provider: prov.id, url: request.url, body: request.body, timeoutMs }, hooks.signal)")
     const decode = body.indexOf("const decoded = Providers.decodeResponse(prov, await response.json())")
     const ledger = body.indexOf('note: "router.gate"')
-    const meter = body.indexOf("hooks.turnMeter?.charge(charged)")
+    const meter = body.indexOf("hooks.turnMeter?.charge(charged, cacheDiscountFor(prov.id))")
     const interpret = body.indexOf("interpretGateTurn(decoded, corpus)")
     expect(cloudGate).toBeGreaterThan(0)
     expect(turnGate).toBeGreaterThan(cloudGate)
@@ -150,7 +150,7 @@ describe("turn budget wiring in the live cli path", () => {
     expect(source).toContain('const turnBudgetOn = plugins.read("turnBudget", "turn")')
     // 2026-09-13: السقفُ من الإعدادات (turnTokenCap؛ 0 = بلا سقف) ثمّ متغيّرِ البيئة ثمّ الافتراض 400k — كان 150k متغيّرَ بيئةٍ على جهاز المطوّر وحده.
     expect(source).toContain('const turnCap = turnBudgetOn ? (typeof turnCapSetting === "number" ? (turnCapSetting === 0 ? undefined : turnCapSetting) : (turnTokenCap() ?? DEFAULT_TURN_TOKEN_CAP)) : undefined')
-    expect(source).toContain("const turnMeter = turnCap === undefined ? undefined : new TurnSpendMeter(turnCap)")
+    expect(source).toContain("const turnMeter = turnCap === undefined ? undefined : new TurnSpendMeter(typeof turnCap === \"number\" ? Math.max(20_000, Math.floor(turnCap / workerShare)) : turnCap)")
     expect(source).toContain("...(turnMeter === undefined ? {} : { turnMeter }),")
     expect(source.match(/new TurnSpendMeter\(/gu)).toHaveLength(1)
     expect(source).toContain("readonly turnMeter?: TurnSpendMeter")
@@ -178,12 +178,12 @@ describe("turn budget wiring in the live cli path", () => {
 
   test("the meter is charged from the same chargeableUsage result, outside the ledger try so a disk failure never hides spend", () => {
     // one charge per ledger writer (ask + gateAsk + memoryRankAsk + inferAsk + visionPointAsk + imagine) — never a charge without a ledger write or vice versa.
-    expect(source.match(/hooks\.turnMeter\?\.charge\(charged\)/gu)).toHaveLength(6)
-    expect(source).toMatch(/note: "image\.generate", \.\.\.charged \}\) \} catch \{[^\r\n]*\}\r?\n\s+hooks\.turnMeter\?\.charge\(charged\)/u)
+    expect(source.match(/hooks\.turnMeter\?\.charge\(charged, cacheDiscountFor\(prov\.id\)\)/gu)).toHaveLength(6)
+    expect(source).toMatch(/note: "image\.generate", \.\.\.charged \}\) \} catch \{[^\r\n]*\}\r?\n\s+hooks\.turnMeter\?\.charge\(charged, cacheDiscountFor\(prov\.id\)\)/u)
     expect(source).toContain("try{recordCloudUsage({provider:prov.id,model:selected.model,note:'memory.semantic',...charged})}catch{}")
-    expect(source).toMatch(/note:'memory\.semantic',\.\.\.charged\}\)\}catch\{\}\r?\n\s+hooks\.turnMeter\?\.charge\(charged\)/u)
-    expect(source).toMatch(/\} catch \(error\) \{\r?\n\s+ledgerNote = [^\r\n]*\r?\n\s+\}\r?\n(?:\s+\/\/[^\r\n]*\r?\n)*\s+hooks\.turnMeter\?\.charge\(charged\)/u)
-    expect(source).toMatch(/note: "router\.gate", \.\.\.charged \}\)\r?\n\s+\} catch \{\r?\n(?:\s+\/\/[^\r\n]*\r?\n)*\s+\}\r?\n\s+hooks\.turnMeter\?\.charge\(charged\)/u)
+    expect(source).toMatch(/note:'memory\.semantic',\.\.\.charged\}\)\}catch\{\}\r?\n\s+hooks\.turnMeter\?\.charge\(charged, cacheDiscountFor\(prov\.id\)\)/u)
+    expect(source).toMatch(/\} catch \(error\) \{\r?\n\s+ledgerNote = [^\r\n]*\r?\n\s+\}\r?\n(?:\s+\/\/[^\r\n]*\r?\n)*\s+hooks\.turnMeter\?\.charge\(charged, cacheDiscountFor\(prov\.id\)\)/u)
+    expect(source).toMatch(/note: "router\.gate", \.\.\.charged \}\)\r?\n\s+\} catch \{\r?\n(?:\s+\/\/[^\r\n]*\r?\n)*\s+\}\r?\n\s+hooks\.turnMeter\?\.charge\(charged, cacheDiscountFor\(prov\.id\)\)/u)
   })
 
   test("the boundary gate runs before the epoch is counted and grants one host-evidenced grace via closeToDone + openSprintCount", () => {
@@ -214,7 +214,7 @@ describe("turn budget wiring in the live cli path", () => {
   })
 
   test("TB-3: a turn-cap refusal of the semantic-verifier ask hands back turn_budget with its own ⏱ line instead of blaming the model", () => {
-    const verifierAsk = source.indexOf("const reply = await ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], judge)")
+    const verifierAsk = source.indexOf("const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], selectedModel, judge)")
     const trip = source.indexOf("if (turnMeter !== undefined && turnMeter.snapshot().tripped) {")
     const unjudged = source.indexOf("⚠ غير محكّم دلالياً: النموذج لم ينتج حكماً صالحاً")
     expect(verifierAsk).toBeGreaterThan(0)
@@ -284,7 +284,7 @@ describe("turn cap renewal wiring", () => {
     expect(source.slice(mid, honest)).toContain('if (last.role !== "assistant" || !text.includes("سقف الدور")) break')
     expect(source.slice(mid, honest)).toContain("continue")
     // the settings key is accepted and bounded
-    expect(source).toContain('"turnTokenCap", "turnRenewals", "turnNotifications"')
+    expect(source).toContain('"turnTokenCap", "cloudTokenCap", "turnRenewals", "turnNotifications"')
     expect(source).toContain("value.turnRenewals > MAX_TURN_RENEWALS")
   })
 
@@ -345,15 +345,18 @@ describe("ideas on our system (09-29): decision model, parallel worktree workers
   test("the three fixed-label judgments ask the decision model, which falls back to the turn model", () => {
     expect(source).toContain("const resolveDecisionModel = (selected: ModelSelection): ModelSelection => {")
     expect(source).toContain("return selectionOf(configured, selected.lane) ?? selected")
-    expect(source).toContain("}, [], reviewJudge)")
-    expect(source).toContain("}, [], resolveDecisionModel(selectedModel))")
-    expect(source).toContain("const reply = await ask(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], judge)")
+    // 10-09: the three judgments go through askDecision — two attempts on the decision model, then the working model judges.
+    expect(source).toContain("}, [], selectedModel, reviewJudge)")
+    expect(source).toContain("}, [], selectedModel)")
+    expect(source).toContain("const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], selectedModel, judge)")
+    expect(source).toContain("try { return await askOnce(question, { ...hooks, maxRetryAttempts: DECISION_RETRY_ATTEMPTS }, history, judge) }")
     expect(source).toContain('"routerGate", "gateModel", "decisionModel", "plugins",')
   })
   test("parallel runs each task through runExecInWorktree with the parent's settings, and merge is --no-ff with abort on conflict", () => {
     expect(source).toContain('if (spec.name === "parallel") {')
     expect(source).toContain("const tasks = parseParallelTasks(body)")
-    expect(source).toContain('{ task: workerTask(task), project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true }')
+    // 10-11 — والعمّالُ يتفرّعون من لقطة حالة الأب غيرِ المودَعة (parallel-base.test.ts).
+    expect(source).toContain('{ task: workerTask(task), project: PROJECT_DIR, mode: workerMode, timeoutMs: 25 * 60_000, json: true, quiet: true, worktree: true, ...(parallelBase === undefined ? {} : { baseRev: parallelBase }) }')
     expect(source).toContain("{ ...process.env, ABDO_CODE_SETTINGS: SETTINGS_FILE }")
     expect(source).toContain('if (spec.name === "merge") {')
     expect(source).toContain('"merge", "--no-ff", "--no-edit", branch]')

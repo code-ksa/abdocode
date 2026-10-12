@@ -5,7 +5,7 @@
  * العمليّة المباشرَ هناك «تنفيذاً موازياً غيرَ مسجَّل»، والتسجيلُ نفسُه ممنوعٌ فيها:
  * «انقُل الملكيّةَ إلى الحزمة المالكة». وأخواتُه انتُقلت قبله، فهذا آخرُها.
  *
- * ✅ **وقد صار يمرّ بمُطلِق العزل (2026-09-27، أمرُ المالك «نفّذ»)**: كان يُقلع بـ`Bun.spawn`
+ * ✅ **وقد صار يمرّ بمُطلِق العزل**: كان يُقلع بـ`Bun.spawn`
  * خارج `launchControlledProcess`، ففاته ما تناله المقدّمة — تحقّقُ صياغةِ الأمر، وحلُّ
  * `cwd` **داخل** نطاق المشروع، والخطّةُ وفحصُ الانزياح (TOCTOU) والبوّابةُ والرفضُ المسمّى.
  * والطَّورُ المنفصلُ (`detach`) يفعل ذلك كلَّه ثمّ **يعود بالمعرّف بلا انتظار**، فالعمرُ
@@ -28,7 +28,7 @@
  *   تيّارَي الطفل إلى ملفٍّ نكتبه، فلا حيلةَ ولا BOM — ومَن قرأ الحيلةَ يجدها محفوظةً
  *   لملفّاتٍ قديمةٍ قد تكون على القرص.
  */
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { INHERIT_PROFILE, UNMEASURED_CAPABILITY, launchControlledProcess } from "@abdo/tools"
 
@@ -142,4 +142,25 @@ export function backgroundLogs(id: string, lines: number): string {
     ? `جارٍ منذ ${Math.round((Date.now() - run.startedAt) / 1000)} ث`
     : run.stopped ? "أُوقف" : `انتهى برمز ${run.exitCode}`
   return `${run.id} · ${state} · ${run.cmd.slice(0, 120)}\n${tail.length ? tail.join("\n") : "(لا خرجَ بعد)"}`
+}
+
+const seenLogSize = new Map<string, number>()
+const logSize = (path: string): number => { try { return statSync(path).size } catch { return 0 } }
+
+/**
+ * 10-08 (مقيس في بروفة النشر): النموذجُ نادى `logs bg-1` خمسَ مرّاتٍ في ١٥ ثانيةً والبناءُ جارٍ — كلُّها «لا خرجَ بعد» أو الخرجُ نفسُه،
+ * والنداءُ المتطابق أنهى الدورَ «duplicate». تشغيلٌ جارٍ لم يزد سجلُّه منذ آخر قراءة ينتظر هنا خرجاً جديداً أو انتهاءً حتى `maxWaitMs`
+ * (كما ينتظر كلود حدثاً بدل أن يستطلع)، ثمّ يعيد الذيلَ كالمعتاد.
+ */
+export async function backgroundLogsAwaitingNew(id: string, lines: number, maxWaitMs = 15_000, stepMs = 500): Promise<string> {
+  const run = runs.get(id)
+  if (run !== undefined && run.exitCode === undefined) {
+    const before = seenLogSize.get(id)
+    if (before !== undefined && logSize(run.log) === before) {
+      const deadline = Date.now() + maxWaitMs
+      while (Date.now() < deadline && run.exitCode === undefined && logSize(run.log) === before) await Bun.sleep(stepMs)
+    }
+  }
+  if (run !== undefined) seenLogSize.set(id, logSize(run.log))
+  return backgroundLogs(id, lines)
 }

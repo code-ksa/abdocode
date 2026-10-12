@@ -1,5 +1,6 @@
 import {writeWorkspacePreference} from './workspace-preference-write.js';
 import {renderTemplateSettings} from './project-template-settings.js';
+import {createMemoryImport} from './native-memory-import.js';
 /* Reference settings and directory surfaces for the native AbdoCode shell.
    Existing controls remain in their original panels so their save contract and IDs stay intact. */
 
@@ -63,6 +64,9 @@ export function mountSettingsSurfaces(api) {
   let remoteStatus = null;// م5 — آخرُ إطار remote-control من المحرّك (off | on + المنفذ والعناوين والرمز والعملاء)
   const addedPanels = new Map();
   const addedNav = [];
+  // استيرادُ الذاكرة والتخصيصات (10-10): وحدةٌ تحتفظ بحالتها (المراجعة والتعديلات) فلا يمسحها renderPanels الذي يجري مع كلّ إطار.
+  const memoryImport = createMemoryImport(api);
+  let memoryImportLang = '';
   const languageRow=$('setlanguage')?.closest('.setting-row');
   if($('setlanguage')){const selected=$('setlanguage').value;$('setlanguage').replaceChildren(...languageChoices().map(item=>{const option=node('option','',item.label);option.value=item.code;return option;}));$('setlanguage').value=selected||'en';}
 
@@ -90,7 +94,7 @@ export function mountSettingsSurfaces(api) {
     [t('Desktop app','تطبيق سطح المكتب'), [
       ['nss-desktop',t('General','عام'),'desktop'], ['nss-extensions',t('Extensions','الامتدادات'),'extensions'], ['nss-remote',t('Abdo Remote Control','عبدو ريموت كونترول'),'remote'], ['nss-developer',t('Developer','المطوّر'),'developer']]],
     [t('Customize','التخصيص'), [
-      ['nss-templates',t('Project templates','قوالب المشاريع'),'layout'], ['skills',t('Skills','المهارات'),'skills'], ['connections',t('Connectors','الموصلات'),'connectors'], ['plugins',t('Plugins','الإضافات'),'plugins'], ['memory',t('Memory','الذاكرة'),'memory']]],
+      ['nss-templates',t('Project templates','قوالب المشاريع'),'layout'], ['skills',t('Skills','المهارات'),'skills'], ['connections',t('Connectors','الموصلات'),'connectors'], ['plugins',t('Plugins','الإضافات'),'plugins'], ['memory',t('Memory','الذاكرة'),'memory'], ['nss-memory-import',t('Import memory & customizations','استيراد الذاكرة والتخصيصات'),'memory']]],
     [t('Platform','المنصة'), [['nss-api',t('API keys','مفاتيح API'),'api']]],
     [t('Native controls','أدوات عبدو كود'), [
       ['providers',t('Providers','المزوّدون'),'providers'], ['models',t('Models','النماذج'),'models'], ['permissions',t('Permissions','الصلاحيات'),'permissions'],
@@ -188,6 +192,7 @@ export function mountSettingsSurfaces(api) {
     if(languageRow)languagePanel.append(languageRow);
     summary(languagePanel,t('Interface translations are currently available in English and Arabic. Other language choices use English for untranslated interface text; the agent responds in your selected language.','ترجمة الواجهة الكاملة متاحة حاليًا بالعربية والإنجليزية. عند اختيار لغة أخرى يظهر نص الواجهة غير المترجم بالإنجليزية، ويرد الوكيل باللغة المختارة.'));
     renderTemplateSettings(addPanel('nss-templates',t('Project templates','قوالب المشاريع')),api,lang);
+    if(!settings.querySelector('[data-panel="nss-memory-import"]')||memoryImportLang!==lang){memoryImportLang=lang;memoryImport.render(addPanel('nss-memory-import',t('Import memory & customizations','استيراد الذاكرة والتخصيصات')),t,lang);}
     let p=addPanel('nss-account',t('Account','الحساب'));
     summary(p,t('This native workspace does not require a cloud account. Projects, sessions and preferences are stored on this computer.','مساحة العمل الأصلية هذه لا تتطلب حسابًا سحابيًا. تُحفظ المشاريع والجلسات والتفضيلات على هذا الجهاز.'));unavailable(p);
     fact(p,t('Workspace','مساحة العمل'),t('Local','محلية'),t('No cloud identity is attached to this shell.','لا توجد هوية سحابية مرتبطة بهذه القشرة.'));
@@ -345,7 +350,7 @@ export function mountSettingsSurfaces(api) {
 
   function refresh(){renderPanels();if(directory)openDirectory(directoryTab);}
   function settingsApplied(next){lang=next?.language==='ar'?'ar':'en';search.placeholder=t('Search settings','ابحث في الإعدادات');search.setAttribute('aria-label',search.placeholder);buildNav();refresh();}
-  function frame(f){if(f?.kind==='remote-control'){remoteStatus=f;refresh();return;}if(f?.kind==='ready'){remoteStatus=null;api.bridge.send?.({kind:'remote-control-get'});}if(['ready','settings','plugins','history','model','model-route'].includes(f?.kind))refresh();}
+  function frame(f){memoryImport.frame(f);if(f?.kind==='remote-control'){remoteStatus=f;refresh();return;}if(f?.kind==='ready'){remoteStatus=null;api.bridge.send?.({kind:'remote-control-get'});}if(['ready','settings','plugins','history','model','model-route'].includes(f?.kind))refresh();}
   buildNav();renderPanels();loadDesktopPreferences();
   return {refresh,frame,settingsApplied,openDirectory,dispose(){closeDirectory();for(const n of addedNav)n.remove();for(const p of addedPanels.values())p.remove();search.remove();for(const b of oldNav.querySelectorAll('.nss-original-nav')){b.hidden=false;b.classList.remove('nss-original-nav');}}};
 }

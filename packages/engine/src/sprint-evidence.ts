@@ -36,6 +36,8 @@ export interface EvidenceClock {
   docWriteAt?: number
   /** 10-01 — آخرُ audit حكمُه PASS على عروضٍ أقلّ من الخمسة (--widths): لا يُغلق البوّابة، ويُسمّى في الرفض. */
   auditNarrowAt?: number
+  /** 10-08 — آخرُ قياسٍ تشغيليّ ناجح: secrets list/import، server test متّصل، deploy ✓ نُشر، grep — سبرنتُ الأسرار والنشر يُقاس بها. */
+  opsAt?: number
 }
 
 /**
@@ -58,10 +60,14 @@ const DOC_FILE = /\.(?:md|markdown|txt|json|csv|tsv|ya?ml|pdf|docx|pptx|xlsx)$/i
 const UI_FILE = /(?:^|\s)\S+\.(?:tsx|jsx|css|scss|sass|less|html|vue|svelte|astro|mdx)(?=\s|$|:)/iu
 
 const PAGE_TOOLS = new Set(["probe", "page", "shot", "look"])
-const BUILD_RUN = /^run\s+(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?build|npx\s+next\s+build|next\s+build)\b/iu
-const TEST_RUN = /^run\s+(?:(?:npm|pnpm|yarn)\s+(?:run\s+)?test|bun\s+(?:run\s+)?test|node\s+--test|npx\s+(?:vitest\s+run|jest)|(?:python3?\s+-m\s+)?pytest|cargo\s+test)\b/iu
+// 10-08 (مقيس بـgpt-6.1-sol): «run $env:TEST_BASE_URL='http://127.0.0.1:3002'; npm test; …» نجح ولم يُعدّ — السابقةُ كانت تشترط «run npm test» في الصدر.
+// تُتخطّى متغيّراتُ البيئة ($env:X=…; أو X=… ) وcd … ;/&& قبل الأمر.
+const RUN_PREFIX = String.raw`^run\s+(?:(?:\$env:\w+\s*=\s*(?:'[^']*'|"[^"]*"|\S+)\s*;\s*)|(?:\w+=(?:'[^']*'|"[^"]*"|\S+)\s+)|(?:cd\s+(?:'[^']*'|"[^"]*"|\S+)\s*(?:;|&&)\s*))*`
+const BUILD_RUN = new RegExp(`${RUN_PREFIX}(?:(?:npm|pnpm|yarn|bun)\\s+(?:run\\s+)?build|npx\\s+next\\s+build|next\\s+build)\\b`, "iu")
+const TEST_RUN = new RegExp(`${RUN_PREFIX}(?:(?:npm|pnpm|yarn)\\s+(?:run\\s+)?test|bun\\s+(?:run\\s+)?test|node\\s+--test|npx\\s+(?:vitest\\s+run|jest)|(?:python3?\\s+-m\\s+)?pytest|cargo\\s+test)\\b`, "iu")
 export const BUILD_FAILED = /Failed to compile|Build error occurred|Type error:|error TS\d+|ELIFECYCLE|exited with code [1-9]|انتهى الأمر برمز [1-9]/iu
-export const TEST_FAILED = /(?:ℹ\s+fail\s+[1-9]|\b[1-9]\d*\s+fail(?:ed|ing)?\b|not ok\s+\d|Tests?:\s+\d+\s+failed|ELIFECYCLE|انتهى الأمر برمز [1-9])/iu
+// 10-08: وصيغةُ TAP («# fail 1») التي يطبعها node --test خارج الطرفيّة — كانت تمرّ فيُعدّ التشغيلُ الفاشل ناجحاً.
+export const TEST_FAILED = /(?:ℹ\s+fail\s+[1-9]|#\s+fail\s+[1-9]|\b[1-9]\d*\s+fail(?:ed|ing)?\b|not ok\s+\d|Tests?:\s+\d+\s+failed|ELIFECYCLE|انتهى الأمر برمز [1-9])/iu
 
 /** يسجّل إيصالاً: قياسُ صفحة، أو بناءٌ/اختبارٌ ناجح (يُقرأ خرجُه)، أو تعديلُ شيفرة. `command` سطرُ الأداة كما نُفّذ. */
 export function noteEvidence(clock: EvidenceClock, command: string, ok: boolean, now = Date.now(), output = ""): void {
@@ -81,6 +87,12 @@ export function noteEvidence(clock: EvidenceClock, command: string, ok: boolean,
     }
     else if (/^audit: FAIL\b/mu.test(output)) clock.auditFailAt = now
   }
+  else if (word === "secrets" && /^secrets\s+(?:list|import)\b/iu.test(line) && !/^رُفض|✕/u.test(output.trim())) clock.opsAt = now
+  else if (word === "server" && /^server\s+test\b/iu.test(line) && /متّصلٌ/u.test(output)) clock.opsAt = now
+  // 10-08 (مقيس على abdo-router): نشرٌ نجح وفحصُه «✓ check: … → 200» قياسُ HTTP للرابط المنشور — فهو قياسُ صفحةٍ أيضاً؛ كان الدليلُ
+  // «health endpoint returned HTTP 200 … after deploying» يُردّ «لم تُقَس أيُّ صفحة» والفحصُ نفسُه جرى داخل deploy.
+  else if (word === "deploy" && /✓ نُشر/u.test(output)) { clock.opsAt = now; if (/✓ check: [^\n]*→ [23]\d\d/u.test(output)) clock.pageAt = now }
+  else if (word === "grep") clock.opsAt = now
   else if (BUILD_RUN.test(line)) { if (!BUILD_FAILED.test(output)) clock.buildAt = now }
   else if (TEST_RUN.test(line)) { if (!TEST_FAILED.test(output)) clock.testAt = now }
   else if (editsCode(line)) { clock.codeAt = now; if (UI_FILE.test(line.split("\n", 1)[0] ?? "")) clock.uiAt = now }
@@ -117,14 +129,23 @@ export function mergeUiClock(clock: EvidenceClock, saved: Pick<EvidenceClock, "u
 /** دليلٌ يدّعي عرضَ صفحةٍ أو ردَّها — بالعربيّة أو الإنجليزيّة. */
 const PAGE_CLAIM = /(?:\baudit\b|\bpage\s*\/|\brenders?\b|\bshows?\b|\bdisplays?\b|\bvisible\b|\bprobe\b|\bshot\b|\bscreenshot\b|\bHTTP\s*200\b|\b200\s*OK\b|(?:^|\s)\/[a-z][\w/-]*\s+(?:→|=>|->)?\s*200\b|\breturn\s+200\b|تظهر|يظهر|تعرض|يعرض|تُعرض|ظاهر|الصفحة\s+ترد|ترد\s+200)/iu
 const BUILD_CLAIM = /(?:\bbuild\b|\bcompiled?\b|بناء|البناء|يبني)/iu
-const TEST_CLAIM = /(?:\btests?\b|\bnpm\s+test\b|اختبار|الاختبار|الاختبارات)/iu
+// 10-08: «server test» (أداةُ الاتّصال) و«test server» (الخادمُ التجريبيّ) ليسا ادّعاءَ اختبارات.
+const TEST_CLAIM = /(?:(?<!server\s)\btests?\b(?!\s+server)|\bnpm\s+test\b|اختبار(?!يّ)|الاختبار(?!يّ)|الاختبارات)/iu
 /** 10-01 — مقيس: سبرنتٌ ناتجُه welcome.md رُفض 25 مرّةً والدليلُ «read welcome.md ✓ — يذكر 4 شرائح» صحيح: لم يكن للمستند صنفٌ من القياس. */
 const DOC_CLAIM = /\bread\s+[^\s`'"]+\.(?:md|markdown|txt|json|csv|tsv|ya?ml|pdf|docx|pptx|xlsx)\b/iu
+/** 10-08 — مقيس على المهمّة الكاملة: «secrets import .env completed: 9 keys stored in vault … grep confirms no secret values» رُفض مرّتين
+ *  «لا يسمّي قياساً» — سبرنتُ الأسرار قياسُه أداةُ الأسرار وgrep، لا build/test. وكذلك server test وdeploy لسبرنت النشر. */
+const OPS_CLAIM = /\bsecrets\s+(?:list|import)\b|\bserver\s+test\b|\bdeploy(?:ed|ing|ment)?\b|\bgrep\b|الخزنة|\bvault\b|(?:ال)?نشر|نُشر|(?:ال)?خادم/iu
 
 /** سببُ رفض إغلاق السبرنت، أو `undefined` حين يُقبل الدليل. */
 export function sprintEvidenceRefusal(evidence: string, clock: EvidenceClock, options: { readonly web?: boolean } = {}): string | undefined {
-  const claims = { page: PAGE_CLAIM.test(evidence), build: BUILD_CLAIM.test(evidence), test: TEST_CLAIM.test(evidence), doc: DOC_CLAIM.test(evidence) }
-  if (!claims.page && !claims.build && !claims.test && !claims.doc)
+  // 10-08 (مقيس على موقع Next.js): «sprint done 14 :: sprint-14-measure.txt» ستَّ مرّاتٍ بأربعة ملفّاتٍ أنشأها النموذجُ في جذر المشروع —
+  // ظنّ أنّ الدليلَ ملفٌّ يُقرأ، والرفضُ العامّ لم يقل غيرَ ذلك. الدليلُ نصٌّ بعد «::» يسمّي ما شُغّل ونتيجتَه؛ اسمُ الملفّ وحده يُسمّى باسمه.
+  const lone = evidence.trim()
+  if (/^[^\s]+\.(?:md|markdown|txt|log|json|ya?ml)$/iu.test(lone))
+    return `رُفض إغلاقُ السبرنت: «${lone.slice(0, 80)}» اسمُ ملفٍّ لا دليل — المحرّكُ لا يفتح ملفّاً ليقرأ منه الدليل، ولا يُغني ملفُّ أدلّةٍ في المشروع عن القياس. اكتب القياسَ نفسَه نصّاً بعد «::» (مثل: sprint done <رقم> :: npm run build ✓ · audit / /models PASS على كلّ العروض) بعد أن تشغّله فعلاً بعد آخر تعديل.`
+  const claims = { page: PAGE_CLAIM.test(evidence), build: BUILD_CLAIM.test(evidence), test: TEST_CLAIM.test(evidence), doc: DOC_CLAIM.test(evidence), ops: OPS_CLAIM.test(evidence) }
+  if (!claims.page && !claims.build && !claims.test && !claims.doc && !claims.ops)
     return "رُفض إغلاقُ السبرنت: الدليلُ لا يسمّي قياساً — اذكر ما شغّلتَ ونتيجتَه بعد آخر تعديل (npm run build ✓، npm test ✓، probe <المسار> 200، أو read <الملفّ الناتج> لمستندٍ غير شيفرة…) ثمّ أعد sprint done."
   const stale = (at: number) => at === 0 || at < clock.codeAt
   if (claims.page && stale(clock.pageAt)) {
@@ -136,6 +157,8 @@ export function sprintEvidenceRefusal(evidence: string, clock: EvidenceClock, op
     if (docAt === 0 || docAt < clock.codeAt || docAt < (clock.docWriteAt ?? 0))
       return "رُفض إغلاقُ السبرنت: الدليلُ يقيس مستنداً ناتجاً ولا قراءةَ له بعد آخر كتابة — اقرأه الآن (read <الملفّ>) ثمّ أعد sprint done بما فيه."
   }
+  if (claims.ops && !claims.page && !claims.build && !claims.test && !claims.doc && stale(clock.opsAt ?? 0))
+    return "رُفض إغلاقُ السبرنت: الدليلُ يقيس أسراراً/خادماً/نشراً ولا قياسَ تشغيليّاً ناجحاً بعد آخر تعديل — شغّل الآن secrets list (الأسماءُ في الخزنة) أو grep (لا قيمةَ مُودَعة) أو server test أو deploy، ثمّ أعد sprint done بنتيجته."
   if (claims.build && stale(clock.buildAt))
     return "رُفض إغلاقُ السبرنت: الدليلُ يدّعي نجاحَ البناء ولا بناءَ ناجحاً بعد آخر تعديلٍ للشيفرة — شغّل npm run build الآن (خادمُ dev لا يفحص الأنواع)، وأصلح ما يكسره، ثمّ أعد sprint done."
   if (claims.test && stale(clock.testAt))

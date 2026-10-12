@@ -53,6 +53,33 @@ export function editsCode(command: string): boolean {
   return !/\.(?:md|mdx|txt|rst|adoc|png|jpe?g|gif|svg|webp|ico)$/iu.test(target)
 }
 
+/**
+ * 10-08 (مقيس على مشروعٍ حقيقيّ): اختبارُ المشروع يطلب خادماً حيّاً (`http.get("http://localhost:3000/api/health")`)
+ * والمضيفُ يشغّله ولا خادم ⇦ ECONNREFUSED ثلاثَ مرّات، والنموذجُ يتجاهله لأنّه ليس من تعديله، فيقف كلُّ دورٍ
+ * «acceptance-pending» بلا إغلاق. المنفذُ المحلّيّ الذي رُفض الاتصالُ به، أو `undefined`.
+ */
+export function refusedLocalPort(output: string): number | undefined {
+  const match = /ECONNREFUSED\s+(?:127\.0\.0\.1|::1|\[::1\]|localhost|0\.0\.0\.0):(\d{2,5})\b/iu.exec(output)
+  const port = match === null ? Number.NaN : Number(match[1])
+  return Number.isInteger(port) && port > 0 && port < 65_536 ? port : undefined
+}
+
+/**
+ * خادمُ المشروع كما يعرّفه هو (سكربت dev ثمّ start) بصيغة الأداة، أو `undefined` — لا يُخترع أمرٌ لمشروعٍ لم يعرّفه.
+ * المنفذُ الذي ينتظره الاختبارُ يُمرَّر `--port` (next/vite/astro تفهمه، والنواةُ تضع PORT في البيئة لمن يقرؤها).
+ */
+export function projectServerCommand(dir: string, port?: number): string | undefined {
+  let scripts: Record<string, unknown> | undefined
+  try { scripts = (JSON.parse(readText(join(dir, "package.json"))) as { scripts?: Record<string, unknown> }).scripts } catch { return undefined }
+  const name = typeof scripts?.dev === "string" ? "dev" : typeof scripts?.start === "string" ? "start" : undefined
+  if (name === undefined) return undefined
+  const manager = existsSync(join(dir, "pnpm-lock.yaml")) ? "pnpm" : existsSync(join(dir, "yarn.lock")) ? "yarn" : existsSync(join(dir, "bun.lock")) || existsSync(join(dir, "bun.lockb")) ? "bun" : "npm"
+  return `run --bg ${manager} run ${name}${port === undefined ? "" : ` -- --port ${port}`}`
+}
+
+export const verifyServerLine = (command: string, port: number, server: string): string =>
+  `↻ التحقّق بعد التعديل: «${command}» يتّصل بخادمٍ حيّ على المنفذ ${port} ولا شيءَ يُنصت (ECONNREFUSED) — ليس عيباً في تعديلك. يشغّل المضيفُ خادمَ المشروع «${server.replace(/^run\s+--bg\s+/u, "")}» تحت إدارة النواة ثمّ يعيد الاختبار.`
+
 export const verifyDemandLine = (command: string, ranBefore: boolean): string =>
   `↻ التحقّق بعد التعديل (plugins.verifyAfterEdit): عُدّلت شيفرةٌ في مشروعٍ له اختبارات، و${ranBefore ? "آخرُ تشغيلٍ لها فشل أو سبق التعديلَ الأخير" : "لم تُشغَّل بعد"} — يشغّل المضيفُ «${command}» الآن ويعيد خرجَها.`
 

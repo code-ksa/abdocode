@@ -41,7 +41,7 @@ test("dark mode: buttons and the terminal read light; settings is sliders, conve
   const termCss = read("../../desktop/src/native-terminal.css")
   expect(termCss).toContain("color:var(--nt-foreground,var(--ns-fg,#242424))")
   const termJs = read("../../desktop/src/native-terminal.js")
-  expect(termJs).toContain("root.style.setProperty('--nt-foreground', dark ? '#eeeeee' : '#242424');")
+  expect(termJs).toContain("root.style.setProperty('--nt-foreground', colors.foreground);")
   const shellJs = read("../../desktop/ui/native-shell.js")
   expect(shellJs).toContain("settings:'M4 6h8m4 0h4M4 12h4m4 0h8M4 18h10m4 0h2M12 4v4M8 10v4M14 16v4'")
   expect(shellJs).toContain("filter:'M4 6h16M7 12h10m-7 6h4'")
@@ -53,7 +53,8 @@ test("dark mode: buttons and the terminal read light; settings is sliders, conve
 // مقيس على 4.0.52 (09-17): وضعُ العمل «أقصى» ومفتاحُ التفويض معطَّل ⇦ النموذج: «أداة team غير موجودة». الوضعُ الموازي يعني التفويض.
 test("a parallel work mode implies delegation: team and delegate are advertised and allowed without the plugin switch", () => {
   const cli = read("../src/cli.ts")
-  expect(cli).toContain('const delegationEnabled = (): boolean => pluginOnNow("delegation") || workProfile(loadSettings().workMode).parallelAgents >= 2')
+  // 10-11 — والعاملُ المتوازي وحده لا يفوّض (team-workers-split-live).
+  expect(cli).toContain('const delegationEnabled = (): boolean => process.env.ABDO_PARALLEL_WORKER !== "1" && (pluginOnNow("delegation") || workProfile(loadSettings().workMode).parallelAgents >= 2)')
   // كلُّ بوّابات التفويض تمرّ من الدالّة الواحدة — لا موضعَ يسأل المفتاحَ وحده.
   expect(cli.match(/pluginOnNow\("delegation"\)/gu)).toHaveLength(1)
   expect(cli).toContain("const delegationOn = delegationEnabled()")

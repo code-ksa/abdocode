@@ -11,7 +11,9 @@ export function mountNativeTerminal(host, bridge, attach) {
   // Escape/Ctrl+K in a shell belong to the shell, not to the conversation's
   // interruption/command-palette shortcuts on document.
   root.addEventListener('keydown', event => event.stopPropagation());
-  // بلاغُ المالك 2026-09-28 (4.0.70): «التيرمينال لا أستطيع الكتابة فيه» — المفاتيحُ تصل xterm عبر حقله المخفيّ وحده،
+  // Esc يغلق قائمة زرّ اليمين قبل أن يبلغ xterm (حقلُه يوقف انتشارَ المفاتيح التي يعالجها) — طورُ الالتقاط لذلك.
+  root.addEventListener('keydown', event => { if (event.key === 'Escape' && !menu.hidden) { closeMenu(); event.preventDefault(); event.stopPropagation(); } }, true);
+  // 2026-09-28 (4.0.70): «التيرمينال لا أستطيع الكتابة فيه» — المفاتيحُ تصل xterm عبر حقله المخفيّ وحده،
   // وهو لا يُركَّز إلا بنقرةٍ داخل الشاشة نفسِها. نقرةٌ في أيّ موضعٍ من اللوح (الحاشية، الشريط، سطر الحالة) تعيد التركيزَ
   // إلى الطرفيّة الحيّة، وتُلتقط في طور الالتقاط كي لا يبتلعها زرٌّ أو منزلقٌ في الطريق.
   root.addEventListener('mousedown', event => {
@@ -26,15 +28,45 @@ export function mountNativeTerminal(host, bridge, attach) {
   const tabItems = document.createElement('div'); tabItems.className = 'nt-tabitems';
   let disposed = false, active = null, sequence = 0, creating = false, unlistenOutput, unlistenExit;
   const terminals = new Map(), early = new Map();
+  // 10-09 — لوحةُ ألوانٍ كاملة لكلّ سمة (16 لوناً + تحديدٌ ظاهر): كان «الأبيض» #eeeeee على خلفيةٍ بيضاء فيختفي نصّ،
+  // والتحديدُ #73a9e655 باهتاً حتى يبدو أنّ السحبَ لم يحدّد شيئاً.
+  const palette = dark => dark
+    ? { background: '#171717', foreground: '#e6e6e6', cursor: '#4f9cf0', cursorAccent: '#171717', selectionBackground: '#264f78', selectionInactiveBackground: '#3a3d41', black: '#000000', red: '#cd3131', green: '#0dbc79', yellow: '#e5e510', blue: '#2472c8', magenta: '#bc3fbc', cyan: '#11a8cd', white: '#e5e5e5', brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#23d18b', brightYellow: '#f5f543', brightBlue: '#3b8eea', brightMagenta: '#d670d6', brightCyan: '#29b8db', brightWhite: '#ffffff' }
+    : { background: '#ffffff', foreground: '#1f2328', cursor: '#2b80e6', cursorAccent: '#ffffff', selectionBackground: '#add6ff', selectionInactiveBackground: '#e5ebf1', black: '#24292f', red: '#cf222e', green: '#116329', yellow: '#7d4e00', blue: '#0969da', magenta: '#8250df', cyan: '#1b7c83', white: '#6e7781', brightBlack: '#57606a', brightRed: '#a40e26', brightGreen: '#1a7f37', brightYellow: '#633c01', brightBlue: '#218bff', brightMagenta: '#a475f9', brightCyan: '#3192aa', brightWhite: '#8c959f' };
+  const isDark = () => document.documentElement.dataset.theme === 'dark' || document.body.classList.contains('dark');
   const updateTheme = () => {
-    const dark = document.documentElement.dataset.theme === 'dark';
-    root.style.setProperty('--nt-background', dark ? '#171717' : '#ffffff');
-    root.style.setProperty('--nt-foreground', dark ? '#eeeeee' : '#242424');
-    for (const item of terminals.values()) { item.term.options.theme = { ...item.term.options.theme, background: dark ? '#171717' : '#ffffff', foreground: dark ? '#eeeeee' : '#242424' }; }
+    const dark = isDark(), colors = palette(dark);
+    root.style.setProperty('--nt-background', colors.background);
+    root.style.setProperty('--nt-foreground', colors.foreground);
+    for (const item of terminals.values()) item.term.options.theme = colors;
   };
   const themeObserver = new MutationObserver(updateTheme); themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']}); updateTheme();
   const button = (label, title, action) => { const el = document.createElement('button'); el.type = 'button'; el.textContent = label; el.title = title; el.setAttribute('aria-label', title); el.onclick = action; return el; };
   const fail = (error) => { if (!disposed) { status.textContent = L('Terminal: ', 'الطرفية: ') + String(error); status.classList.add('error'); } };
+  // 10-09 — النسخُ واللصق عبر حافظة النظام (أمرا Rust)؛ navigator.clipboard احتياطٌ — قراءتُه تحتاج إذناً لا يُمنح في WebView2.
+  const clipWrite = text => bridge.invoke('clipboard_write_text', { text }).catch(() => navigator.clipboard.writeText(text));
+  const clipRead = () => bridge.invoke('clipboard_read_text').catch(() => navigator.clipboard.readText());
+  let flashTimer = 0;
+  const flash = text => { status.textContent = text; status.classList.remove('error'); clearTimeout(flashTimer); flashTimer = setTimeout(() => { if (!disposed && active) status.textContent = active.closed ? status.textContent : (active.cwd || ''); }, 1400); };
+  const copySelection = item => { const text = item?.term.getSelection(); if (!text) return; clipWrite(text).then(() => { item.term.clearSelection(); flash(L('Copied to clipboard', 'نُسخ إلى الحافظة')); item.term.focus(); }).catch(fail); };
+  const pasteInto = item => { if (!item || item.closed) return; clipRead().then(text => { if (text) item.term.paste(text); item.term.focus(); }).catch(fail); };
+  const menu = document.createElement('div'); menu.className = 'nt-menu'; menu.setAttribute('role', 'menu'); menu.hidden = true;
+  const closeMenu = () => { menu.hidden = true; };
+  const openMenu = (event, item) => {
+    event.preventDefault();
+    const entry = (label, keys, disabled, action) => { const el = document.createElement('button'); el.type = 'button'; el.setAttribute('role', 'menuitem'); el.disabled = disabled; const name = document.createElement('span'); name.textContent = label; const hint = document.createElement('kbd'); hint.textContent = keys; el.append(name, hint); el.onclick = () => { closeMenu(); action(); }; return el; };
+    menu.replaceChildren(
+      entry(L('Copy', 'نسخ'), 'Ctrl+C', !item.term.hasSelection(), () => copySelection(item)),
+      entry(L('Paste', 'لصق'), 'Ctrl+V', item.closed, () => pasteInto(item)),
+      entry(L('Select all', 'تحديد الكل'), 'Ctrl+Shift+A', false, () => { item.term.selectAll(); item.term.focus(); }),
+      entry(L('Clear', 'مسح الشاشة'), '', false, () => { item.term.clear(); item.term.focus(); }));
+    menu.hidden = false;
+    const box = root.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+    menu.style.left = Math.max(4, Math.min(event.clientX - box.left, box.width - w - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(event.clientY - box.top, box.height - h - 4)) + 'px';
+  };
+  const onOutside = event => { if (!menu.hidden && !menu.contains(event.target)) closeMenu(); };
+  document.addEventListener('mousedown', onOutside, true);
   const resize = item => {
     if (disposed || item.closed || item.view.hidden || !item.view.isConnected || item.view.clientWidth < 24 || item.view.clientHeight < 24) return;
     try { item.fit.fit(); if (item.id) bridge.invoke('terminal_resize', { id: item.id, cols: Math.min(500, Math.max(2, item.term.cols)), rows: Math.min(200, Math.max(2, item.term.rows)) }).catch(fail); } catch (error) { fail(error); }
@@ -73,17 +105,22 @@ export function mountNativeTerminal(host, bridge, attach) {
     const tab = button('PowerShell ' + key, 'PowerShell ' + key, () => choose(item)); tab.className = 'nt-tab'; tab.setAttribute('role', 'tab');
     const item = { key, term: null, fit: null, view, tab, tabWrap, closed: false, id: null, cwd: null, observer: null };
     tabWrap.append(tab, button('×', L('Close terminal', 'إغلاق الطرفية'), () => close(item))); tabItems.append(tabWrap);
-    const dark = document.documentElement.dataset.theme === 'dark' || document.body.classList.contains('dark') || document.documentElement.getAttribute('data-theme') === 'dark';
-    const term = new Terminal({ cursorBlink: true, cursorStyle: 'bar', convertEol: false, fontFamily: 'Cascadia Mono, Consolas, monospace', fontSize: 13, lineHeight: 1.18, scrollback: 5000, theme: { background: dark ? '#171717' : '#ffffff', foreground: dark ? '#eeeeee' : '#242424', cursor: '#2b80e6', selectionBackground: '#73a9e655', black: '#343434', red: '#c43c37', green: '#258549', yellow: '#94752b', blue: '#2676c9', magenta: '#9253b3', cyan: '#207b85', white: '#eeeeee' } });
+    const dark = isDark();
+    const term = new Terminal({ cursorBlink: true, cursorStyle: 'block', cursorInactiveStyle: 'outline', convertEol: false, fontFamily: '"Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace', fontSize: 13, lineHeight: 1.2, letterSpacing: 0, scrollback: 10000, rightClickSelectsWord: false, macOptionIsMeta: true, windowsPty: { backend: 'conpty' }, allowProposedApi: false, theme: palette(dark) });
     const fit = new FitAddon(); term.loadAddon(fit); item.term = term; item.fit = fit; terminals.set(key, item); choose(item); term.open(view);
     item.observer = new ResizeObserver(() => resize(item)); item.observer.observe(view);
     let inputQueue = Promise.resolve();
     term.onData(data => { if (!item.id || item.closed) return; inputQueue = inputQueue.then(() => bridge.invoke('terminal_write', { id: item.id, data })).catch(fail); });
+    // مثل Windows Terminal: Ctrl+C ينسخ حين يوجد تحديد (وإلّا يبقى ^C للصدفة)، وCtrl+V يلصق، وCtrl+Shift+C/V وCtrl/Shift+Insert كذلك.
     term.attachCustomKeyEventHandler(event => {
-      if (event.type === 'keydown' && event.ctrlKey && event.shiftKey && event.code === 'KeyC') { const text = term.getSelection(); if (text) navigator.clipboard.writeText(text).catch(fail); return false; }
-      if (event.type === 'keydown' && event.ctrlKey && event.shiftKey && event.code === 'KeyV') { navigator.clipboard.readText().then(text => term.paste(text)).catch(fail); return false; }
+      if (event.type !== 'keydown' || event.altKey) return true;
+      const code = event.code;
+      if (event.ctrlKey && (code === 'KeyC' || code === 'Insert') && (event.shiftKey || term.hasSelection())) { event.preventDefault(); copySelection(item); return false; }
+      if ((event.ctrlKey && code === 'KeyV') || (event.shiftKey && !event.ctrlKey && code === 'Insert')) { event.preventDefault(); pasteInto(item); return false; }
+      if (event.ctrlKey && event.shiftKey && code === 'KeyA') { event.preventDefault(); term.selectAll(); return false; }
       return true;
     });
+    view.addEventListener('contextmenu', event => openMenu(event, item));
     try {
       await listenReady;
       if (disposed) return;
@@ -107,7 +144,7 @@ export function mountNativeTerminal(host, bridge, attach) {
   command.append(input, button(L('Run', 'تنفيذ'), L('Run agent command', 'تنفيذ أمر الوكيل'), () => { if (input.value.trim()) { bridge.submit(input.value.trim()); input.value = ''; } }));
   command.onsubmit = event => { event.preventDefault(); if (input.value.trim()) { bridge.submit(input.value.trim()); input.value = ''; } };
   const receipts = document.createElement('div'); receipts.className = 'nt-receipts'; receipts.id = 'terminalrows'; tools.removeAttribute('id'); tools.append(receipts, command); area.append(tools);
-  root.append(tabs, area, status); host.appendChild(root); attach(receipts);
+  root.append(tabs, area, status, menu); host.appendChild(root); attach(receipts);
   void create();
-  return () => { disposed = true; themeObserver.disconnect(); unlistenOutput?.(); unlistenExit?.(); attach(null); for (const item of [...terminals.values()]) void close(item); root.remove(); };
+  return () => { disposed = true; themeObserver.disconnect(); document.removeEventListener('mousedown', onOutside, true); clearTimeout(flashTimer); unlistenOutput?.(); unlistenExit?.(); attach(null); for (const item of [...terminals.values()]) void close(item); root.remove(); };
 }

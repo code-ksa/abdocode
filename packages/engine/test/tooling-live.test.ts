@@ -68,6 +68,14 @@ test.skipIf(process.platform !== "win32")("grep flags, medit all-or-nothing, and
     const bad = await turn(`نفّذ: read ${join(project, "notes.md")}`, "نفّذ: medit notes.md <<<\nline two\n=>\nX\n@@\nmissing text\n=>\nY")
     expect(bad[1]).toContain("الحزمة 2")
     expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("LINE ONE\nline two\nLINE THREE\n")
+    // 10-08 (مقيس حيّاً): مثالُ الكتالوج منسوخاً حرفياً ثمّ الملفُّ كلُّه بلا «=>» — تحت medit وتحت edit؛ الردُّ يسمّي العيوبَ والملفُّ لا يُمسّ.
+    const copied = await turn("نفّذ: read notes.md", "نفّذ: medit notes.md <<<\nالقديم الأوّل\n=>\nالجديد الأوّل\n@@\nLINE ONE\nline two\nLINE 3")
+    expect(copied[1]).toContain("الحزمة 1 نصُّ المثال من الكتالوج حرفياً")
+    expect(copied[1]).toContain("write notes.md <<<")
+    const underEdit = await turn("نفّذ: read notes.md", "نفّذ: edit notes.md <<<\nالقديم الأول\n=>\nالجديد الأول\n@@\nLINE ONE\nline two\nLINE 3")
+    expect(underEdit[1]).toContain("edit لا يقبل «<<<»")
+    expect(underEdit[1]).toContain("الحزمة 2 بلا سطر «=>»")
+    expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("LINE ONE\nline two\nLINE THREE\n")
     // run --bg: معرّفٌ، ثمّ logs يرى الخرج، ثمّ stop يوقف عمليةً ما زالت تعمل
     // 🔴 **اسأل القرصَ لا الدالّة**: أثرُ الشِّلّ يُدخَل في النواة ويُسجَّل في دفترها قبل إقلاعه
     // ويُسوّى بخروجه. العدُّ من `journal_effects` في الملفّ الذي تكتبه النواة نفسُها — فدالّةٌ

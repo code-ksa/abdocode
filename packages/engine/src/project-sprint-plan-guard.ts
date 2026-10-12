@@ -11,7 +11,9 @@ export interface SprintPlanWrite {
 const PLAN = "abdo-sprints.md"
 
 /** فاصل مقاطع السبرنتات وصيغ الحالة — مشتركة بين حارس التقدم وعدّاد المفتوح (سماحة سقف الدور). */
-const SPRINT_SECTION_SPLIT = /^(?:#{1,6}\s+)?(?=(?:ال)?سبرنت\s+\d+|sprint\s+\d+)/gimu
+// 10-10 (مقيس في مهمّة n8n): خطّةٌ عناوينُها «## S0 — …» حتى «## S16 — …» قرأتها «sprint show» «بلا عناوين سبرنت مرقّمة» فلم يُغلق سبرنتٌ بالأداة قطّ.
+// صيغةُ «S<رقم>» تُقبل عنواناً (بعد #) وحده — «| S1 |» في جدولٍ ليس عنواناً.
+const SPRINT_SECTION_SPLIT = /^(?:#{1,6}\s+(?=S\d{1,2}\b)|(?:#{1,6}\s+)?(?=(?:ال)?سبرنت\s+\d+|sprint\s+\d+))/gimu
 const SPRINT_STATUS_LINE = /^\s*\*{0,2}(?:الحالة|status)\*{0,2}\s*[:：-]\s*\*{0,2}([^\r\n]*)/imu
 const SPRINT_DONE = /^(?:\[[xX]\](?:\s.*)?|(?:✅\s*)?(?:مكتمل|completed|done)[.!\s*]*)$/iu
 /**
@@ -157,11 +159,13 @@ export const openSprintCount = (projectDir: string): number | undefined => {
 
 const firstLine = (s: string): string => (s.split(/\r?\n/u, 1)[0] ?? "").replace(/^#+\s*/u, "").trim().slice(0, 120)
 const fieldOf = (section: string, pattern: RegExp): string => (section.match(pattern)?.[1] ?? "").trim().slice(0, 240)
-const SPRINT_GATE_LINE = /^\s*\*{0,2}(?:بوابة\s*القبول|معيار\s*القبول|acceptance\s*gate)\*{0,2}\s*[:：-]\s*\*{0,2}([^\r\n]*)/imu
+// 10-11 (مقيس على n8n-clone): الخطّةُ تكتب «- **بوابة**: `seo` PASS…» فلم يُطابَق إلا «بوابة القبول:» — وصل المحكّمَ عنوانُ «S15 — SEO والبحث»
+// وحده فقرأ «البحث» ميزةَ بحثٍ وحجب الاكتمال. يُقبل البندُ والتشديدُ و«بوابة» وحدها.
+const SPRINT_GATE_LINE = /^\s*(?:[-*•]\s+)?\*{0,2}(?:ال)?(?:بو\u0651?ابة(?:\s*القبول)?|معيار\s*القبول|acceptance\s*gate|gate)\*{0,2}\s*[:：-]\s*\*{0,2}([^\r\n]*)/imu
 const NEXT_ACTION_LINE = /NEXT_ACTION\s*[:：=-]?\s*([^\r\n]*)/u
 
 /**
- * 09-29 (أمر المالك: «يشتغل من خطّةٍ في الوعي، وعند اكمل يكون عارف الخطوات التالية»): سطرٌ للنظام كلَّ حقبة من
+ * 09-29: سطرٌ للنظام كلَّ حقبة من
  * ABDO-SPRINTS.md وABDO-HANDOFF.md — كم أُغلق، أوّلُ سبرنتٍ مفتوح ببوّابته، وNEXT_ACTION. الملفُّ غائب = "" (لا اختراع).
  */
 export const sprintBrief = (projectDir: string): string => {
@@ -232,7 +236,7 @@ export const sprintAdvance = (projectDir: string, openAtStart: number | undefine
  * دليلَه. الدليلُ إلزاميّ (الادّعاءُ بلا دليلٍ لا يُكتب)، والمراجعةُ المستقلّة ما زالت تحكم على الادّعاء.
  */
 export const SPRINT_USAGE = "الصيغة: sprint show | sprint done <رقم> :: <الدليل المقيس (إيصال build/probe/shot)>"
-const sprintHeading = (n: number): RegExp => new RegExp(`^(?:#{1,6}\\s+)?(?:ال)?(?:سبرنت|sprint)\\s*${n}(?!\\d)`, "imu")
+const sprintHeading = (n: number): RegExp => new RegExp(`^(?:#{1,6}\\s+S${n}(?!\\d)|(?:#{1,6}\\s+)?(?:ال)?(?:سبرنت|sprint)\\s*${n}(?!\\d))`, "imu")
 export function sprintShow(projectDir: string): string {
   let text: string
   try { text = readFileSync(join(projectDir, "ABDO-SPRINTS.md"), "utf-8") } catch { return "لا ABDO-SPRINTS.md في المشروع — لا خطّةَ سبرنتات." }
@@ -254,7 +258,7 @@ export function sprintDone(projectDir: string, n: number, evidence: string): { r
   const scan = maskFences(text).split(/\r?\n/u)
   const start = scan.findIndex((l) => sprintHeading(n).test(l))
   if (start < 0) return { ok: false, text: `لا سبرنتَ برقم ${n} في ABDO-SPRINTS.md — sprint show للقائمة.` }
-  let end = scan.findIndex((l, i) => i > start && /^(?:#{1,6}\s+)?(?:ال)?(?:سبرنت|sprint)\s*\d+/iu.test(l))
+  let end = scan.findIndex((l, i) => i > start && /^(?:#{1,6}\s+S\d{1,2}\b|(?:#{1,6}\s+)?(?:ال)?(?:سبرنت|sprint)\s*\d+)/iu.test(l))
   if (end < 0) end = lines.length
   let statusAt = scan.findIndex((l, i) => i > start && i < end && /^\s*\*{0,2}(?:الحالة|status)\*{0,2}\s*[:：-]/iu.test(l))
   if (!sprintIsOpen(lines.slice(start, end).join("\n"))) return { ok: true, text: `سبرنت ${n} مكتملٌ من قبل — لا تغيير.\n${sprintShow(projectDir)}` }
@@ -278,8 +282,12 @@ export function sprintDone(projectDir: string, n: number, evidence: string): { r
  * 09-30 (مقيس بعاملين): المراجِعُ طالب بدليل سبرنت 1 المُغلَق في جلسةٍ سابقة، وبوّابةُ سبرنت 4 تطلب shot فاكتفى النموذجُ بـprobe لأنّ
  * شرطَ المتصفّح يقرأ «اكمل» وحدَها. ما كان مفتوحاً عند بدء الدور (بعناوينه وبوّاباته) هو المطلوبُ فيه — للحكّام ولشرط المتصفّح.
  */
+/** بنودُ السبرنت المكتوبة (سطورُ «- …» بلا سطر البوّابة) — حدودُه كما كتبها المخطِّط، لا كما يوحي عنوانُه. */
+const sprintItems = (section: string): string => section.split(/\r?\n/u).slice(1)
+  .filter((l) => /^\s*[-*•]\s+/u.test(l) && !SPRINT_GATE_LINE.test(l))
+  .map((l) => l.replace(/^\s*[-*•]\s+/u, "").replace(/\*\*/gu, "").trim()).join("؛ ").slice(0, 500)
 export const openSprintsSummary = (projectDir: string): string => {
   let text: string
   try { text = readFileSync(join(projectDir, "ABDO-SPRINTS.md"), "utf-8") } catch { return "" }
-  return sprintSectionsOf(text).filter(sprintIsOpen).map((s) => `- ${firstLine(s)}${fieldOf(s, SPRINT_GATE_LINE) ? ` — بوّابتُه: ${fieldOf(s, SPRINT_GATE_LINE)}` : ""}`).join("\n")
+  return sprintSectionsOf(text).filter(sprintIsOpen).map((s) => `- ${firstLine(s)}${sprintItems(s) ? ` — بنودُه: ${sprintItems(s)}` : ""}${fieldOf(s, SPRINT_GATE_LINE) ? ` — بوّابتُه: ${fieldOf(s, SPRINT_GATE_LINE)}` : ""}`).join("\n")
 }

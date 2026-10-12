@@ -36,6 +36,10 @@ export interface PageMeasurement {
   readonly unnamedControls: readonly string[]
   readonly unlabeledFields: readonly string[]
   readonly overlaps: readonly string[]
+  /** 10-09 — زرٌّ/رابطٌ/شارةٌ محتواها أعرضُ أو أطولُ منها والفيضُ ظاهر: يندلق فوق جاره (مقيس: «قائمة الحساب» 32px ومحتواها 63 ⇦ الأفاتار فوق «؟»). */
+  readonly controlSpills?: readonly string[]
+  /** 10-09 — اسمُ المنصّة أو عنوانٌ مقطوعٌ بنقاط (text-overflow) — مقيس: «…AI API MARKETPLACE» 193>166 على 1920. */
+  readonly truncatedTexts?: readonly string[]
   /** 10-02 — قواعدُ الأنماط المطبّقة (بلا @font-face) وروابطُ ظاهرةٌ بلون المتصفّح الافتراضيّ: صفحةٌ بلا ورقة أنماطها. غائبةٌ في قياسٍ قديم. */
   readonly styleRules?: number
   readonly linkCount?: number
@@ -123,6 +127,19 @@ export const MEASURE_SCRIPT = String.raw`(() => {
       if (smaller > 0 && (w * h) / smaller > 0.3) overlaps.push(label(a.el) + " «" + (a.el.innerText || "").trim().slice(0, 20) + "» ⟂ " + label(b.el) + " «" + (b.el.innerText || "").trim().slice(0, 20) + "»");
     }
   }
+  // 10-09 — اندلاقُ المتحكّمات: تراكبُ النصوص لا يرى أيقونتين بلا نصّ، والفيضُ لا يُقاس إلّا على الصفحة كلّها. عنصرٌ تفاعليّ (أو شارة)
+  // فيضُه ظاهر ومحتواه أعرضُ أو أطولُ منه بأكثر من 2px يرسم فوق جاره. والمقطوعُ بنقاطٍ في الرأس/الملاحة/العناوين يُسمّى تحذيراً.
+  const controlSpills = [...document.querySelectorAll("button, a, [role=button], [role=tab], [role=menuitem], [class*=badge], [class*=chip], [class*=pill]")].filter((el) => {
+    if (!visible(el) || el.clientWidth === 0) return false;
+    const cs = getComputedStyle(el);
+    if (cs.overflowX !== "visible" && cs.overflowY !== "visible") return false;
+    return el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2;
+  }).slice(0, 6).map((el) => label(el) + " " + el.scrollWidth + "x" + el.scrollHeight + ">" + el.clientWidth + "x" + el.clientHeight);
+  const truncatedTexts = [...document.querySelectorAll("header *, nav *, h1, h2, h3")].filter((el) => {
+    if (!visible(el) || el.clientWidth === 0) return false;
+    const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length > 1);
+    return own && getComputedStyle(el).textOverflow === "ellipsis" && el.scrollWidth > el.clientWidth + 1;
+  }).slice(0, 4).map((el) => label(el) + " «" + (el.textContent || "").trim().slice(0, 30) + "» " + el.scrollWidth + ">" + el.clientWidth);
   // 10-02 — صفحةٌ بلا أنماطها: قواعدُ الأوراق (متداخلةً في @layer/@media) بلا @font-face، وروابطُ بلون المتصفّح الافتراضيّ.
   let styleRules = 0;
   const countRules = (rules) => { for (const r of rules) { if (r.type === 5) continue; if (r.cssRules && r.cssRules.length) countRules(r.cssRules); else styleRules++; } };
@@ -138,7 +155,7 @@ export const MEASURE_SCRIPT = String.raw`(() => {
     textLength: (body && body.innerText ? body.innerText : "").trim().length,
     h1Count: [...document.querySelectorAll("h1")].filter(visible).length,
     imgNoAlt: [...document.querySelectorAll("img:not([alt])")].filter(visible).length,
-    unnamedControls, unlabeledFields, overlaps,
+    unnamedControls, unlabeledFields, overlaps, controlSpills, truncatedTexts,
   });
 })()`
 
@@ -165,6 +182,8 @@ export function analyzePage(m: PageMeasurement, ctx: { readonly path: string; re
   if (m.inlineDvh) add("100dvh", "warn", "inline <style>", "svh / min-height", "Firefox Android scroll jump")
 
   if (m.overlaps.length > 0) add("text-overlap", "error", m.overlaps.length, 0, m.overlaps.slice(0, 3).join(" | "))
+  if ((m.controlSpills?.length ?? 0) > 0) add("control-spill", "error", m.controlSpills!.length, 0, `محتوى المتحكّم أكبرُ منه ويُرسم فوق جاره: ${m.controlSpills!.slice(0, 3).join(" | ")}`)
+  if ((m.truncatedTexts?.length ?? 0) > 0) add("text-truncated", "warn", m.truncatedTexts!.length, 0, `نصٌّ مقطوعٌ بنقاط في الرأس/الملاحة/العناوين: ${m.truncatedTexts!.slice(0, 3).join(" | ")}`)
   // 10-02 — مقيس: إعادةُ كتابة layout.tsx أسقطت import globals.css فخرج الموقعُ كلُّه بأنماط المتصفّح، ولم يحمرّ فحصٌ واحد (لا فيضان ولا تراكب).
   if (m.status < 400 && m.styleRules !== undefined && (m.styleRules < UNSTYLED_RULES || ((m.linkCount ?? 0) >= 5 && (m.uaLinks ?? 0) / (m.linkCount ?? 1) >= 0.6))) {
     add("unstyled", "error", `${m.styleRules} rules · ${m.uaLinks ?? 0}/${m.linkCount ?? 0} default-blue links`, "the app stylesheet applied", "the page renders with browser defaults — check that the root layout imports the global stylesheet and that the CSS build includes it")

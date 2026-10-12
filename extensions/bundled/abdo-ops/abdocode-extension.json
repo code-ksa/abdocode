@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "abdo-ops",
+  "name": "Abdo Ops (Abdo Code)",
+  "version": "1.0.0",
+  "description": "مهاراتُ التشغيل التي يعمل بها مهندسٌ متمرّس: خوادم أوبونتو، وNode 24، والحزم، والنشر بإصداراتٍ ورجوع، والإيداع والدفع، والاختبار بتوأمٍ وطفرة، والتحقّق قبل ادّعاء الإنجاز — كلُّ خطوةٍ تُقاس وتُثبت بإيصال.",
+  "skills": ["skills/ubuntu-server", "skills/node-24", "skills/packages", "skills/deploy", "skills/git-commit", "skills/git-push", "skills/testing", "skills/verify-delivery"],
+  "mcpServers": []
+}

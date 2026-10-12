@@ -56,10 +56,11 @@ describe("السكربت — الوعيُ بالـDPI وUTF-8 وتحديدُ pid
     expect(s).toContain("if ($cn -match 'EDIT|RICHEDIT|TEXTBOX') { return 'Edit' }")
     expect(s).toContain("if (-not $cur.IsPassword)") // لا قيمةَ لكلمة مرور
   })
-  test("set يستبدل لا يُلحق (EM_SETSEL للمقبض الأصليّ، Ctrl+A لغيره) ويقرأ راجعاً", () => {
+  // 10-11 — المقبضُ الأصليّ يُستبدل نصُّه برسالة WM_SETTEXT (لا تمسّها المقدّمة) بدل EM_SETSEL ثمّ مفاتيح (desk-focus-proof).
+  test("set يستبدل لا يُلحق (WM_SETTEXT للمقبض الأصليّ، Ctrl+A لغيره) ويقرأ راجعاً", () => {
     const s = desktopScript({ kind: "set", ref: 2, text: "abc" }, "", BOUND, UI)
     expect(s).toContain("$idx = 1")
-    expect(s).toContain("SendMessage([IntPtr]$nh, 0x00B1, [IntPtr]::Zero, (New-Object IntPtr (-1)))")
+    expect(s).toContain("if ($nh -ne 0) { [void][AbdoDesk]::SendMessageText([IntPtr]$nh, 0x000C, [IntPtr]::Zero,")
     expect(s).toContain("[AbdoDesk]::KeyDown(17); [AbdoDesk]::KeyDown(65)")
     expect(s).toContain("$verified = ($null -ne $readback)")
     expect(s).toContain("$expType = 'Edit'")

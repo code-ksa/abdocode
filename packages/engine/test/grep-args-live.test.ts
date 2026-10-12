@@ -20,7 +20,12 @@ describe("grep arguments as the model writes them (GNU grep)", () => {
     expect(a).toMatchObject({ pattern: "avatar", paths: ["."], ignoreCase: true, includes: ["*.tsx"], ignored: [] })
     const b = parseGrepArgs(tokenizeArgs(`-rni "x y" src | head -30`))
     expect(b).toMatchObject({ pattern: "x y", paths: ["src"], ignoreCase: true, ignored: ["| head -30"] })
-    expect(parseGrepArgs(tokenizeArgs(`-A 50 "Sprint 14" f.md`))).toMatchObject({ pattern: "Sprint 14", context: 5, paths: ["f.md"] })
+    // 10-08: -A بعدُ وحده كما في GNU، وبلا قصٍّ صامت (كان سياقاً متماثلاً ≤5 فلم يرَ النموذجُ جسدَ السبرنت).
+    expect(parseGrepArgs(tokenizeArgs(`-A 50 "Sprint 14" f.md`))).toMatchObject({ pattern: "Sprint 14", before: 0, after: 50, paths: ["f.md"] })
+    expect(parseGrepArgs(tokenizeArgs(`-B3 -C 2 x`))).toMatchObject({ before: 3, after: 2 })
+    expect(parseGrepArgs(tokenizeArgs(`--after-context=7 x`))).toMatchObject({ before: 0, after: 7 })
+    expect(parseGrepArgs(tokenizeArgs(`-A 100 x`))).toMatchObject({ after: 60, contextAsked: 100 })
+    expect(parseGrepArgs(tokenizeArgs(`-A 60 x`)).contextAsked).toBeUndefined()
     expect(parseGrepArgs(tokenizeArgs(`-c avatar f.tsx`))).toMatchObject({ pattern: "avatar", count: true, paths: ["f.tsx"] })
     expect(parseGrepArgs(tokenizeArgs(`-Z x`)).ignored).toEqual(["-Z"])
     // الصيغةُ القديمة باقية: النمطُ ثمّ glob، و--type/--files.
@@ -42,7 +47,7 @@ test.skipIf(process.platform !== "win32")("the real grep tool on disk: GNU forms
   writeFileSync(join(project, "package.json"), JSON.stringify({ name: "proj", version: "1.0.0" }))
   writeFileSync(join(project, "src", "components", "header.tsx"), `export const H = () => <AvatarImage src="/avatar.png" alt="" />\n`)
   writeFileSync(join(project, "src", "components", "notes.css"), `.avatar { color: red }\n`)
-  writeFileSync(join(project, "PLAN.md"), "# plan\n## Sprint 14: redesign\nالحالة: مفتوح\n")
+  writeFileSync(join(project, "PLAN.md"), "# plan\n## Sprint 14: redesign\nالحالة: مفتوح\n" + Array.from({ length: 80 }, (_, i) => `row ${i + 4}`).join("\n") + "\n")
   let asked = 0
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const body = await request.json() as { stream?: boolean; messages?: { role: string; content: unknown }[] }
@@ -53,6 +58,8 @@ test.skipIf(process.platform !== "win32")("the real grep tool on disk: GNU forms
       asked += 1
       content = asked === 1
         ? `نفّذ: grep -i avatar . -r --include="*.tsx"\nنفّذ: grep -n "Sprint 14" PLAN.md\nنفّذ: grep -rn avatar src | head -30\nنفّذ: grep avatar nowhere/`
+        // حزمةُ القراءة أربعةُ نداءاتٍ في الردّ الواحد — السياقُ في ردٍّ ثانٍ.
+        : asked === 2 ? `نفّذ: grep -n "Sprint 14" PLAN.md -A 40\nنفّذ: grep -n "Sprint 14" PLAN.md -A 100`
         : "وجدتُ المطابقات."
     }
     if (body.stream === false) return Response.json({ choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 5, completion_tokens: 5 } })
@@ -73,7 +80,7 @@ test.skipIf(process.platform !== "win32")("the real grep tool on disk: GNU forms
     send({ kind: "submit", mode: "full-access", turn: { id: "g-1", body: "GREP-GNU ابحث" } })
     await wait(() => frames.some((f) => f.turnId === "g-1" && ["done", "refused", "unresolved"].includes(f.kind)))
     const outs = frames.filter((f) => f.kind === "tool-result" && f.turnId === "g-1").map((f) => String(f.output).replaceAll("\\", "/"))
-    expect(outs).toHaveLength(4)
+    expect(outs).toHaveLength(6)
     // «.» مع --include: الملفُّ tsx وحده، لا css
     expect(outs[0]).toContain("src/components/header.tsx:1")
     expect(outs[0]).not.toContain("notes.css")
@@ -86,5 +93,13 @@ test.skipIf(process.platform !== "win32")("the real grep tool on disk: GNU forms
     // مسارٌ غائب: «لا مطابقة» ومعها اسمُه — لا نفيٌ صامت
     expect(outs[3]).toContain("لا مطابقة")
     expect(outs[3]).toContain("غير موجود: nowhere/")
+    // -A 40: أربعون سطراً بعدها، ولا سطرَ قبلها
+    expect(outs[4]).toContain("PLAN.md-42- row 42")
+    expect(outs[4]).not.toContain("PLAN.md-43-")
+    expect(outs[4]).not.toContain("PLAN.md-1-")
+    // -A 100 فوق السقف: ستّون ويُسمّى السقف
+    expect(outs[5]).toContain("PLAN.md-62- row 62")
+    expect(outs[5]).not.toContain("PLAN.md-63-")
+    expect(outs[5]).toContain("السياقُ 100 سطراً فوق سقف 60")
   } finally { child.kill(); await child.exited; server.stop(true); await errors; for (let i = 0; i < 20; i += 1) { try { rmSync(base, { recursive: true, force: true }); break } catch { await Bun.sleep(250) } } }
 }, 180_000)

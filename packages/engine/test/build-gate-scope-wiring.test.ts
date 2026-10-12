@@ -9,7 +9,7 @@ const cli = readFileSync(join(import.meta.dir, "..", "src", "cli.ts"), "utf8")
 
 test("create words no longer imply a build, and the npm gates require the script to exist", () => {
   // ن3: كلماتُ القبول من وحدة acceptance-goal-words (المساراتُ وأسماءُ الملفّات لا تُشعلها)
-  expect(cli).toContain("const requiresBuild = !planningOnly && goalRequiresBuild(effectiveGoal)")
+  expect(cli).toContain("const requiresBuild = !planningOnly && !parallelWorker && goalRequiresBuild(effectiveGoal)")
   expect(cli).not.toContain("|بناءً|أنشئ|انشئ|إنشاء|انشاء)/iu.test(effectiveGoal)")
   expect(cli).toContain("const packageHasScript = (name: string): boolean =>")
   expect(cli).toContain('requiresTypecheck && !successfulTypecheck && pending === undefined && packageHasScript("typecheck")')

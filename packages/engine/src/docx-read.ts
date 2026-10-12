@@ -41,18 +41,23 @@ function zipEntries(bytes: Uint8Array): ZipEntry[] {
   return out
 }
 
-/** جزءٌ واحد من الحزمة نصّاً، أو undefined إن غاب. */
-export function zipPart(bytes: Uint8Array, name: string): string | undefined {
+/** أسماءُ ملفّات الحزمة (بلا المجلّدات) — لقارئ تصدير الذاكرة (`memory-import.ts`) الذي يبحث بالاسم لا بمسارٍ ثابت. */
+export function zipEntryNames(bytes: Uint8Array): string[] {
+  return zipEntries(bytes).filter((e) => !e.name.endsWith("/")).map((e) => e.name)
+}
+
+/** جزءٌ واحد من الحزمة نصّاً، أو undefined إن غاب. `maxBytes` سقفُ المفكوك (افتراضُه سقفُ Word). */
+export function zipPart(bytes: Uint8Array, name: string, maxBytes: number = DOCX_XML_MAX): string | undefined {
   const entry = zipEntries(bytes).find((e) => e.name === name)
   if (entry === undefined) return undefined
-  if (entry.size > DOCX_XML_MAX) throw new Error(`${name} مفكوكاً ${entry.size} بايت — فوق السقف ${DOCX_XML_MAX}`)
+  if (entry.size > maxBytes) throw new Error(`${name} مفكوكاً ${entry.size} بايت — فوق السقف ${maxBytes}`)
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   if (view.getUint32(entry.offset, true) !== 0x04034b50) throw new Error(`رأسٌ محلّيّ تالف لـ${name}`)
   const start = entry.offset + 30 + view.getUint16(entry.offset + 26, true) + view.getUint16(entry.offset + 28, true)
   const raw = bytes.subarray(start, start + entry.compressed)
   let data: Uint8Array
   if (entry.method === 0) data = raw
-  else if (entry.method === 8) data = inflateRawSync(raw, { maxOutputLength: DOCX_XML_MAX })
+  else if (entry.method === 8) data = inflateRawSync(raw, { maxOutputLength: maxBytes })
   else throw new Error(`ضغطٌ غير مدعوم (${entry.method}) في ${name}`)
   return new TextDecoder().decode(data)
 }

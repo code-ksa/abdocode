@@ -68,7 +68,7 @@ describe("S13.5 — المفتاحان الميتان صار لهما قارئ",
   test("القارئان حقيقيّان: التوزيع والإعلان يسألان delegation، والكتالوج يسأل reviewer", () => {
     expect(source).toContain('if (!delegationEnabled()) {')
     // 4.0.52: «أقصى» بلا فريقٍ كان يَعِد ولا يُنفّذ — القارئُ صار دالّةً: المفتاح أو وضعُ عملٍ يوازي.
-    expect(source).toContain('const delegationEnabled = (): boolean => pluginOnNow("delegation") ||')
+    expect(source).toContain('const delegationEnabled = (): boolean => process.env.ABDO_PARALLEL_WORKER !== "1" && (pluginOnNow("delegation") ||')
     expect(source).toContain('const delegationOn = delegationEnabled()')
     expect(source).toContain('const reviewerOn = pluginOnNow("reviewer")')
     // هـ2 (2026-09-07) كان أربعةَ قرّاء مباشرين؛ و4.0.52 جمعهم في `delegationEnabled()` فصار المفتاحُ يُقرأ

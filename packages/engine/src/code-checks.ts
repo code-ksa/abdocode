@@ -15,7 +15,9 @@ import { join, relative } from "node:path"
 export type CodeCheckSeverity = "error" | "warn"
 export interface CodeFinding { readonly check: string; readonly severity: CodeCheckSeverity; readonly file: string; readonly detail: string }
 
-const SKIP_DIR = /^(?:node_modules|\.next|\.git|dist|build|out|coverage|\.turbo|\.vercel)$/u
+// 10-11 (مقيس على n8n-clone): ‏`.abdo/` حالةُ المحرّك ومراجعُ ملتقطة من مواقع الغير (‎.abdo/reference/*/scripts) — 17 تحذيرَ «localhost مكتوب»
+// في سكربتات n8n.io نفسِها ملأت release-check. ليست شيفرةَ المشروع فلا تُفحص.
+const SKIP_DIR = /^(?:node_modules|\.next|\.git|\.abdo|dist|build|out|coverage|\.turbo|\.vercel)$/u
 const SOURCE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/u
 const TEST_FILE = /(?:^|[\\/])(?:test|tests|__tests__|e2e|cypress|playwright)[\\/]|\.(?:test|spec)\.[jt]sx?$/u
 const CONFIG_FILE = /(?:^|[\\/])(?:next|vite|vitest|jest|playwright|tailwind|postcss|eslint)\.config\.[cm]?[jt]s$|(?:^|[\\/])\.env/u

@@ -22,6 +22,7 @@ import { homedir } from "node:os"
 import { isAbsolute, basename, join, resolve } from "node:path"
 import { browserSiteAllowed } from "../browser-site-policy"
 import { judge } from "../mind/surface"
+import { REFERENCE_ROOT, referenceDir, referenceFiles, referenceReceipt, type ReferenceCopy } from "../reference-save"
 
 export const CHROME_BRIDGE_PROTOCOL = "2025-11-25"
 export const DEFAULT_BRIDGE_PORT = 9367
@@ -32,7 +33,11 @@ export const UPLOAD_SECRET_FILE = /(^|[\\/])(\.env(\..*)?|\.npmrc|\.netrc|id_(rs
 type RpcId = string | number | null
 type RpcRequest = { jsonrpc?: string; id?: RpcId; method?: string; params?: Record<string, unknown> }
 
-export interface PageNode { readonly ref: string; readonly role: string; readonly name: string; readonly state?: "filled" | "empty" }
+/**
+ * `autofilled` (الإضافة ≥0.6.6): المتصفّحُ عبّأ الحقلَ بحفظه ويخفي قيمتَه عن السكربت حتى أوّل لمسة. كان `isNode` يُسقط العقدةَ كلَّها
+ * بهذه الحالة (مقيس 10-10) فتختفي خانةُ كلمة المرور من الشجرة ولا يظهر تلميحُ الدخول — وهي أهمُّ حالةٍ فيها.
+ */
+export interface PageNode { readonly ref: string; readonly role: string; readonly name: string; readonly state?: "filled" | "empty" | "autofilled" }
 
 /**
  * صفحةُ دخولٍ في شجرة الصفحة: حقلُ كلمة مرورٍ ظاهر. الحكمُ من حالة الحقول لا من قيمها (الإضافةُ 0.6.2 لا ترسل
@@ -44,7 +49,7 @@ export const loginHint = (nodes: readonly PageNode[]): string | undefined => {
   if (secret === undefined) return undefined
   const submit = nodes.find((n) => n.role === "button" && /دخول|login|sign\s*in|log\s*in/iu.test(n.name))
   const button = submit === undefined ? "زرّ الدخول" : `[${submit.ref}] «${submit.name}»`
-  if (secret.state === "filled") return `صفحةُ دخولٍ وحقولُها معبّأة (حفظُ كروم): اضغط ${button} بـchrome.tap بنفسك — لا تكتب شيئاً ولا تطلب من المستخدم الضغط.`
+  if (secret.state === "filled" || secret.state === "autofilled") return `صفحةُ دخولٍ وحقولُها معبّأة (حفظُ المتصفّح${secret.state === "autofilled" ? " — القيمةُ مخفيّةٌ عن السكربت حتى أوّل لمسة، وهي موجودة" : ""}): اضغط ${button} بـchrome.tap بنفسك — لا تكتب شيئاً ولا تطلب من المستخدم الضغط.`
   if (secret.state === "empty") return `صفحةُ دخولٍ وكلمةُ المرور فارغة: قل للمستخدم «سجّل الدخول في هذا التبويب» وانتظره — لا تطلب كلمةَ المرور ولا تكتبها.`
   // إضافةٌ قبل 0.6.2 لا ترسل الحالة — لا يُدّعى «فارغة»؛ يُسمّى الجهلُ ويُطلب تحديثُ الإضافة.
   return `صفحةُ دخولٍ وحالةُ حقولها غيرُ معروفة (الإضافةُ أقدمُ من 0.6.2 — أعد تحميلها من chrome://extensions): اطلب من المستخدم تسجيلَ الدخول في هذا التبويب — لا تطلب كلمةَ المرور ولا تكتبها.`
@@ -76,7 +81,7 @@ export const BRIDGE_TOOLS = Object.freeze([
   { name: "look", description: "نصُّ الصفحة أو عنصرٍ بمرجعه مع أنماطه المحسوبة وحالةِ تركيزه", inputSchema: { type: "object", properties: { ref: { type: "string", maxLength: 12 } }, additionalProperties: false } },
   { name: "tap", description: "نقرةٌ موثوقة على عنصرٍ بمرجعه (عبر منقّح كروم — يرى المستخدم الشارة)", inputSchema: { type: "object", properties: { ref: { type: "string", minLength: 2, maxLength: 12 } }, required: ["ref"], additionalProperties: false } },
   { name: "fill", description: "كتابةٌ موثوقة في حقلٍ بمرجعه — حقولُ الاعتماد مرفوضةٌ وتُسلَّم للمستخدم", inputSchema: { type: "object", properties: { ref: { type: "string", minLength: 2, maxLength: 12 }, text: { type: "string", maxLength: 2000 } }, required: ["ref", "text"], additionalProperties: false } },
-  { name: "key", description: "ضغطةُ مفتاحٍ باسمه (Enter, Tab, Escape, ArrowDown…)", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: 16 } }, required: ["key"], additionalProperties: false } },
+  { name: "key", description: "ضغطةُ مفتاحٍ باسمه (Enter, Tab, Escape, ArrowDown, F5, a…) مع مُعدِّلات اختياريّة: Control+a, Shift+Tab, Control+Enter", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: 40 } }, required: ["key"], additionalProperties: false } },
   // ن3 (09-15) — قائمةٌ منسدلة ورفعُ ملفّ وسحبٌ في تبويب المستخدم؛ المسارُ المرفوع مطلقٌ حُكم في المحرّك (داخل المشروع، ليس سرّاً) ويُعاد فحصُه هنا.
   { name: "select", description: "اختيارُ خيارٍ في قائمةٍ منسدلة (select) بمرجعها: بالنصّ أو القيمة؛ يُقرأ ما استقرّ", inputSchema: { type: "object", properties: { ref: { type: "string", minLength: 2, maxLength: 12 }, text: { type: "string", minLength: 1, maxLength: 200 } }, required: ["ref", "text"], additionalProperties: false } },
   { name: "upload", description: "رفعُ ملفٍّ من قرص المستخدم إلى حقل ملفّ (input type=file) بمرجعه — مسارٌ مطلقٌ داخل المشروع، لا ملفّاتِ اعتماد", inputSchema: { type: "object", properties: { ref: { type: "string", minLength: 2, maxLength: 12 }, path: { type: "string", minLength: 1, maxLength: 1024 } }, required: ["ref", "path"], additionalProperties: false } },
@@ -86,7 +91,11 @@ export const BRIDGE_TOOLS = Object.freeze([
   { name: "tabs", description: "تبويباتُ النافذة الحاليّة: list (مرقّمة بالفعّال) | switch <رقم> | close <رقم> (آخرُ تبويبٍ لا يُغلق) | new <رابط>", inputSchema: { type: "object", properties: { op: { type: "string", enum: ["list", "switch", "close", "new"] }, target: { type: "string", maxLength: 24 }, url: { type: "string", minLength: 8, maxLength: 2048 } }, required: ["op"], additionalProperties: false } },
   { name: "back", description: "رجوعٌ إلى الصفحة السابقة في تاريخ التبويب الفعّال — بلا سابقةٍ يُقال", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "forward", description: "تقدّمٌ إلى الصفحة اللاحقة في تاريخ التبويب الفعّال — بلا لاحقةٍ يُقال", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
-  { name: "shot", description: "لقطةُ التبويب الفعّال تُحفظ PNG على قرص المستخدم ويُعاد مسارُها", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "shot", description: "لقطةُ التبويب الفعّال تُحفظ PNG على قرص المستخدم ويُعاد مسارُها — full: true للصفحة كاملةً بطولها لا الشاشة الظاهرة وحدها", inputSchema: { type: "object", properties: { full: { type: "boolean" } }, additionalProperties: false } },
+  // 10-10 نسخُ الصفحة كما في DevTools، وقراءةُ الكونسول والشبكة، وأكثرُ من متصفّحٍ في وقتٍ واحد.
+  { name: "save", description: "حفظُ الصفحة الفعّالة مرجعاً للتصميم = DevTools «Inspect ⇦ <html> ⇦ Copy element» + كلُّ أوراق الأنماط والسكربتات، ملفّاتٍ في <المشروع>/.abdo/reference/<الموقع>/<الصفحة>/ — يعمل على الصفحات التي تحتاج دخولاً في متصفّح المستخدم", inputSchema: { type: "object", properties: { dir: { type: "string", maxLength: 200 } }, additionalProperties: false } },
+  { name: "devtools", description: "ما في أدوات المطوّر للتبويب الفعّال: console (رسائلُ الكونسول والأخطاء غيرُ الممسوكة) | network (الطلباتُ بحالتها ونوعها وزمنها — تُسجَّل من أوّل نداء؛ reload: true يعيد تحميل الصفحة ليلتقط كلَّ طلباتها)", inputSchema: { type: "object", properties: { what: { type: "string", enum: ["console", "network"] }, reload: { type: "boolean" }, clear: { type: "boolean" } }, required: ["what"], additionalProperties: false } },
+  { name: "browsers", description: "المتصفّحاتُ الموصولة (كروم وإيدج معاً): list (● الذي تذهب إليه الأفعال — آخرُ متصفّحٍ ركّز عليه المستخدم) | use <chrome|edge|auto> لتثبيت متصفّحٍ بعينه", inputSchema: { type: "object", properties: { op: { type: "string", enum: ["list", "use"] }, target: { type: "string", maxLength: 24 } }, required: ["op"], additionalProperties: false } },
   { name: "reload", description: "إعادةُ تحميل إضافة المتصفّح من ملفّاتها على القرص (بعد تحديثها) — تعود موصولةً بالرمز نفسه خلال ثوانٍ", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   // 2026-09-14 — تكافؤُ أدوات الفحص مع المتصفّح المملوك: تصميمُ الصفحة بالأرقام، عنصرٌ بمرجعه، قواعدُ CSS لمحدِّد، الأصول.
   // S9 (09-18) — spec: شجرةُ العناصر الظاهرة بصناديقها وأنماطها (ماشي المواصفة) لاستخراج مواصفة تصميمٍ آليّة؛ الهدفُ مرجعُ جذرٍ اختياريّ.
@@ -113,14 +122,35 @@ export interface BridgeOptions {
   readonly staleMs?: number
 }
 
-interface Pending { readonly resolve: (value: unknown) => void; readonly reject: (error: Error) => void; readonly timer: ReturnType<typeof setTimeout> }
+/** متصفّحٌ موصول: مقبسُه ونبضُه وآخرُ لحظةٍ ركّز عليه المستخدم فيها. */
+interface Peer {
+  readonly socket: { send(data: string): void; close(): void }
+  browser: string
+  version: string
+  readonly connectedAt: number
+  focusedAt: number
+  lastSeen: number
+}
 
-/** الجسر: مقبسٌ للإضافة ونداءاتٌ مرقّمة بمهلة. لا يعرف MCP — تلك حلقةُ `serveChromeBridge`. */
+interface Pending { readonly resolve: (value: unknown) => void; readonly reject: (error: Error) => void; readonly timer: ReturnType<typeof setTimeout>; readonly peer: Peer }
+
+/** اسمُ المتصفّح من ترويسة User-Agent عند الترقية — تُصحّحه رسالةُ hello من الإضافة (userAgentData أدقّ). */
+export const browserFromUserAgent = (ua: string): string =>
+  /\bEdg(?:A|iOS)?\//u.test(ua) ? "edge" : /\bOPR\//u.test(ua) ? "opera" : /\bFirefox\//u.test(ua) ? "firefox" : /\bSafari\//u.test(ua) && !/\bChrom(?:e|ium)\//u.test(ua) ? "safari" : "chrome"
+
+/** أقصى رسالةٍ من الإضافة: نسخةُ صفحةٍ كاملة (save) تبلغ عشرات الميغابايت؛ سقفُ Bun الافتراضيّ ١٦MB كان يقطعها. */
+const MAX_EXTENSION_MESSAGE = 64 * 1024 * 1024
+
+/** الجسر: مقبسٌ لكلّ متصفّحٍ موصول ونداءاتٌ مرقّمة بمهلة. لا يعرف MCP — تلك حلقةُ `serveChromeBridge`. */
 export class ChromeBridge {
   readonly token: string
   readonly port: number
   #server: ReturnType<typeof Bun.serve> | undefined
-  #socket: { send(data: string): void; close(): void } | undefined
+  // 10-10 كروم وإيدج موصولان معاً. كان مقبسٌ واحد والثاني يُردّ 409، فأيُّ متصفّحٍ اتّصل أوّلاً
+  // احتكر الجسر. الآن: مقبسٌ لكلّ متصفّح، والأفعالُ تذهب إلى آخرِ متصفّحٍ ركّز عليه المستخدم (أو المثبَّت بـbrowsers use).
+  #peers = new Map<object, Peer>()
+  #pinned: string | undefined
+  #routed: Peer | undefined
   #pending = new Map<number, Pending>()
   #seq = 0
   #refs: readonly PageNode[] = []
@@ -131,10 +161,10 @@ export class ChromeBridge {
   readonly #announce: (line: string) => void
   readonly #pairingWindowMs: number
   #pairingUntil = 0
-  // ب8د (مقيس 09-15 على جهاز المالك): المقبسُ «مفتوحٌ» والإضافةُ ميتة (عاملُ الخدمة MV3 أُوقف) ⇦ `open` انتظر ٢٠ ث بلا ردّ و«connected» كذب.
+  // ب8د: المقبسُ «مفتوحٌ» والإضافةُ ميتة (عاملُ الخدمة MV3 أُوقف) ⇦ `open` انتظر ٢٠ ث بلا ردّ و«connected» كذب.
   // النبضُ كلَّ ٢٠ ث من الإضافة يُبقي عاملَها حيّاً (كروم ≥116) ويجعل «متّصل» قياساً: بلا نبضٍ خلال staleMs المقبسُ ميتٌ ويُغلق.
+  // (10-10: النبضُ لكلّ مقبسٍ على حدة — وإغلاقُ مقبسٍ قديم لا يمحو الجديد كما كان حين كانت الحالةُ حقلاً واحداً.)
   readonly #staleMs: number
-  #lastSeen = 0
 
   constructor(options: BridgeOptions = {}) {
     this.port = options.port ?? DEFAULT_BRIDGE_PORT
@@ -152,12 +182,12 @@ export class ChromeBridge {
   /** يفتح المقبس. الرمزُ يُفحص عند الترقية وحدها — لا رسالةَ تصل قبل مطابقته. */
   start(): number {
     const bridge = this
-    this.#server = Bun.serve<{ ok: true }>({
+    this.#server = Bun.serve<{ ua: string }>({
       hostname: "127.0.0.1",
       port: this.port,
       fetch(request, server) {
         const url = new URL(request.url)
-        if (url.pathname === "/health") return Response.json({ ok: true, connected: bridge.#socket !== undefined, pairing: bridge.pairingOpen })
+        if (url.pathname === "/health") return Response.json({ ok: true, connected: bridge.connected, pairing: bridge.pairingOpen, browsers: bridge.browsers.map((b) => b.browser) })
         // ب8 — الاقترانُ الآليّ: داخل النافذة يُسلَّم المنفذُ والرمزُ لمن يسأل على 127.0.0.1 ويُعلَن التسليمُ باسم السائل؛ خارجَها 423 بلا تسريب.
         if (url.pathname === "/pair" && request.method === "GET") {
           if (!bridge.pairingOpen) return Response.json({ error: "pairing closed" }, { status: 423 })
@@ -167,14 +197,25 @@ export class ChromeBridge {
         const presented = request.headers.get("x-abdo-bridge-token") ?? url.searchParams.get("token") ?? ""
         if (presented.length === 0 || presented.length !== bridge.token.length || !timingSafeEqualText(presented, bridge.token)) return new Response("forbidden", { status: 403 })
         if (url.pathname === "/pair/open" && request.method === "POST") { const until = bridge.openPairing(); return Response.json({ ok: true, until }) }
-        if (bridge.#socket !== undefined) return new Response("an extension is already connected", { status: 409 })
-        if (server.upgrade(request, { data: { ok: true } })) return
+        if (server.upgrade(request, { data: { ua: request.headers.get("user-agent") ?? "" } })) return
         return new Response("upgrade required", { status: 426 })
       },
       websocket: {
-        open(socket) { bridge.#socket = socket; bridge.#lastSeen = Date.now(); bridge.#announce("chrome-bridge: extension connected") },
-        message(_socket, raw) { bridge.#onMessage(String(raw)) },
-        close() { bridge.#socket = undefined; bridge.#failAll(new Error("extension disconnected")); bridge.#announce("chrome-bridge: extension disconnected") },
+        maxPayloadLength: MAX_EXTENSION_MESSAGE,
+        open(socket) {
+          const now = Date.now()
+          const peer: Peer = { socket, browser: bridge.#uniqueName(browserFromUserAgent(socket.data.ua)), version: "", connectedAt: now, focusedAt: 0, lastSeen: now }
+          bridge.#peers.set(socket, peer)
+          bridge.#announce(`chrome-bridge: extension connected (${peer.browser})`)
+        },
+        message(socket, raw) { bridge.#onMessage(socket, String(raw)) },
+        close(socket) {
+          const peer = bridge.#peers.get(socket)
+          if (peer === undefined) return
+          bridge.#peers.delete(socket)
+          bridge.#failFor(peer, new Error(`extension disconnected (${peer.browser})`))
+          bridge.#announce(`chrome-bridge: extension disconnected (${peer.browser})`)
+        },
       },
     })
     const port = this.#server.port ?? this.port
@@ -191,38 +232,75 @@ export class ChromeBridge {
 
   stop(): void {
     this.#failAll(new Error("bridge stopped"))
-    this.#socket?.close()
+    for (const peer of this.#peers.values()) { try { peer.socket.close() } catch { /* مغلق */ } }
+    this.#peers.clear()
     this.#server?.stop(true)
     this.#server = undefined
   }
 
-  /** «متّصل» قياسٌ لا حالة: مقبسٌ مفتوح **ونبضٌ حديث**؛ المقبسُ الذي صمت أطولَ من staleMs يُغلق ويُعدّ غيرَ متّصل. */
-  get connected(): boolean {
-    if (this.#socket === undefined) return false
-    if (Date.now() - this.#lastSeen <= this.#staleMs) return true
-    this.#announce(`chrome-bridge: extension silent for ${Math.round((Date.now() - this.#lastSeen) / 1000)}s — socket dropped`)
-    try { this.#socket.close() } catch { /* ميتٌ أصلاً */ }
-    this.#socket = undefined
-    this.#failAll(new Error("extension stale"))
-    return false
+  /** المتصفّحاتُ الحيّة: من صمت أطولَ من staleMs يُغلق مقبسُه ويُسقط هنا (قياسٌ لا حالة). */
+  #live(): Peer[] {
+    const now = Date.now()
+    for (const [key, peer] of this.#peers) {
+      if (now - peer.lastSeen <= this.#staleMs) continue
+      this.#announce(`chrome-bridge: extension (${peer.browser}) silent for ${Math.round((now - peer.lastSeen) / 1000)}s — socket dropped`)
+      this.#peers.delete(key)
+      try { peer.socket.close() } catch { /* ميتٌ أصلاً */ }
+      this.#failFor(peer, new Error("extension stale"))
+    }
+    return [...this.#peers.values()]
+  }
+
+  /** إلى أين يذهب الفعل: المثبَّتُ إن كان موصولاً، وإلّا آخرُ متصفّحٍ ركّز عليه المستخدم، وإلّا آخرُ من اتّصل. */
+  #current(): Peer | undefined {
+    const live = this.#live()
+    const pinned = this.#pinned === undefined ? undefined : live.find((p) => p.browser === this.#pinned)
+    return pinned ?? live.sort((a, b) => b.focusedAt - a.focusedAt || b.connectedAt - a.connectedAt)[0]
+  }
+
+  #uniqueName(base: string, self?: Peer): string {
+    const taken = new Set([...this.#peers.values()].filter((p) => p !== self).map((p) => p.browser))
+    if (!taken.has(base)) return base
+    for (let i = 2; ; i++) if (!taken.has(`${base}-${i}`)) return `${base}-${i}`
+  }
+
+  /** «متّصل» قياسٌ لا حالة: مقبسٌ مفتوح **ونبضٌ حديث** في متصفّحٍ واحدٍ على الأقلّ. */
+  get connected(): boolean { return this.#live().length > 0 }
+  /** المتصفّحاتُ الموصولة الآن، والحاليُّ أوّلها. */
+  get browsers(): readonly { browser: string; version: string; current: boolean }[] {
+    const current = this.#current()
+    return this.#live().map((p) => ({ browser: p.browser, version: p.version, current: p === current })).sort((a, b) => Number(b.current) - Number(a.current))
   }
   get refs(): readonly PageNode[] { return this.#refs }
   get pairingOpen(): boolean { return Date.now() < this.#pairingUntil }
   /** يفتح نافذةَ الاقتران (أو يمدّها) ويعيد لحظةَ إغلاقها. */
   openPairing(ms = 120_000): number { this.#pairingUntil = Date.now() + Math.max(0, ms); this.#announce(`chrome-bridge: pairing window open for ${Math.round(Math.max(0, ms) / 1000)}s`); return this.#pairingUntil }
 
-  #onMessage(raw: string): void {
-    let message: { id?: unknown; ok?: unknown; result?: unknown; error?: unknown; kind?: unknown }
+  #onMessage(socket: object, raw: string): void {
+    const peer = this.#peers.get(socket)
+    if (peer === undefined) return
+    let message: { id?: unknown; ok?: unknown; result?: unknown; error?: unknown; kind?: unknown; browser?: unknown; version?: unknown }
     try { message = JSON.parse(raw) } catch { return }
-    this.#lastSeen = Date.now()
-    if (message.kind === "ping") { try { this.#socket?.send(JSON.stringify({ kind: "pong", at: this.#lastSeen })) } catch { /* المقبسُ يُغلق */ } return }
+    peer.lastSeen = Date.now()
+    if (message.kind === "ping") { try { peer.socket.send(JSON.stringify({ kind: "pong", at: peer.lastSeen })) } catch { /* المقبسُ يُغلق */ } return }
+    if (message.kind === "hello") {
+      const named = typeof message.browser === "string" && /^[a-z]{2,12}$/u.test(message.browser) ? message.browser : undefined
+      if (named !== undefined && !peer.browser.startsWith(named)) { const was = peer.browser; peer.browser = this.#uniqueName(named, peer); this.#announce(`chrome-bridge: ${was} is ${peer.browser}`) }
+      if (typeof message.version === "string") peer.version = message.version.slice(0, 16)
+      return
+    }
+    if (message.kind === "focus") { peer.focusedAt = peer.lastSeen; return }
     if (typeof message.id !== "number") return
     const pending = this.#pending.get(message.id)
-    if (pending === undefined) return
+    if (pending === undefined || pending.peer !== peer) return
     this.#pending.delete(message.id)
     clearTimeout(pending.timer)
     if (message.ok === true) pending.resolve(message.result)
     else pending.reject(new Error(typeof message.error === "string" ? message.error.slice(0, 300) : "extension error"))
+  }
+
+  #failFor(peer: Peer, error: Error): void {
+    for (const [id, p] of this.#pending) if (p.peer === peer) { clearTimeout(p.timer); p.reject(error); this.#pending.delete(id) }
   }
 
   #failAll(error: Error): void {
@@ -232,19 +310,30 @@ export class ChromeBridge {
   /** نداءٌ خامّ إلى الإضافة — بلا حراسة؛ الحراسةُ في `run`. */
   send(action: string, args: Record<string, unknown>, timeoutMs = CALL_TIMEOUT_MS): Promise<unknown> {
     // الاتّصالُ يُقاس لحظةَ الإرسال (النبض): مقبسٌ صامتٌ يُغلق هنا فيسمّى الخطأُ بدل انتظارٍ ٢٠ ث بلا ردّ.
-    const socket = this.connected ? this.#socket : undefined
-    if (socket === undefined) return Promise.reject(new Error("لا إضافةَ موصولة (أو صمتت أطولَ من المهلة) — افتح المتصفّح وسينبض عاملُ الإضافة ويعود، أو نفّذ: bridge pair"))
+    const peer = this.#current()
+    if (peer === undefined) return Promise.reject(new Error("لا إضافةَ موصولة (أو صمتت أطولَ من المهلة) — افتح المتصفّح وسينبض عاملُ الإضافة ويعود، أو نفّذ: bridge pair"))
     const id = ++this.#seq
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { if (this.#pending.delete(id)) reject(new Error(`الإضافة لم تُجب ${action} خلال ${timeoutMs}ms`)) }, timeoutMs)
+      const timer = setTimeout(() => { if (this.#pending.delete(id)) reject(new Error(`الإضافة (${peer.browser}) لم تُجب ${action} خلال ${timeoutMs}ms`)) }, timeoutMs)
       timer.unref?.()
-      this.#pending.set(id, { resolve, reject, timer })
-      socket.send(JSON.stringify({ id, action, args }))
+      this.#pending.set(id, { resolve, reject, timer, peer })
+      peer.socket.send(JSON.stringify({ id, action, args }))
     })
+  }
+
+  /** قبل كلّ أداة: إن تبدّل المتصفّحُ الذي تذهب إليه الأفعال بطلت مراجعُ الصفحة (شجرةُ متصفّحٍ آخر). يعيد اسمَه للإيصال. */
+  #route(): string {
+    const peer = this.#current()
+    if (peer !== undefined && this.#routed !== undefined && peer !== this.#routed) { this.#refs = []; this.#generation += 1 }
+    if (peer !== undefined) this.#routed = peer
+    return peer?.browser ?? ""
   }
 
   /** الأداةُ المحروسة: الحارسُ والسياسةُ هنا، والإضافةُ تنفّذ فقط. يعود نصّاً للنموذج. */
   async run(name: string, args: Record<string, unknown>): Promise<string> {
+    if (name === "browsers") return this.#browsersTool(args)
+    const where = this.#route()
+    const others = this.#peers.size > 1 ? ` (${where})` : ""
     switch (name) {
       case "page": {
         const nodes = await this.send("page", {})
@@ -252,18 +341,19 @@ export class ChromeBridge {
         this.#generation += 1
         if (this.#refs.length === 0) return "صفحةٌ بلا عناصر قابلة للقيادة"
         const hint = loginHint(this.#refs)
-        const stateWord = (n: PageNode) => n.state === "filled" ? " (معبّأ)" : n.state === "empty" ? " (فارغ)" : ""
-        return `جيل ${this.#generation} — ${this.#refs.length} عنصراً:\n${this.#refs.map((n) => `[${n.ref}] ${n.role}${n.name ? `: ${n.name}` : ""}${stateWord(n)}`).join("\n")}${hint === undefined ? "" : `\n⚑ ${hint}`}`
+        const stateWord = (n: PageNode) => n.state === "filled" ? " (معبّأ)" : n.state === "autofilled" ? " (معبّأ بحفظ المتصفّح)" : n.state === "empty" ? " (فارغ)" : ""
+        return `جيل ${this.#generation}${others} — ${this.#refs.length} عنصراً:\n${this.#refs.map((n) => `[${n.ref}] ${n.role}${n.name ? `: ${n.name}` : ""}${stateWord(n)}`).join("\n")}${hint === undefined ? "" : `\n⚑ ${hint}`}`
       }
       case "open": {
         const url = String(args.url ?? "")
         const verdict = judge({ generation: this.#generation }, { kind: "navigate", url, origin: "operator" })
         if (!verdict.ok) return `العقد رفض: ${verdict.why}`
         if (this.#settingsFile !== undefined && !browserSiteAllowed(this.#settingsFile, url)) return "Navigation blocked by saved site permissions"
-        await this.send("open", { url })
+        // الإضافةُ تنتظر اكتمالَ التحميل حتى ٢٥ ث — المهلةُ هنا أطولُ منها كي يصل ردُّها لا خطأُ مهلة (كانت ٢٠ ث = أقصرَ من انتظار الإضافة).
+        await this.send("open", { url }, 35_000)
         this.#refs = []
         this.#generation += 1
-        return `انتقلتُ في كروم المستخدم — الجيل ${this.#generation}، والمراجعُ القديمة بطلت. استعمل chrome.page لقراءة الصفحة.`
+        return `انتقلتُ في متصفّح المستخدم${others} — الجيل ${this.#generation}، والمراجعُ القديمة بطلت. استعمل chrome.page لقراءة الصفحة.`
       }
       case "look": {
         const ref = typeof args.ref === "string" ? args.ref : ""
@@ -290,7 +380,7 @@ export class ChromeBridge {
       }
       case "key": {
         const key = String(args.key ?? "")
-        if (!/^[A-Za-z]{1,16}$/.test(key)) return "الصيغة: key <Enter|Tab|Escape|…>"
+        if (!KEY_SHAPE.test(key)) return "الصيغة: key <Enter|Tab|Escape|ArrowDown|F5|a…> ومُعدِّلاتٌ اختياريّة: Control+a، Shift+Tab، Control+Enter"
         const pressed = await this.send("key", { key })
         return `ضغطتُ ${key} في متصفّح المستخدم ${inputMode(pressed)}.`
       }
@@ -395,13 +485,40 @@ export class ChromeBridge {
         return `طلبتُ من الإضافة (${r.version ?? "?"}) إعادةَ تحميل نفسها من قرصها — ستنقطع ثوانيَ ثمّ تعود موصولةً؛ انتظر بـchrome.tabs قبل أيّ فعل، والمراجعُ القديمة بطلت.`
       }
       case "shot": {
-        const dataUrl = await this.send("shot", {})
+        const full = args.full === true
+        const dataUrl = await this.send("shot", full ? { full: true } : {}, full ? 60_000 : CALL_TIMEOUT_MS)
         const data = typeof dataUrl === "string" && dataUrl.startsWith("data:image/png;base64,") ? dataUrl.slice("data:image/png;base64,".length) : ""
         if (data.length === 0) return "تعذّرت اللقطة — الإضافة لم تُعطِ صورة"
         mkdirSync(this.#shotsDir, { recursive: true })
-        const file = join(this.#shotsDir, `chrome-${Date.now()}.png`)
+        const file = join(this.#shotsDir, `${where || "chrome"}-${full ? "full-" : ""}${Date.now()}.png`)
         writeFileSync(file, Buffer.from(data, "base64"))
-        return `حُفظت لقطةُ التبويب على قرصك: ${file} (${Math.round(data.length * 3 / 4)} بايت) — لا تُرسل إلى أحد.`
+        return `حُفظت لقطةُ ${full ? "الصفحة كاملةً" : "التبويب"}${others} على قرصك: ${file} (${Math.round(data.length * 3 / 4)} بايت) — لا تُرسل إلى أحد.`
+      }
+      case "save": {
+        const copy = await this.send("save", {}, 120_000) as ReferenceCopy | null
+        if (copy === null || typeof copy !== "object" || typeof copy.html !== "string" || typeof copy.url !== "string") return "تعذّر نسخُ الصفحة — الإضافة لم تُعطِ HTML (أقدمُ من 0.7.0؟ أعد تحميلها بـchrome.reload)"
+        const placed = referenceDir(typeof args.dir === "string" ? args.dir : "", copy.url)
+        if (!placed.ok) return placed.why
+        // المشروعُ الحاليّ من ملفّ الإعدادات؛ والكتابةُ تحت .abdo/reference وحدها (referenceDir يرفض المطلقَ و«..»). بلا مشروعٍ: مجلّدُ الحالة.
+        const root = this.#projectRoot()
+        const written: string[] = [], refused: string[] = []
+        for (const f of referenceFiles(copy, placed.dir, `browser extension (${where}): document.documentElement.outerHTML as DevTools Copy element + stylesheet and script texts`)) {
+          const target = resolve(root, f.path)
+          if (!target.startsWith(resolve(root, REFERENCE_ROOT))) { refused.push(`${f.path}: خارج ${REFERENCE_ROOT}`); continue }
+          try { mkdirSync(join(target, ".."), { recursive: true }); writeFileSync(target, f.content, "utf8"); written.push(`${f.path} (${f.content.length} حرفاً)`) }
+          catch (error) { refused.push(`${f.path}: ${String(error instanceof Error ? error.message : error).slice(0, 120)}`) }
+        }
+        return referenceReceipt(copy, placed.dir, written, refused, ` في متصفّح المستخدم${others}`) + (root === this.#stateDir ? `\n(لا مشروعَ في الإعدادات — كُتبت تحت ${root})` : "")
+      }
+      case "devtools": {
+        const what = args.what === "network" ? "network" : args.what === "console" ? "console" : ""
+        if (what === "") return "الصيغة: devtools {what: console|network, reload?, clear?}"
+        const r = await this.send("devtools", { what, reload: args.reload === true, clear: args.clear === true }, 45_000) as { started?: boolean; entries?: unknown[]; dropped?: number; url?: string } | null
+        if (r === null || typeof r !== "object" || !Array.isArray(r.entries)) return "تعذّرت قراءةُ أدوات المطوّر — الإضافة أقدمُ من 0.7.0 أو بلا صلاحيّة debugger (سفاري/فايرفوكس)"
+        const lines = r.entries.slice(-120).map((e) => maskSecrets(devtoolsLine(what, e)))
+        const head = `${what === "console" ? "الكونسول" : "الشبكة"}${others} — ${r.url ?? ""}: ${r.entries.length} سطراً${r.dropped ? ` (أُسقط ${r.dropped} أقدم)` : ""}`
+        const note = r.started === true && what === "network" && args.reload !== true ? "\n(بدأ التسجيلُ الآن — ما طُلب قبل هذا النداء لا يظهر؛ أعد بـreload: true لالتقاط كلّ طلبات الصفحة)" : ""
+        return `${head}${note}\n${lines.length === 0 ? "(لا شيء)" : lines.join("\n")}`.slice(0, 12_000)
       }
       default:
         return `أداةُ جسرٍ مجهولة: ${name}`
@@ -409,7 +526,51 @@ export class ChromeBridge {
   }
 
   #node(ref: string): PageNode | undefined { return this.#refs.find((n) => n.ref === ref) }
+
+  #browsersTool(args: Record<string, unknown>): string {
+    const op = String(args.op ?? "list")
+    if (op === "use") {
+      const target = String(args.target ?? "").trim().toLowerCase()
+      if (target === "auto" || target === "") { this.#pinned = undefined; return `الأفعالُ تتبع آخرَ متصفّحٍ يركّز عليه المستخدم.\n${this.#browsersTool({ op: "list" })}` }
+      if (!this.#live().some((p) => p.browser === target)) return `لا متصفّحَ موصولاً باسم «${target.slice(0, 24)}».\n${this.#browsersTool({ op: "list" })}`
+      this.#pinned = target
+      return `ثبّتُّ الأفعالَ على ${target} حتى «browsers use auto».\n${this.#browsersTool({ op: "list" })}`
+    }
+    const list = this.browsers
+    if (list.length === 0) return "لا متصفّحَ موصولاً — افتح كروم أو إيدج والإضافةُ فيه تتّصل خلال ثوانٍ (أو: bridge pair)."
+    return `${list.length} متصفّحاً موصولاً (● تذهب إليه الأفعال${this.#pinned === undefined ? " — آخرُ من ركّز عليه المستخدم" : ` — مثبَّت: ${this.#pinned}`}):\n${list.map((b) => `${b.current ? "●" : "○"} ${b.browser}${b.version ? ` (الإضافة ${b.version})` : ""}`).join("\n")}`
+  }
+
+  /** جذرُ المشروع الحاليّ من ملفّ الإعدادات (`project`) — وإلّا مجلّدُ الحالة. */
+  #projectRoot(): string {
+    try {
+      const project = (JSON.parse(readFileSync(this.#settingsFile ?? "", "utf8")) as { project?: unknown }).project
+      if (typeof project === "string" && isAbsolute(project) && existsSync(project)) return resolve(project)
+    } catch { /* لا إعدادات */ }
+    return this.#stateDir
+  }
 }
+
+/** شكلُ `key`: اسمُ مفتاحٍ أو حرفٌ/رقمٌ أو F1–F12، مسبوقٌ بمُعدِّلاتٍ اختياريّة. */
+export const KEY_SHAPE = /^(?:(?:Control|Ctrl|Alt|Shift|Meta|Cmd)\+){0,3}(?:[A-Za-z]{2,16}|[A-Za-z0-9]|F(?:[1-9]|1[0-2]))$/u
+
+/** سطرٌ من الكونسول أو الشبكة كما تعيده الإضافة — نصٌّ قصير للنموذج. */
+const devtoolsLine = (what: "console" | "network", entry: unknown): string => {
+  const e = (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>
+  const s = (v: unknown, n = 300) => String(v ?? "").replace(/\s+/gu, " ").slice(0, n)
+  if (what === "console") return `[${s(e.level, 10)}] ${s(e.text, 400)}${e.at ? ` — ${s(e.at, 160)}` : ""}`
+  return `${s(e.method, 8)} ${e.failed ? `✕ ${s(e.failed, 60)}` : s(e.status ?? "…", 4)} ${s(e.type, 12)} ${s(e.url, 240)}${typeof e.ms === "number" ? ` ${Math.round(e.ms)}ms` : ""}${typeof e.bytes === "number" ? ` ${e.bytes}B` : ""}`
+}
+
+/**
+ * ما يُقرأ من الكونسول والشبكة يصل النموذج — والروابطُ والرسائلُ تحمل أحياناً رموزاً (token=…، Bearer …، JWT، sk-…).
+ * الحجبُ هنا في الجسر لا في الإضافة، كحجب كلمة المرور في look.
+ */
+export const maskSecrets = (text: string): string => text
+  .replace(/([?&#](?:access_token|id_token|refresh_token|token|code|key|api_key|apikey|secret|password|pass|auth|sig|signature|session|sid)=)[^&#\s]+/giu, "$1«محجوب»")
+  .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gu, "$1 «محجوب»")
+  .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/gu, "«JWT محجوب»")
+  .replace(/\b(?:sk|pk|rk|ghp|gho|github_pat|xox[bpas])[-_][A-Za-z0-9_-]{16,}\b/gu, "«مفتاح محجوب»")
 
 /** رمزُ اقترانٍ سابق من `chrome-bridge.json` — نصٌّ base64url بطول ٢٤ فأكثر، وإلا لا شيء. */
 export function persistedToken(stateDir: string): string | undefined {
@@ -434,7 +595,7 @@ const inputMode = (reply: unknown): string => {
   return mode === "synthetic" ? "بأحداثٍ اصطناعية (سفاري — قد لا تراها بعضُ الصفحات)" : "بإدخالٍ موثوق"
 }
 
-const isNode = (v: unknown): v is PageNode => typeof v === "object" && v !== null && typeof (v as PageNode).ref === "string" && typeof (v as PageNode).role === "string" && typeof (v as PageNode).name === "string" && ((v as PageNode).state === undefined || (v as PageNode).state === "filled" || (v as PageNode).state === "empty")
+const isNode = (v: unknown): v is PageNode => typeof v === "object" && v !== null && typeof (v as PageNode).ref === "string" && typeof (v as PageNode).role === "string" && typeof (v as PageNode).name === "string" && ((v as PageNode).state === undefined || (v as PageNode).state === "filled" || (v as PageNode).state === "empty" || (v as PageNode).state === "autofilled")
 
 function timingSafeEqualText(a: string, b: string): boolean {
   let diff = 0

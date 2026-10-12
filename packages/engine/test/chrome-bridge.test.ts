@@ -81,13 +81,13 @@ describe("S11 — chrome.look على حقل يعيد قيمتَه في `value`،
     expect(lookReceipt({ text: "x" }, undefined)).toBe('{"text":"x"}')
   })
 
-  test("الإضافة 0.6.5 تقرأ القيمة في الصفحة وتحجب كلمةَ المرور فيها، والمانيفست 0.6.8", () => {
+  test("الإضافة 0.6.5 تقرأ القيمة في الصفحة وتحجب كلمةَ المرور فيها، والمانيفست 0.7.0", () => {
     const background = readFileSync(resolve(import.meta.dir, "../../browser-bridge/extension/background.js"), "utf8")
     expect(background).toContain('const field = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"')
     expect(background).toContain(': tag === "INPUT" && (el.getAttribute("type") || "").toLowerCase() === "password" ? "«محجوب»"')
     expect(background).toContain(': String(el.value || "").slice(0, 2000)')
     expect(background).toContain("...(value === undefined ? {} : { value }), styles })")
-    expect(JSON.parse(readFileSync(resolve(import.meta.dir, "../../browser-bridge/extension/manifest.json"), "utf8")).version).toBe("0.6.8")
+    expect(JSON.parse(readFileSync(resolve(import.meta.dir, "../../browser-bridge/extension/manifest.json"), "utf8")).version).toBe("0.7.0")
   })
 })
 
@@ -109,10 +109,13 @@ describe("ChromeBridge — المقبسُ والحراسة", () => {
       const ext = fakeExtension(port, "secret-token")
       expect(await ext.opened).toBe(true)
       expect(bridge.connected).toBe(true)
-      // إضافةٌ ثانية لا تُقبل — مقبسٌ واحد لكروم واحد.
+      // 10-10: إضافةٌ ثانية (إيدج بجانب كروم) تُقبل — كان 409؛ وإغلاقُ واحدةٍ لا يُسقط الأخرى.
       const second = fakeExtension(port, "secret-token")
-      expect(await second.opened).toBe(false)
+      expect(await second.opened).toBe(true)
       ext.close()
+      await Bun.sleep(50)
+      expect(bridge.connected).toBe(true)
+      second.close()
       await Bun.sleep(50)
       expect(bridge.connected).toBe(false)
     } finally { bridge.stop(); rmSync(dir, { recursive: true, force: true }) }
