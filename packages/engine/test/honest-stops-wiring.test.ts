@@ -51,7 +51,7 @@ describe("browser backend (owner 09-13): one setting, switchable from Settings a
     expect(forward).toBeGreaterThan(off)
     expect(owned).toBeGreaterThan(forward)
     // التمريرُ إلى الإضافة يمرّ بالبوّابة نفسِها ويرفض بالاسم حين لا اقتران.
-    const block = source.slice(forward, forward + 3400) // 09-14: اتّسع بتمرير page styles/dom/css/assets إلى inspect
+    const block = source.slice(forward, forward + 6000) // 09-14: اتّسع بتمرير page styles/dom/css/assets إلى inspect؛ 10-12: وبتوجيه الصفحات المحلّيّة وfind
     // مراجعة 09-14: متصفّحُ المستخدم الحقيقيّ — موافقةٌ في كلّ نداء (outside-workspace)، لا fill/key، وسياسةُ المواقع قبل open.
     expect(block).toContain('await gate(turnId, "outside-workspace", `إضافةُ المتصفّح (تبويبُك الحقيقيّ) ${target}: ${rest.slice(0, 120)}`, name)')
     expect(block).not.toContain('if (name === "fill" || name === "key") return "رُفض')

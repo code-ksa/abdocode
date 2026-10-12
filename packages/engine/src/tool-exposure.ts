@@ -7,7 +7,7 @@
 import { requestedWorkers } from "./parallel-workers"
 
 export const TOOL_FAMILIES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  browser: ["ui", "page", "open", "tap", "fill", "shot", "scroll", "hover", "key", "find", "dismiss", "wait", "network", "console", "look", "next", "surface", "browser", "bridge", "sessions", "history", "select", "upload", "drag", "tabs", "back", "forward", "design", "audit", "compare", "seo", "release-check"],
+  browser: ["ui", "page", "open", "tap", "fill", "shot", "scroll", "hover", "key", "find", "dismiss", "wait", "network", "console", "look", "next", "surface", "browser", "bridge", "sessions", "history", "select", "upload", "drag", "tabs", "back", "forward", "design", "audit", "compare", "seo", "release-check", "crawl"],
   desktop: ["desk", "ui-book"],
   delegation: ["team", "delegate", "handoff", "agents", "parallel", "merge"],
   // 10-01 — أدواتُ اليوم بلا عائلة كانت تُعرض في كلّ نداء (≈3 آلاف حرفٍ من الكتالوج): قيس بحمل context-window-live (نافذةٌ 22k
@@ -127,3 +127,22 @@ const DESKTOP_DRIVE = /(?:افتح|شغّ?ل|فتح|open|launch|start)\s+(?:لي
 export const isDesktopDriveTask = (text: string): boolean => DESKTOP_DRIVE.test(text)
 
 export const DESKTOP_DRIVE_BRIEF = "\n[طلبُ تحكّمٍ بالكمبيوتر — لا مشروعَ برمجيّاً هنا: لا تقرأ المجلّدَ ولا تكتب ملفّات. اعمل كما يعمل مشغّلُ الكمبيوتر، أداةً واحدةً في كلّ ردّ: «desk open <اسم التطبيق>» (يفتحه باسمه في قائمة ابدأ ويربط نافذتَه) ← «desk ui» (في رأسه سطرا «للكتابة» و«للإرسال»: مربّعُ الإدخال وزرُّ الإرسال بمراجعهما — إن ظهر المربّعُ فلا تضغط أزرارَ التبديل Toggle؛ نافذةُ Electron تُقرأ ثانيةً تلقائيّاً) ← انقر مربّعَ الإدخال بـ«desk click <x> <y>» في وسط عنصره ← «desk type <النصّ>» ← «desk press <مرجعُ زرّ الإرسال>» (أو «desk key enter») ← «desk ui» لتتحقّق أنّ الرسالةَ أُرسلت (المربّعُ فرغ وظهرت المحادثة). ثمّ قل ما فعلتَ بالإيصالات.]\n"
+
+/**
+ * 10-12 (مقيس: «ولد صورة مناسبة من جيميناي المفتوح في متصفحك» ⇦ فتح النموذجُ Gemini في المتصفّح المملوك المعزول، فردّ «signed out»،
+ * وكان قد رسم SVG بديلاً؛ وجسرُ الإضافة لم يكن يعمل أصلاً). طلبٌ يسمّي متصفّحَ المستخدم أو حسابَه المفتوح، أو يطلب صورةً من Gemini/ChatGPT
+ * (لا تُولَّد إلا في حسابه)، يُنفَّذ في متصفّحه الحقيقيّ عبر الإضافة لا في متصفّح الوكيل.
+ */
+const USER_BROWSER = /متصفّ?ح(?:ك|ي|كم|نا)(?![\p{L}])|(?:ال)?متصفّ?ح\s+(?:ال)?(?:مفتوح|حقيقي|اللي\s+(?:عندي|عندك|مفتوح))|(?:في|على|من|عبر|ب)\s*(?:ال)?كروم|google\s+chrome|\b(?:in|on|with|using)\s+(?:my\s+|the\s+)?chrome\b|\b(?:my|your)\s+(?:own\s+)?browser\b|(?:على|في|من|ب)\s*(?:ال)?حساب(?:ي|ك)?\s+(?:ال)?مفتوح|الحساب\s+(?:ال)?مفتوح|(?:جيميناي|جيمناي|جمناي|gemini|chatgpt|شات\s*جي\s*بي\s*تي)\s+(?:ال)?مفتوح/iu
+const WEB_IMAGE = /(?:ولّ?د|اصنع|سوّ?ي|ارسم|أنشئ|انشئ|اعمل|\bgenerate|\bcreate|\bmake|\bdraw)[^.\n]{0,80}(?:صور|ايميدج|إيميج|ايمج|\bimages?\b|\bpictures?\b|\billustrations?\b)[^.\n]{0,80}(?:جيميناي|جيمناي|جمناي|gemini|chatgpt|شات\s*جي\s*بي\s*تي|dall-?e|imagen)|(?:ولّ?د|اصنع|سوّ?ي|ارسم|أنشئ|انشئ|اعمل|\bgenerate|\bcreate|\bmake|\bdraw)[^.\n]{0,80}(?:جيميناي|جيمناي|جمناي|gemini|chatgpt|شات\s*جي\s*بي\s*تي|dall-?e|imagen)[^.\n]{0,80}(?:صور|ايميدج|إيميج|ايمج|\bimages?\b|\bpictures?\b|\billustrations?\b)/iu
+export const wantsWebImageGen = (text: string): boolean => WEB_IMAGE.test(text)
+export const isUserBrowserTask = (text: string): boolean => USER_BROWSER.test(text) || WEB_IMAGE.test(text)
+/** طلبٌ يسمّي كروم بعينه — تُثبَّت أفعالُ الجسر عليه حين يكون كروم وإيدج موصولين معاً. */
+export const namesChrome = (text: string): boolean => /كروم|\bchrome\b/iu.test(text)
+
+/** ما يدخل الحقبةَ الأولى لطلبٍ في متصفّح المستخدم — وحالةُ الإضافة مقيسةً هذا الدور لا مفترَضة. */
+export const userBrowserBrief = (status: string, imageGen: boolean): string =>
+  `\n[متصفّحُ المستخدم الحقيقيّ — المسجَّلُ دخولُه في حساباته (كروم/إيدج عبر إضافة عبدو كود)، لا متصفّحُك المملوك المعزول بلا حسابات. في هذا الدور page/open/look/tap/fill/key/scroll/shot/tabs/wait تُنفَّذ في تبويب المستخدم. افتح كلَّ موقعٍ بـ«tabs new <رابط>» ولا تستبدل تبويباً يعمل فيه؛ صفحاتُ المشروع المحلّيّة (127.0.0.1/localhost) تُفتح تلقائيّاً في متصفّح عبدو كود وتظهر في لوحه، وaudit يقيسها هناك. لزحف موقعٍ كامل بحسابه: crawl <رابط> [max N]. لا تطلب كلمةَ مرورٍ ولا تكتبها: صفحةُ دخولٍ فارغة = قل للمستخدم «سجّل الدخول في هذا التبويب» وتوقّف. حالةُ الإضافة الآن: ${status}]\n`
+  + (imageGen
+    ? "[توليدُ الصور من Gemini/ChatGPT في متصفّح المستخدم هو المطلوب — لا ترسم SVG ولا تستعمل imagine ولا صورةً من مكانٍ آخر بديلاً: «tabs new https://gemini.google.com/app» (أو https://chatgpt.com إن سمّاه المستخدم) ← page ← fill <مرجعُ مربّع الطلب> «Generate an image: <وصفٌ إنجليزيّ دقيق والأبعاد، 16:9 لصورة البطل>» ← key Enter ← chrome.image {\"path\": \"public/images/<اسم>.png\", \"wait\": 90} (ينتظر الصورةَ الجديدة ويحفظها في مجلّد أصول المشروع ويقول مسارَها الفعليّ) ← استعمل ذلك المسار. لكلّ صورةٍ طلبٌ ثمّ chrome.image. إن ردّ الموقعُ برفضٍ أو بطلب الدخول فانقل ردَّه بنصّه ولا تختلق صورة.]\n"
+    : "")

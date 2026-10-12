@@ -323,7 +323,7 @@ describe("serve convergence wiring", () => {
     // هـ2 (2026-09-07): خلاصةُ الوكيل الموجِّه تلي رصدَ المشروع — سلسلةٌ فارغة في الوضع الأساسيّ.
     // 2026-09-13: وصفاتُ الإعداد المحفوظة (recipesBrief) تلي الدروسَ بالقاعدة نفسها — لا وصفةَ مذكورةً في الرسالة = سلسلةٌ فارغة.
     expect(source).toContain(': priorGoal === undefined ? "" : resumeBrief(priorGoal)')
-    expect(source).toContain('? `${rootInstructionsBrief}${projectOrientation}${orientationBrief}${projectAwareness}${summaryBrief}${coldMap}${priorRecall}${generalAwareness}${resumeLine}${sprintStateBrief}${rails.semanticBrief ? semanticBrief : ""}${lessonsBrief}${recipesBrief}${secretNotice}${teamBrief}${isDesktopDriveTask(turn.body) ? DESKTOP_DRIVE_BRIEF : ""}${turn.body}${summaryAsk}`')
+    expect(source).toContain('? `${rootInstructionsBrief}${projectOrientation}${orientationBrief}${projectAwareness}${summaryBrief}${coldMap}${priorRecall}${generalAwareness}${resumeLine}${sprintStateBrief}${rails.semanticBrief ? semanticBrief : ""}${lessonsBrief}${recipesBrief}${secretNotice}${teamBrief}${isDesktopDriveTask(turn.body) && !userBrowser ? DESKTOP_DRIVE_BRIEF : ""}${userBrowserNote}${turn.body}${summaryAsk}`')
     expect(source).toContain('const secretNotice = secretWarning === undefined ? "" : `${secretWarning.model}\\n\\n`')
     expect(source).toContain("if (priorGoal !== undefined) await emitEvent(turn.id, resumeAnnouncement(priorGoal))")
     // حقيقة الدور تحفظ الهدف الفعليّ — بدءاً ونهايةً — فالاستئناف المتسلسل يظلّ يشير إلى الهدف الحقيقيّ؛

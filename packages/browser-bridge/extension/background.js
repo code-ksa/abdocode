@@ -33,6 +33,21 @@ const settings = async () => {
 
 // التبويبُ الفعّال بسلّم بدائل: النافذةُ المركَّزة أخيراً قد تعود فارغةً بعد إعادة تشغيل عامل الخدمة (MV3) أو حين تكون النافذةُ
 // المركَّزة غيرَ عاديّة (مقيس 09-15: «no active tab» وكروم مفتوح) — فتُسأل النوافذُ العاديّة ثمّ أيُّ تبويبٍ فعّال، و`open` ينشئ تبويباً.
+// 0.7.2 — تبويباتُ الوكيل: ما فتحه عبدو كود بنفسه. «open» يُبدّل تبويباً منها فقط؛ تبويبُ المستخدم (بريدُه، حساباته…) لا يُستبدل أبداً —
+// يُفتح للرابط تبويبٌ جديد. مقيس 10-12: النموذجُ فتح صفحتَه بـopen فاستبدل تبويبَ بريد المستخدم الذي كان المستخدمُ عليه.
+// الحفظُ في storage.session كي لا ينساها عاملُ الخدمة إذا نام؛ ونسيانُها يقود إلى تبويبٍ جديد — الاتّجاهُ الآمن.
+const agentTabs = new Set()
+const agentTabsReady = (async () => {
+  try { const saved = await api.storage.session.get({ agentTabs: [] }); for (const id of saved.agentTabs || []) agentTabs.add(id) } catch {}
+})()
+const rememberAgentTab = async (id) => {
+  agentTabs.add(id)
+  try { await api.storage.session.set({ agentTabs: [...agentTabs] }) } catch {}
+}
+api.tabs.onRemoved.addListener((tabId) => {
+  if (agentTabs.delete(tabId)) { try { void api.storage.session.set({ agentTabs: [...agentTabs] }) } catch {} }
+})
+
 const activeTab = async ({ createIfNone = false } = {}) => {
   const pick = (tabs) => (tabs || []).find((t) => t && typeof t.id === "number")
   let tab = pick(await api.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []))
@@ -401,6 +416,57 @@ const SYNTH_DRAG = (fromRef, toRef) => {
   return { mode: "synthetic" }
 }
 
+// 0.7.1 — «ولّد صورةً من Gemini في متصفّحي»: أحدثُ صورةٍ كبيرة على الصفحة (أو صورةُ مرجعٍ بعينه) تُعاد بايتاتٍ ليحفظها الجسرُ ملفّاً
+// في المشروع. الصفحةُ تقرأ blob:/data: بنفسها (لا تُقرأ من خارجها)، وhttp(s) يجلبها عاملُ الإضافة بصلاحيّة <all_urls> (لا يقيّده CORS).
+// exclude: مفاتيحُ ما حُفظ قبلُ — كي لا تُعاد الصورةُ السابقة والجديدةُ ما زالت تُولَّد.
+const IMAGE_FIND = async (ref, exclude, minSide) => {
+  const keyOf = (src) => String(src).slice(0, 300)
+  const skip = new Set(exclude || [])
+  const srcOf = (img) => img.currentSrc || img.src || ""
+  const describe = (img) => ({ src: srcOf(img), key: keyOf(srcOf(img)), width: img.naturalWidth, height: img.naturalHeight, alt: String(img.alt || "").slice(0, 120) })
+  let img = null
+  if (ref) {
+    const el = globalThis.__abdoRef ? globalThis.__abdoRef(ref) : document.querySelector('[data-abdo-ref="' + ref + '"]')
+    img = el && el.tagName === "IMG" ? el : el && el.querySelector ? el.querySelector("img") : null
+    if (!img || !srcOf(img)) return null
+  } else {
+    const all = [...document.images].filter((i) => i.complete && i.naturalWidth >= minSide && i.naturalHeight >= minSide && srcOf(i) && !/^data:image\/svg/i.test(srcOf(i)) && !skip.has(keyOf(srcOf(i))))
+    const shown = all.filter((i) => { const r = i.getBoundingClientRect(); return r.width >= 64 && r.height >= 64 })
+    img = (shown.length > 0 ? shown : all).pop() || null
+    if (!img) return null
+  }
+  const found = describe(img)
+  if (/^(blob|data):/i.test(found.src)) {
+    const blob = await (await fetch(found.src)).blob()
+    const buf = new Uint8Array(await blob.arrayBuffer())
+    let bin = ""
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000))
+    found.mime = blob.type
+    found.data = btoa(bin)
+    found.src = found.src.slice(0, 60)
+  }
+  return found
+}
+
+// 0.8.0 — «يفتح جميع الصفحات والروابط»: روابطُ الصفحة وعناوينُها لزاحف الموقع (crawl) في المحرّك. نسخةٌ حرفيّة في المحرّك
+// (page-scripts.ts) يقرؤها المتصفّحُ المملوك — اختبارٌ يقارن البايتات.
+const LINKS = () => {
+  const text = (el) => String(el.innerText || el.textContent || "").replace(/\s+/g, " ").trim()
+  const links = []
+  const seen = new Set()
+  for (const a of document.querySelectorAll("a[href]")) {
+    const href = a.href
+    if (!/^https?:/i.test(href) || seen.has(href)) continue
+    seen.add(href)
+    links.push({ href, text: text(a).slice(0, 80) })
+    if (links.length >= 400) break
+  }
+  const headings = [...document.querySelectorAll("h1,h2,h3")].slice(0, 24).map((h) => h.tagName.toLowerCase() + " " + text(h).slice(0, 140))
+  return { url: location.href, title: String(document.title || "").slice(0, 200), headings, links }
+}
+
+const IMAGE_CAP = 15 * 1024 * 1024
+
 const inPage = async (tabId, func, args = []) => {
   const [frame] = await api.scripting.executeScript({ target: { tabId }, func, args })
   return frame && frame.result
@@ -546,9 +612,16 @@ const perform = async (action, args) => {
     case "scroll": return inPage(tab.id, SCROLL, [args.direction, args.count || 1])
     case "open": {
       if (!/^https?:\/\//i.test(String(args.url))) throw new Error("http/https only")
+      await agentTabsReady
+      if (!agentTabs.has(tab.id)) {
+        const created = await api.tabs.create({ windowId: tab.windowId, url: String(args.url), active: true })
+        await rememberAgentTab(created.id)
+        await settled(created.id, 25000)
+        return { newTab: true, id: created.id }
+      }
       await api.tabs.update(tab.id, { url: String(args.url) })
       await settled(tab.id, 25000)
-      return true
+      return { newTab: false, id: tab.id }
     }
     case "tap": {
       if (!TRUSTED_INPUT) { const r = await inPage(tab.id, SYNTH_TAP, [args.ref]); if (!r) throw new Error("element not found"); return r }
@@ -661,6 +734,48 @@ const perform = async (action, args) => {
         }
       }
     }
+    case "links": return inPage(tab.id, LINKS)
+    // 0.8.0 — زرُّ «تنزيل» نقره الوكيل (صورةُ Gemini بحجمها الكامل، ملفٌّ من لوحة): أوّلُ تنزيلٍ يكتمل بعد `since` يُعاد مسارُه، والجسرُ
+    // ينسخه إلى المشروع. الإضافةُ لا تبدأ تنزيلاً بنفسها ولا تحذف شيئاً.
+    case "download": {
+      if (!api.downloads || typeof api.downloads.search !== "function") throw new Error("this browser has no downloads API")
+      const since = Number(args.since) || 0
+      const waitMs = Math.min(Math.max(Number(args.wait) || 0, 0), 120) * 1000
+      const started = Date.now()
+      for (;;) {
+        const items = await api.downloads.search({ orderBy: ["-startTime"], limit: 10 })
+        const done = (items || []).find((d) => d.state === "complete" && d.filename && Date.parse(d.startTime) >= since)
+        if (done) return { filename: done.filename, mime: done.mime || "", bytes: done.fileSize || done.totalBytes || 0, url: String(done.finalUrl || done.url || "").slice(0, 300) }
+        if (Date.now() - started >= waitMs) return null
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+    }
+    case "image": {
+      const waitMs = Math.min(Math.max(Number(args.wait) || 0, 0), 120) * 1000
+      const exclude = Array.isArray(args.exclude) ? args.exclude.slice(-200).map(String) : []
+      const minSide = Math.min(Math.max(Number(args.minSide) || 256, 32), 4096)
+      const started = Date.now()
+      let found = null
+      for (;;) {
+        found = await inPage(tab.id, IMAGE_FIND, [String(args.ref || ""), exclude, minSide])
+        if (found || Date.now() - started >= waitMs) break
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+      }
+      if (!found) return null
+      if (!found.data) {
+        if (!/^https?:/i.test(found.src)) throw new Error("image source is not http(s), blob or data")
+        const response = await fetch(found.src, { credentials: "include" })
+        if (!response.ok) throw new Error("image HTTP " + response.status)
+        const buf = new Uint8Array(await response.arrayBuffer())
+        if (buf.length > IMAGE_CAP) throw new Error("image larger than 15MB")
+        let bin = ""
+        for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000))
+        found.mime = response.headers.get("content-type") || ""
+        found.data = btoa(bin)
+        found.src = found.src.slice(0, 300)
+      }
+      return found
+    }
     case "save": {
       const copy = await inPage(tab.id, SAVE_DOC)
       if (!copy || typeof copy.html !== "string") throw new Error("could not read the page")
@@ -701,6 +816,7 @@ const perform = async (action, args) => {
       if (op === "new") {
         if (!/^https?:\/\//i.test(String(args.url))) throw new Error("http/https only")
         const created = await api.tabs.create({ windowId: tab.windowId, url: String(args.url), active: true })
+        await rememberAgentTab(created.id)
         await settled(created.id)
         return { id: created.id, url: String(args.url) }
       }

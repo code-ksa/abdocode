@@ -98,3 +98,38 @@ export const bridgeCallArgs = (target: string, rest: string, projectDir: string)
   if (target === "back" || target === "forward") return { ok: true, args: JSON.stringify({}) }
   return { ok: true, args: rest }
 }
+
+/** صفحةٌ محلّيّة (خادمُ المشروع): localhost و127.0.0.1 و[::1] و*.localhost. */
+export const isLocalUrl = (url: string): boolean => /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|[^/:]+\.localhost)(?::\d+)?(?:[/?#]|$)/iu.test(url.trim())
+
+/**
+ * 10-12 (مقيس في دور مستخدم): النموذجُ ينادي أدواتِ الجسر نصّاً حرّاً — «chrome.shot full» رُفض «تحتاج كائنَ JSON بمفاتيح: full»،
+ * و«chrome.scroll bottom» خارجَ القيم المسموحة. هنا يُبنى الكائنُ حتميّاً لكلّ أداةٍ معروفة؛ JSON الصريح يمرّ كما هو، والمجهولُ نصّاً.
+ */
+export const bridgeFreeText = (tool: string, text: string, projectDir: string): string => {
+  const t = text.trim()
+  if (t.length === 0 || t.startsWith("{")) return t
+  const words = t.split(/\s+/u)
+  switch (tool) {
+    case "shot": return JSON.stringify(/\bfull\b|كامل/iu.test(t) ? { full: true } : {})
+    case "scroll": {
+      const up = /\b(?:up|top)\b|أعلى|فوق/iu.test(t)
+      const n = Number(/\d+/u.exec(t)?.[0] ?? (/\b(?:bottom|top|end)\b|آخر|نهاية/iu.test(t) ? 10 : 1))
+      return JSON.stringify({ direction: up ? "up" : "down", count: Math.min(10, Math.max(1, n || 1)) })
+    }
+    case "inspect": {
+      const mode = words[0]!.toLowerCase().replace(/^style$/u, "styles")
+      return JSON.stringify({ mode, ...(words.length > 1 ? { target: words.slice(1).join(" ").slice(0, 120) } : {}) })
+    }
+    case "browsers": return JSON.stringify(words[0]!.toLowerCase() === "use" ? { op: "use", target: words[1] ?? "" } : { op: "list" })
+    case "devtools": return JSON.stringify({ what: /network|شبكة/iu.test(t) ? "network" : "console", reload: /\breload\b/iu.test(t), clear: /\bclear\b/iu.test(t) })
+    case "save": return JSON.stringify({ dir: t })
+    case "key": return JSON.stringify({ key: words[0] })
+    case "look": case "tap": return /^\[?r\d{1,6}\]?$/u.test(words[0]!) ? JSON.stringify({ ref: words[0]!.replace(/[[\]]/gu, "") }) : t
+    case "fill": case "select": case "upload": case "drag": case "tabs": {
+      const built = bridgeCallArgs(tool, t, projectDir)
+      return built.ok ? built.args : t
+    }
+    default: return t
+  }
+}

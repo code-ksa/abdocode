@@ -53,7 +53,7 @@ test("a computer-use request is routed as one: no project orientation, and the o
   expect(DESKTOP_DRIVE_BRIEF).toContain("desk press <مرجعُ زرّ الإرسال>")
   const cli = (await Bun.file(new URL("../src/cli.ts", import.meta.url)).text())
   expect(cli).toContain('const orientAgent = workAtTurn.orientationAgent && delegationOnNow && !isDesktopDriveTask(turn.body) ? findAgent(agentCatalogue(), "orient") : undefined')
-  expect(cli).toContain('${teamBrief}${isDesktopDriveTask(turn.body) ? DESKTOP_DRIVE_BRIEF : ""}${turn.body}')
+  expect(cli).toContain('${teamBrief}${isDesktopDriveTask(turn.body) && !userBrowser ? DESKTOP_DRIVE_BRIEF : ""}${userBrowserNote}${turn.body}')
 })
 
 test("the twin: coding requests are not computer-use tasks", async () => {

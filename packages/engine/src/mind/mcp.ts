@@ -261,7 +261,7 @@ export class McpSession implements ToolProviderSession {
     return this.#schemas.get(name.startsWith(`${this.id}.`) ? name.slice(this.id.length + 1) : name)
   }
 
-  async call(name: string, args: string, timeoutMs = 60_000): Promise<{ ok: boolean; text: string }> {
+  async call(name: string, args: string, timeoutMs = 60_000, maxText = MAX_TEXT): Promise<{ ok: boolean; text: string }> {
     const bare = name.startsWith(`${this.id}.`) ? name.slice(this.id.length + 1) : name
     if (!this.#schemas.has(bare)) return { ok: false, text: `لا أداةَ باسم ${bare} عند خادم MCP «${this.id}»` }
     const built = argumentsFor(args, this.#schemas.get(bare))
@@ -271,7 +271,8 @@ export class McpSession implements ToolProviderSession {
     const answer = await this.#rpc("tools/call", { name: bare, arguments: built.value }, timeoutMs)
     if (!answer.ok) return { ok: false, text: String(answer.why ?? "خطأ غير مسمّى") }
     const result = asObject(answer.result)
-    const text = textOfResult(answer.result).slice(0, MAX_TEXT)
+    // 10-12 (مقيس): سقفُ 4000 حرف قصّ JSON روابطِ صفحة ClickUp فسقط الزاحفُ بعد صفحةٍ واحدة «Unterminated string» — المحرّكُ يرفعه لما يقرؤه آليّاً.
+    const text = textOfResult(answer.result).slice(0, maxText)
     // ‏MCP يعلن فشلَ الأداة داخل النتيجة لا بخطأ البروتوكول.
     return { ok: result?.isError !== true, text }
   }

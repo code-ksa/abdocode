@@ -25,9 +25,11 @@ describe("كتابةُ الشيفرة عبر الصدفة تُردّ إلى writ
 describe("أدواتُ إضافة المتصفّح مقفلةٌ خلف «browser extension»", () => {
   const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
   test("الاستدعاءُ يُرفض باسم البديل، والعرضُ يُخفيها، حين المتصفّحُ المختار مملوك", () => {
-    expect(cli).toContain("if (chromeBridgeId !== undefined && word.startsWith(`${chromeBridgeId}.`) && (loadSettings().browserBackend ?? \"owned\") !== \"extension\") {")
+    // 10-12: الخلفيّةُ تُقرأ من متصفّح الدور (طلبٌ في متصفّح المستخدم يفتحها لدوره وحده) — والإعدادُ المحفوظ هو الافتراض.
+    expect(cli).toContain("if (chromeBridgeId !== undefined && word.startsWith(`${chromeBridgeId}.`) && browserBackendNow() !== \"extension\") {")
+    expect(cli).toContain("const browserBackendNow = (): \"owned\" | \"extension\" | \"off\" => turnBrowserBackend ?? loadSettings().browserBackend ?? \"owned\"")
     expect(cli).toContain("استعمل open/page/shot/tap؛ أدواتُ ${chromeBridgeId}.* لتبويب المستخدم فقط بعد «browser extension»")
-    expect(cli).toContain("const hideChrome = chromeBridgeId !== undefined && (s0.browserBackend ?? \"owned\") !== \"extension\"")
+    expect(cli).toContain("const hideChrome = chromeBridgeId !== undefined && browserBackendNow() !== \"extension\"")
     expect(cli).toContain("const shellWrite = violationAcrossVariants(cmd, fileWriteViaShellViolation)")
   })
 })

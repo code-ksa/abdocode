@@ -118,6 +118,8 @@ import { meterSummary, readMeter, recordMeterEntry } from "./usage-meter"
 import { ownerGoneLine, parseOwnerPid, watchOwner } from "./owner-watch"
 import { dismissReceipt, parseRenderedTree, pickDismissTarget } from "./overlay-dismiss"
 import { ensureExtensionPaired, launchBrowserWindows, runningBrowsersWindows } from "./extension-pairing"
+import { bridgeFreeText, isLocalUrl } from "./browser-actions-args"
+import { crawlCandidate, NO_ROBOTS, parseCrawlArgs, parseRobots, robotsAllows, sitemapMarkdown, type CrawlPage } from "./site-crawl"
 import { readBridgePairing } from "./mcp-servers/chrome-bridge"
 import { RELEASE_LESSONS_APPLIED_FILE, RELEASE_LESSONS_FILE, applyReleaseLessons, releaseLessonsLine } from "./release-lessons"
 import { windowAllowedByTask } from "./desktop-name-gate"
@@ -193,7 +195,7 @@ import { FrameQueue, createRemoteControl, mergeFrames, type RemoteControl } from
 import { CheckpointStore, restoreReportLine } from "./turn-checkpoint"
 import { FileMutationQueue, queueWaitLine } from "./file-mutation-queue"
 import { buildReviewPrompt, changesFromUnifiedDiff, judgeReview, parsePrRef, parseReviewFindings, PR_REVIEW_HEADER, renderReviewReport, REVIEW_LENSES, REVIEW_SYSTEM, reviewDiffText, type ReviewChange } from "./review-lane"
-import { DESKTOP_DRIVE_BRIEF, exposedByIntent, exposureLine, familiesFor, familiesFromResult, isDesktopDriveTask, noteToolUse } from "./tool-exposure"
+import { DESKTOP_DRIVE_BRIEF, exposedByIntent, exposureLine, familiesFor, familiesFromResult, isDesktopDriveTask, isUserBrowserTask, namesChrome, noteToolUse, userBrowserBrief, wantsWebImageGen } from "./tool-exposure"
 import { applyWorkerDiff, snapshotWorkingTree } from "./parallel-base"
 import { hiddenToolsLine, unavailableBecause, type AvailabilityFacts } from "./tool-availability"
 import { clipForWindow, contextBreakdownLine, isToolResult, overflowLine } from "./context-window"
@@ -2844,6 +2846,14 @@ const runServeShell = async (): Promise<void> => {
   const nextToolSeq = (() => { let n = 0; return () => (++n).toString(36) })()
   // T12: مزوّدو الأدوات الخارجيّون الموصولون بقرار مالكٍ صريح
   const externals = new Map<string, import("./mind/external").ToolProviderSession>()
+  // 10-12 — متصفّحُ الدور: طلبٌ في متصفّح المستخدم (حسابُه المفتوح) يذهب إلى الإضافة لهذا الدور وحده، والإعدادُ المحفوظ لا يتغيّر.
+  let turnBrowserBackend: "extension" | undefined
+  const browserBackendNow = (): "owned" | "extension" | "off" => turnBrowserBackend ?? loadSettings().browserBackend ?? "owned"
+  // 10-12 — في دور متصفّح المستخدم يحدّد آخرُ فتحٍ أين تذهب الأفعال: صفحاتُ المشروع المحلّيّة في متصفّح عبدو كود (تظهر في لوحه ولا يُمسّ
+  // تبويبُ المستخدم — مقيس: استُبدل تبويبُ بريد المستخدم بصفحة المشروع)، ومواقعُ الحسابات (Gemini…) في كروم المستخدم.
+  let surfaceTarget: "owned" | "extension" = "extension"
+  const onUserBrowser = (): boolean => browserBackendNow() === "extension" && surfaceTarget === "extension"
+  const chromeBridge = () => (loadSettings().mcpServers ?? []).find((s) => s.command.includes("mcp-chrome-bridge"))
   const extensionConnections = new Map<string, string>()
   // S13.5 (إصلاح) — الإعلانُ يقرأ **المصدر الحيّ** لحظةَ بناء الطلب. لقطةٌ
   // تُكتب عند التوصيل والفصل كانت تبقى تُعلن أدواتِ مزوّدٍ مات (وهو يُفرغها عن
@@ -2852,7 +2862,7 @@ const runServeShell = async (): Promise<void> => {
     // 09-29: أدواتُ إضافة المتصفّح لا تُعرض للنموذج إلا مع «browser extension» — ما لا يُعرض لا يُغري.
     const s0 = loadSettings()
     const chromeBridgeId = (s0.mcpServers ?? []).find((s) => s.command.includes("mcp-chrome-bridge"))?.id
-    const hideChrome = chromeBridgeId !== undefined && (s0.browserBackend ?? "owned") !== "extension"
+    const hideChrome = chromeBridgeId !== undefined && browserBackendNow() !== "extension"
     return [...externals.values()].flatMap((s) => s.tools()).filter((t) => !(hideChrome && t.name.startsWith(`${chromeBridgeId}.`)))
   })
   const externalTool = (word: string) => {
@@ -3821,13 +3831,16 @@ const runServeShell = async (): Promise<void> => {
       // 09-29: أدواتُ إضافة المتصفّح (chrome.*) تعمل في تبويب المستخدم الحقيقيّ — لا تُستدعى
       // إلا حين يختار المستخدمُ «browser extension»؛ مع المتصفّح المملوك الطريقُ open/page/shot ولوحُ التطبيق.
       const chromeBridgeId = (loadSettings().mcpServers ?? []).find((s) => s.command.includes("mcp-chrome-bridge"))?.id
-      if (chromeBridgeId !== undefined && word.startsWith(`${chromeBridgeId}.`) && (loadSettings().browserBackend ?? "owned") !== "extension") {
+      if (chromeBridgeId !== undefined && word.startsWith(`${chromeBridgeId}.`) && browserBackendNow() !== "extension") {
         return invalid(`رُفض ${word}: متصفّحُ الوكيل المختار هو المملوك (لوحُ التطبيق) — استعمل open/page/shot/tap؛ أدواتُ ${chromeBridgeId}.* لتبويب المستخدم فقط بعد «browser extension».`)
       }
       const ok = await gate(turnId, ext.effect, `أداةٌ خارجية ${word}: ${rest0.slice(0, 80)}`, word)
       if (!ok) return denied(`رُفض ${word} — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
       const session = externals.get(word.slice(0, word.indexOf(".")))!
-      const r = await session.call(word, rest0)
+      // 10-12 — أدواتُ الجسر بنصٍّ حرّ («chrome.shot full»، «chrome.scroll bottom») تُبنى كائناً قبل النداء؛ ونداءٌ صريحٌ لكروم يجعل الأفعالَ التالية فيه.
+      const bridgeTool = chromeBridgeId !== undefined && word.startsWith(`${chromeBridgeId}.`) ? word.slice(chromeBridgeId.length + 1) : undefined
+      if (bridgeTool === "open" || bridgeTool === "tabs") surfaceTarget = "extension"
+      const r = await session.call(word, bridgeTool === undefined ? rest0 : bridgeFreeText(bridgeTool, rest0, PROJECT_DIR))
       return {
         output: `${r.ok ? "⚙" : "✕"} ${word}\n${r.text}`,
         verdict: r.ok ? VERDICT_OK : { ok: false, reason: "tool_failed", denied: false, detail: r.text.slice(0, 160) },
@@ -4720,7 +4733,10 @@ const runServeShell = async (): Promise<void> => {
         // فأوّلُ أداةٍ في الدور التالي ترمي «القناة مغلقة» ويسقط الدورُ كلُّه. القناةُ الميّتة تُنسى، و`open`/`ui` تُعاد
         // مرّةً واحدة على سطحٍ جديد؛ وغيرُهما يُقال له أنّ الاتصال انقطع بدل أن يموت الدور.
         // 10-10 — «page save»: مرجعُ التصميم ملفّاتٌ في المشروع (يحتاج hooks للكتابة عبر السياسة) — قبل المسار العامّ للسطح.
-        if (spec.name === "page" && /^save\b/u.test(rest.trim())) return surfaced(await runPageSave(rest.trim().slice(4).trim(), turnId, hooks))
+        if (spec.name === "crawl") return surfaced(await runCrawl(rest, turnId, hooks))
+        if (spec.name === "page" && /^image\b/u.test(rest.trim())) return surfaced(await runPageImage(rest.trim().slice(5).trim(), turnId))
+        // 10-12: في تبويب المستخدم «page save» هو chrome.save — كان يقول «يعمل على المتصفّح المملوك» فقط.
+        if (spec.name === "page" && /^save\b/u.test(rest.trim())) return surfaced(onUserBrowser() ? await bridgeCall("save", JSON.stringify({ dir: rest.trim().slice(4).trim() }), turnId) : await runPageSave(rest.trim().slice(4).trim(), turnId, hooks))
         try {
           const liveSurface = surface
           const out = await runSurfaceTool(spec.name, rest, turnId)
@@ -5245,7 +5261,7 @@ const runServeShell = async (): Promise<void> => {
       const isUrl = /^https?:\/\//iu.test(cmd.target)
       const ref = /^r\d{1,6}$/u.test(cmd.target) ? cmd.target : ""
       if (!isUrl && ref.length === 0 && cmd.target !== "page") return invalid(DESIGN_USAGE)
-      const backend = loadSettings().browserBackend ?? "owned"
+      const backend = browserBackendNow()
       if (backend === "off") return denied("رُفض design spec: متصفّحُ الوكيل موقوفٌ من الإعدادات — browser owned / browser extension", "policy_denied")
       if (isUrl) {
         // الفتحُ بمساره المعتاد: سياسةُ المواقع والعقدُ والبوّابة هناك لا هنا.
@@ -5259,7 +5275,7 @@ const runServeShell = async (): Promise<void> => {
         const toolName = bridge === undefined ? "" : `${bridge.id}.inspect`
         if (bridge === undefined || session === undefined || !session.tools().some((t) => t.name === toolName)) return invalid("رُفض: إضافةُ المتصفّح غيرُ موصولة — bridge pair، أو بدّل: browser owned")
         if (!await gate(turnId, "outside-workspace", `إضافةُ المتصفّح (تبويبُك الحقيقيّ) inspect spec ${ref}`.trim(), "design")) return denied("رُفض design spec — قراءةُ تبويبك الحقيقيّ تحتاج موافقتك في كلّ مرّة.", "policy_denied")
-        const r = await session.call(toolName, JSON.stringify({ mode: "spec", target: ref }))
+        const r = await session.call(toolName, JSON.stringify({ mode: "spec", target: ref }), 60_000, 700_000)
         if (!r.ok) return invalid(`✕ ${r.text.slice(0, 200)}`)
         const nl = r.text.indexOf("\n")
         dumpText = nl < 0 ? "" : r.text.slice(nl + 1)
@@ -5371,6 +5387,173 @@ const runServeShell = async (): Promise<void> => {
     return referenceReceipt(copy, dir, written, refused)
   }
 
+  /**
+   * 10-12 — طلبٌ في متصفّح المستخدم: الجسرُ يُشغَّل من الباب نفسِه الذي يفتحه زرُّ «وصّل» (إطارُ external-connect في طابور الأُطر)، ثمّ
+   * يُقرن، ويُثبَّت كروم إن سمّاه المستخدم. مقيس: كان الجسرُ لا يعمل إلا بضغطةٍ يدويّة بعد كلّ إعادة تشغيل، فذهب الدورُ إلى Edge المعزول.
+   * يعيد ما يدخل الحقبةَ الأولى وسطرَ الحالة للمستخدم — والحالةُ مقيسةٌ هنا لا مفترَضة.
+   */
+  const prepareUserBrowser = async (body: string): Promise<{ brief: string; line: string }> => {
+    const imageGen = wantsWebImageGen(body)
+    if ((loadSettings().browserBackend ?? "owned") === "off") {
+      return { brief: userBrowserBrief("متصفّحُ الوكيل موقوفٌ من الإعدادات — لا تصفّح في هذا الدور؛ قل ذلك للمستخدم وتوقّف.", false), line: "🌐 الطلبُ في متصفّحك، لكنّ متصفّحَ الوكيل موقوفٌ من الإعدادات." }
+    }
+    const bridge = (loadSettings().mcpServers ?? []).find((s) => s.command.includes("mcp-chrome-bridge"))
+    if (bridge === undefined) {
+      const why = "«إضافة المتصفّح» غيرُ محفوظة في الإعدادات ▸ الاتّصالات — قل للمستخدم يضيفها ثمّ توقّف؛ لا تستعمل متصفّحاً آخر بديلاً."
+      return { brief: userBrowserBrief(why, imageGen), line: `🌐 الطلبُ في متصفّحك: ${why}` }
+    }
+    turnBrowserBackend = "extension"
+    if (!externals.has(bridge.id)) {
+      remoteQueue.push({ kind: "external-connect", id: bridge.id, command: bridge.command, protocol: "mcp" })
+      for (let i = 0; i < 60 && !externals.has(bridge.id); i++) await Bun.sleep(250)
+    }
+    if (!externals.has(bridge.id)) {
+      const why = "تعذّر تشغيلُ جسر الإضافة خلال 15 ث — قل للمستخدم يضغط «وصّل» في الإعدادات ▸ الاتّصالات ثمّ توقّف؛ لا تستعمل متصفّحاً آخر بديلاً."
+      return { brief: userBrowserBrief(why, imageGen), line: `🌐 الطلبُ في متصفّحك: ${why}` }
+    }
+    const outcome = await ensureExtensionPaired({ stateDir: STATE_ROOT, runningBrowsers: runningBrowsersWindows, launchBrowser: launchBrowserWindows })
+    let pinned = ""
+    if (outcome.status === "connected" && namesChrome(body)) {
+      const r = await externals.get(bridge.id)!.call(`${bridge.id}.browsers`, JSON.stringify({ op: "use", target: "chrome" }))
+      pinned = r.ok ? " · الأفعالُ مثبَّتةٌ على كروم" : ` · تعذّر تثبيتُ كروم: ${r.text.slice(0, 120)}`
+    }
+    const status = outcome.status === "connected"
+      ? `متّصلة — ${outcome.text.slice(0, 200)}${pinned}`
+      : `${outcome.text.slice(0, 400)} — لا تتابع بمتصفّحٍ آخر: قل للمستخدم ما يفعله ثمّ توقّف.`
+    return { brief: userBrowserBrief(status, imageGen), line: `🌐 الطلبُ في متصفّحك الحقيقيّ عبر الإضافة: ${outcome.status === "connected" ? `متّصلة${pinned}` : outcome.text.slice(0, 200)}` }
+  }
+
+  /** نداءٌ واحد لأداةٍ في جسر الإضافة من مسارات المحرّك (crawl، page save/image) — بالبوّابة نفسِها التي تمرّ بها أفعالُ تبويب المستخدم. */
+  const bridgeCall = async (tool: string, args: string, turnId: string): Promise<string> => {
+    const bridge = chromeBridge()
+    const session = bridge === undefined ? undefined : externals.get(bridge.id)
+    if (bridge === undefined || session === undefined) return "رُفض: إضافةُ المتصفّح غيرُ موصولة — bridge status"
+    if (!session.tools().some((t) => t.name === `${bridge.id}.${tool}`)) return `رُفض: جسرُ الإضافة لا يعرف ${tool} — حدّث عبدو كود والإضافة`
+    if (!await gate(turnId, "outside-workspace", `إضافةُ المتصفّح (تبويبُك الحقيقيّ) ${tool}`, tool)) return `رُفض ${tool} — يحتاج موافقتك.`
+    // الحفظُ واللقطةُ الكاملة والصورةُ المنتظَرة أطولُ من دقيقة؛ والروابطُ يقرؤها الزاحفُ كاملةً (لا سقفَ النموذج 4000 حرف).
+    const timeoutMs = tool === "save" || tool === "download" ? 150_000 : tool === "image" ? 170_000 : tool === "shot" ? 90_000 : 60_000
+    const r = await session.call(`${bridge.id}.${tool}`, args, timeoutMs, tool === "links" ? 200_000 : 8_000)
+    return (r.ok ? "" : "✕ ") + r.text
+  }
+  const errText = (error: unknown): string => String(error instanceof Error ? error.message : error).slice(0, 160)
+
+  /**
+   * 10-12 — «page image <مسار> [wait N] [rN]»: أحدثُ صورةٍ كبيرة في الصفحة (أو صورةُ مرجعٍ) تُحفظ ملفّاً في المشروع — في كروم المستخدم عبر
+   * chrome.image، وفي متصفّح عبدو كود بسكربت الإضافة نفسِه (page-scripts.ts) ثمّ جلبِ المصدر. الصيغةُ من البايتات لا من الامتداد.
+   */
+  const ownedSavedImages = new Set<string>()
+  const runPageImage = async (text: string, turnId: string): Promise<string> => {
+    if (onUserBrowser()) return bridgeCall("image", JSON.stringify({ path: text }), turnId)
+    if (surface === undefined) return "لا صفحةَ مفتوحة — open <رابط> أوّلاً ثمّ page image <مسار>"
+    const { imageArgs, imageTargetPath, placeImage, sniffImage } = await import("./mcp-servers/chrome-bridge")
+    const { path, ref, wait } = imageArgs({ path: text })
+    const target = imageTargetPath(PROJECT_DIR, path)
+    if (!target.ok) return target.why
+    const checked = brokerPath(target.rel)
+    if (!checked.ok) return `رُفض: ${checked.why}`
+    const { IMAGE_FIND_SOURCE } = await import("./page-scripts")
+    type Found = { src: string; key: string; width: number; height: number; mime?: string; data?: string }
+    let found: Found | null = null
+    const started = Date.now()
+    for (;;) {
+      try { found = JSON.parse(await surface.evaluateAsync(`(${IMAGE_FIND_SOURCE})(${JSON.stringify(ref)}, ${JSON.stringify([...ownedSavedImages])}, 256).then((r) => JSON.stringify(r))`, 30_000)) as Found | null } catch { found = null }
+      if (found !== null || Date.now() - started >= wait * 1000) break
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+    if (found === null) return wait > 0 ? `لم تظهر صورةٌ جديدة (≥256px) في الصفحة خلال ${wait} ث — اقرأها بـpage` : "لا صورةَ جديدة (≥256px) في الصفحة الآن — أعد بـwait 90 إن كانت تُولَّد"
+    let bytes: Uint8Array
+    if (typeof found.data === "string" && found.data.length > 0) bytes = Buffer.from(found.data, "base64")
+    else {
+      let url: URL
+      try { url = new URL(found.src) } catch { return "مصدرُ الصورة غيرُ صالح" }
+      if (!/^https?:$/u.test(url.protocol)) return "مصدرُ الصورة ليس http/https/blob/data"
+      const release = allowEgressWhile(url.hostname, "page image — the image the user asked to save from the open page")
+      try {
+        const response = await fetch(url.href, { signal: AbortSignal.timeout(30_000) })
+        if (!response.ok) return `تعذّر جلبُ الصورة: HTTP ${response.status}`
+        bytes = new Uint8Array(await response.arrayBuffer())
+      } catch (error) { return `تعذّر جلبُ الصورة: ${errText(error)}` } finally { release() }
+    }
+    if (bytes.length > 15 * 1024 * 1024) return `رُفض: الصورةُ أكبرُ من 15MB (${bytes.length} بايت)`
+    const kind = sniffImage(bytes)
+    if (kind === undefined) return `ما في المصدر ليس صورة (${bytes.length} بايت) — لم يُكتب شيء`
+    const placed = placeImage(target, kind)
+    if (!await gate(turnId, "edit", `page image: ${placed.rel}`)) return "رُفض الحفظ — لم تُمنح الموافقة."
+    mkdirSync(dirname(placed.abs), { recursive: true })
+    writeFileSync(placed.abs, bytes)
+    ownedSavedImages.add(found.key)
+    return `حُفظت الصورة من متصفّح عبدو كود في ${placed.rel} (${kind}، ${found.width}×${found.height}، ${bytes.length} بايت)${placed.renamed ? ` — طلبتَ ${target.rel} والصورةُ ${kind} فصُحّح الامتداد؛ استعمل ${placed.rel}` : ""}.`
+  }
+
+  /**
+   * 10-12 — crawl: يفتح صفحاتِ الموقع نفسِه واحدةً واحدة بالمتصفّح الذي يعمل فيه الدور، ويقرأ روابطها، ويحفظ نسخةَ كلِّ صفحة مرجعاً
+   * (page save / chrome.save)، ويكتب خريطةَ الموقع في .abdo/reference/<المضيف>/SITEMAP.md. robots.txt يُحترم، وثانيةٌ على الأقلّ بين الصفحات،
+   * وروابطُ الأفعال (logout/delete…) لا تُفتح (site-crawl.ts).
+   */
+  const runCrawl = async (rest: string, turnId: string, hooks: AskHooks): Promise<string> => {
+    const args = parseCrawlArgs(rest)
+    if (!args.ok) return args.why
+    const start = new URL(args.url)
+    if (!browserSiteAllowed(SETTINGS_FILE, start.href)) return "رُفض: الموقعُ خارج سياسة المواقع المحفوظة — browser allow <نطاق>"
+    if (!await gate(turnId, "network", `crawl ${start.origin} (حتى ${args.max} صفحة${args.save ? "، تُحفظ نسخُها" : ""})`)) return "رُفض الزحف — لم تُمنح الموافقة."
+    let robots = NO_ROBOTS
+    if (!isLocalUrl(start.href)) {
+      const release = allowEgressWhile(start.hostname, "robots.txt — before the explicit crawl of this site")
+      try { const r = await fetch(`${start.origin}/robots.txt`, { signal: AbortSignal.timeout(8_000) }); if (r.ok) robots = parseRobots(await r.text()) } catch { /* بلا robots.txt: لا قيود معلَنة */ } finally { release() }
+    }
+    const delay = Math.max(1_000, robots.delayMs)
+    const first = crawlCandidate(start.href, start.origin) ?? start.href
+    const queue = [first], seen = new Set(queue), pages: CrawlPage[] = []
+    const skipped = { robots: 0, limit: 0 }
+    let browserName = ""
+    while (queue.length > 0 && pages.length < args.max) {
+      if (running?.controller.signal.aborted) break
+      const url = queue.shift()!
+      if (!robotsAllows(robots, new URL(url).pathname + new URL(url).search)) { skipped.robots += 1; continue }
+      const opened = await runSurfaceTool("open", url, turnId)
+      browserName = onUserBrowser() ? "متصفّح المستخدم (الإضافة)" : "متصفّح عبدو كود"
+      if (/^(?:رُفض|العقد رفض|تعذّر|✕|Navigation blocked)/u.test(opened)) { pages.push({ url, error: opened.split("\n")[0]!.slice(0, 140) }); continue }
+      let info: { url?: string; title?: string; headings?: string[]; links?: { href: string }[] } | undefined
+      try {
+        if (onUserBrowser()) info = JSON.parse(await bridgeCall("links", "{}", turnId))
+        else if (surface !== undefined) {
+          const { LINKS_SOURCE } = await import("./page-scripts")
+          info = JSON.parse(await surface.evaluateAsync(`JSON.stringify((${LINKS_SOURCE})())`))
+        }
+      } catch (error) { pages.push({ url, error: `تعذّرت قراءةُ روابطها: ${errText(error)}` }); continue }
+      const links = Array.isArray(info?.links) ? info!.links : []
+      let saved: string | undefined, shot: string | undefined
+      if (args.save) {
+        const receipt = onUserBrowser() ? await bridgeCall("save", JSON.stringify({ dir: "" }), turnId) : await runPageSave("", turnId, hooks)
+        saved = /\.abdo\/reference\/[^\s،)]+/u.exec(receipt)?.[0] ?? receipt.split("\n")[0]!.slice(0, 120)
+      }
+      if (args.shots) {
+        const receipt = onUserBrowser() ? await bridgeCall("shot", JSON.stringify({ full: true }), turnId) : await runSurfaceTool("shot", "full", turnId)
+        shot = /[A-Za-z]:\\[^\s]+\.png/u.exec(receipt)?.[0] ?? receipt.split("\n")[0]!.slice(0, 120)
+      }
+      pages.push({ url: info?.url ?? url, title: info?.title, headings: info?.headings, links: links.length, saved, shot })
+      for (const link of links) {
+        const next = crawlCandidate(String(link?.href ?? ""), start.origin)
+        if (next !== undefined && !seen.has(next)) { seen.add(next); queue.push(next) }
+      }
+      if (queue.length > 0 && pages.length < args.max) await new Promise((r) => setTimeout(r, delay))
+    }
+    skipped.limit = queue.length
+    const markdown = sitemapMarkdown(start.href, browserName || "—", pages, skipped)
+    const rel = `.abdo/reference/${start.hostname}/SITEMAP.md`
+    const checked = brokerPath(rel)
+    let written = ""
+    if (checked.ok && await gate(turnId, "edit", `crawl: خريطةُ الموقع ${rel}`)) {
+      mkdirSync(dirname(checked.abs), { recursive: true })
+      writeFileSync(checked.abs, markdown, "utf8")
+      writeFileSync(join(dirname(checked.abs), "sitemap.json"), JSON.stringify({ start: start.href, browser: browserName, pages, skipped }, null, 2), "utf8")
+      written = `\nالخريطة: ${rel} (وsitemap.json بجانبها) — اقرأها قبل البناء.`
+    }
+    const ok = pages.filter((p) => p.error === undefined)
+    const list = pages.slice(0, 40).map((p, i) => { let path = p.url; try { const u = new URL(p.url); path = u.pathname + u.search } catch { /* كما هو */ } return `${i + 1}. ${path}${p.title ? ` — ${p.title.slice(0, 70)}` : ""}${p.error ? ` ✕ ${p.error.slice(0, 80)}` : ` (${p.links ?? 0} رابطاً)`}` }).join("\n")
+    return `زحفتُ ${ok.length} صفحة من ${start.origin} عبر ${browserName || "المتصفّح"}${pages.length > ok.length ? ` (وتعذّرت ${pages.length - ok.length})` : ""}${args.save ? " وحُفظت نسخُها في .abdo/reference/" + start.hostname + "/" : ""} · تُخطّيت بـrobots.txt: ${skipped.robots} · بقيت فوق الحدّ: ${skipped.limit}${written}\n${list}`
+  }
+
   const runSurfaceTool = async (name: string, rest: string, turnId: string): Promise<string> => {
     const { Surface } = await import("./mind/surface")
 
@@ -5418,7 +5601,7 @@ const runServeShell = async (): Promise<void> => {
         sessionRestoreTried.delete(cmd.origin)
         return gone.ok ? `نُسيت جلسةُ ${cmd.origin} — حُذف: ${gone.deleted.map((f) => basename(f)).join("، ") || "(لا ملفّ؛ أُزيل سطرُ الفهرس)"}` : gone.why ?? "لم يُحذف شيء"
       }
-      if ((loadSettings().browserBackend ?? "owned") !== "owned") return "sessions save/restore للمتصفّح المملوك وحده — إضافةُ المتصفّح تعمل في ملفّ المستخدم الحقيقيّ الذي يحفظ جلساتِه بنفسه. بدّل: browser owned"
+      if (browserBackendNow() !== "owned") return "sessions save/restore للمتصفّح المملوك وحده — إضافةُ المتصفّح تعمل في ملفّ المستخدم الحقيقيّ الذي يحفظ جلساتِه بنفسه. بدّل: browser owned"
       if (cmd.verb === "restore" && browserSessions.stateFor(cmd.origin) === undefined) return `لا جلسةَ محفوظة لـ ${cmd.origin} — ${loginReceipt(cmd.origin, false)}`
       // بلا سطح: open يُطلق المتصفّحَ ويستعيد الكعكاتِ قبل التنقّل (restoreBeforeNavigation).
       if (surface === undefined) return cmd.verb === "restore" ? runSurfaceTool("open", `${cmd.origin}/`, turnId) : "لا سطحَ موصول — افتح الأصلَ أوّلاً: open <رابط> ثمّ أعد sessions save"
@@ -5451,7 +5634,7 @@ const runServeShell = async (): Promise<void> => {
     // ب8ج — bridge (للنموذج): الحالةُ بلا بوّابة؛ الاقترانُ فعلٌ خارجيّ (يُقلع متصفّحاً) يمرّ بالبوّابة.
     if (name === "bridge") {
       const verb = rest.trim().toLowerCase() || "status"
-      const backend = loadSettings().browserBackend ?? "owned"
+      const backend = browserBackendNow()
       if (verb === "status") {
         const pairing = readBridgePairing(STATE_ROOT)
         let live: { connected: boolean; pairing: boolean } | undefined
@@ -5507,6 +5690,13 @@ const runServeShell = async (): Promise<void> => {
       const m = /^(.*?)(?:\s+(\d{1,2}))?\s*$/u.exec(rest.trim())
       const needle = (m?.[1] ?? "").replace(/^["'«»]+|["'«»]+$/gu, "").trim()
       if (needle.length === 0) return "الصيغة: wait <نصّ أو [rN]> [ثوانٍ ≤ 60] — ينتظر ظهورَه في الصفحة"
+      // 10-12 (مقيس في دور مستخدم): «wait 20» قُرئ نصّاً «20» فطابق [r20] فوراً — رقمٌ وحده مهلةٌ بالثواني ثمّ قراءةُ الصفحة.
+      if (/^\d{1,3}$/u.test(needle) && m?.[2] === undefined) {
+        const pause = Math.min(60, Math.max(1, Number(needle)))
+        await new Promise((r) => setTimeout(r, pause * 1000))
+        const now = await runSurfaceTool("page", "", turnId)
+        return `انتظرتُ ${pause} ث (رقمٌ وحده مهلة؛ لانتظار نصٍّ: wait "<النصّ>" <ثوانٍ>). أوّلُ سطور الصفحة الآن:\n${now.split("\n").slice(0, 8).join("\n")}`
+      }
       const seconds = Math.min(60, Math.max(1, Number.parseInt(m?.[2] ?? "15", 10) || 15))
       const fold = (s: string) => normalizeArabic(s).toLowerCase()
       const started = Date.now()
@@ -5529,9 +5719,25 @@ const runServeShell = async (): Promise<void> => {
       if (/^(?:العقد رفض|مرجعٌ غير معروف|لم أنقر|رُفض|✕)/u.test(tapped)) return `تعذّر إغلاقُ «${choice.name}»: ${tapped}`
       return `${dismissReceipt(choice)}\n${tapped}`
     }
-    const backend = loadSettings().browserBackend ?? "owned"
+    const backend = browserBackendNow()
     if (backend === "off" && !(name === "surface" && rest.trim() === "off") && !(name === "browser")) return "رُفض التصفّح: متصفّحُ الوكيل موقوفٌ من الإعدادات (سطح المكتب ▸ متصفّح الوكيل) — أو اكتب: browser owned / browser extension"
     if (backend === "extension" && name !== "surface") {
+      const navUrl = name === "open" || name === "ui" ? (rest.trim().split(/\s+/u)[0] ?? "") : name === "tabs" && /^new\s+\S/u.test(rest.trim()) ? (rest.trim().split(/\s+/u)[1] ?? "") : undefined
+      if (navUrl !== undefined) surfaceTarget = isLocalUrl(navUrl) ? "owned" : "extension"
+    }
+    // قياسُ صفحات المشروع (audit/seo/compare/release-check) بمتصفّح عبدو كود أبداً — يحاكي العروض ولا يحتاج حسابَ المستخدم.
+    if (backend === "extension" && name !== "surface" && surfaceTarget === "extension" && !["audit", "seo", "compare", "release-check"].includes(name)) {
+      if (name === "find") {
+        const needle = rest.trim().replace(/^["'«“]+|["'»”]+$/gu, "").trim()
+        if (needle.length === 0) return "الصيغة: find <نصّ يظهر في اسم العنصر أو دوره>"
+        const tree = await runSurfaceTool("page", "", turnId)
+        if (/^(?:رُفض|✕)/u.test(tree)) return tree
+        const lines = tree.split("\n").filter((l) => /^\[r\d+\]/u.test(l))
+        const fold = (x: string) => normalizeArabic(x).toLowerCase()
+        const hits = lines.filter((l) => fold(l).includes(fold(needle)))
+        if (hits.length === 0) return `لا عنصرَ يطابق «${needle.slice(0, 60)}» في ${lines.length} عنصراً على تبويب المستخدم — جرّب page لقراءة الشجرة`
+        return `${hits.length} عنصراً يطابق «${needle.slice(0, 60)}» (من ${lines.length}، تبويبُ المستخدم):\n${hits.slice(0, 20).map((l) => l.replace(/^\[(r\d+)\]\s*/u, "$1 · ")).join("\n")}`
+      }
       // إعادةُ توجيهٍ إلى إضافة المتصفّح الحقيقيّ: المفرداتُ نفسُها (page/open/look/tap/fill/key/scroll/shot) تُنفَّذ في تبويب المستخدم عبر الجسر المحلّيّ، بالبوّابة نفسِها.
       const bridge = (loadSettings().mcpServers ?? []).find((s) => s.command.includes("mcp-chrome-bridge"))
       if (bridge === undefined) return "رُفض: الخلفيّةُ المختارة «إضافة المتصفّح» غيرُ محفوظة — أضف «إضافة المتصفّح» من الإعدادات ▸ الاتّصالات ثمّ «وصّل»، أو بدّل: browser owned"
@@ -8409,7 +8615,7 @@ const runServeShell = async (): Promise<void> => {
       const localLane = Providers.provider(selectedModel.ref.split("/")[0] ?? "")?.local === true
       const LOCAL_TURN_MS = 8 * 60_000, LOCAL_TOOL_CAP = 24
       // دليلُ المتصفّح لا يُطلب حين المتصفّحُ موقوفٌ أو التحكّمُ مطفأ (مراجعة 09-14: كان يجعل الدورَ غيرَ قابلٍ للإقفال).
-      const browserAvailable = loadSettings().computerUseEnabled !== false && (loadSettings().browserBackend ?? "owned") !== "off"
+      const browserAvailable = loadSettings().computerUseEnabled !== false && browserBackendNow() !== "off"
       const projectOrientation = projectAwarenessOn && projectSelected ? projectOrientationBrief(turnProjectDir, railsAtTurn.orientationProse) : ''
       // 10-09 — تعليماتُ جذر المشروع (AGENTS.md/ABDO.md/CLAUDE.md) في أوّل طلبٍ من كلّ دور، مستقلّةً عن مفتاح الوعي: هي قواعدُ المشروع لا ذاكرتُنا عنه.
       const rootInstructionsBrief = projectSelected ? rootInstructionsLayer(rootInstructions(turnProjectDir)) : ""
@@ -8449,6 +8655,16 @@ const runServeShell = async (): Promise<void> => {
       // هـ2 — سلّمُ الأوضاع: في «أقوى» فما فوق يقرأ الوكيلُ الموجِّه (read-only) المشروعَ من الوعي والذاكرة قبل الحقبة الأولى،
       // وخلاصتُه المهيكلة تُحقن في مدخل الحقبة الأولى. الأساسيُّ = لا وكيلَ إضافيّاً، بايتاً كما كان.
       let orientationBrief = ""
+      // 10-12 — طلبٌ في متصفّح المستخدم يُجهَّز قبل الموجِّه: الجسرُ والاقترانُ وكروم، وحالتُها تدخل الحقبةَ الأولى.
+      turnBrowserBackend = undefined
+      surfaceTarget = "extension"
+      const userBrowser = isUserBrowserTask(turn.body)
+      let userBrowserNote = ""
+      if (userBrowser) {
+        const prepared = await prepareUserBrowser(turn.body)
+        userBrowserNote = prepared.brief
+        await emitEvent(turn.id, prepared.line)
+      }
       // وضعٌ مخزَّنٌ لا يُعرف يهبط إلى الأساسيّ — والهبوطُ يُقال، فإعدادٌ يُهمل بصمتٍ يظنّه المالك عاملاً.
       const storedWorkMode = settingsAtTurn.workMode
       if (storedWorkMode !== undefined && !isWorkMode(storedWorkMode)) {
@@ -8882,7 +9098,7 @@ const runServeShell = async (): Promise<void> => {
           ? `↩ استئناف خطّة المشروع${planTitle.length > 0 ? ` «${planTitle}»` : ""}: واصل من السبرنت المفتوح أدناه مباشرةً — لا تبدأ من جديد ولا تُعِد قراءةَ ما في SPRINT_STATE.\n`
           : priorGoal === undefined ? "" : resumeBrief(priorGoal)
         const epochInput = epoch === 1
-          ? `${rootInstructionsBrief}${projectOrientation}${orientationBrief}${projectAwareness}${summaryBrief}${coldMap}${priorRecall}${generalAwareness}${resumeLine}${sprintStateBrief}${rails.semanticBrief ? semanticBrief : ""}${lessonsBrief}${recipesBrief}${secretNotice}${teamBrief}${isDesktopDriveTask(turn.body) ? DESKTOP_DRIVE_BRIEF : ""}${turn.body}${summaryAsk}`
+          ? `${rootInstructionsBrief}${projectOrientation}${orientationBrief}${projectAwareness}${summaryBrief}${coldMap}${priorRecall}${generalAwareness}${resumeLine}${sprintStateBrief}${rails.semanticBrief ? semanticBrief : ""}${lessonsBrief}${recipesBrief}${secretNotice}${teamBrief}${isDesktopDriveTask(turn.body) && !userBrowser ? DESKTOP_DRIVE_BRIEF : ""}${userBrowserNote}${turn.body}${summaryAsk}`
           : `واصل الهدف الأصلي من نقطة التوقف، ولا تبدأ من جديد:\n${turn.body}\n` +
             `${summaryBrief}${summaryAsk}` +
             (awarenessBrief.length > 0 ? `${awarenessBrief}` : "") +
@@ -9765,6 +9981,7 @@ const runServeShell = async (): Promise<void> => {
       // وضعُ CI (exec): الجوابُ الخاتم في إطار done لقشرة «cli» وحدها — القشرةُ المكتبيّة تبنيه من الأحداث كما كانت.
       emit({ kind: "done", turnId: turn.id, rerun: !completed, ...(shellKind === "cli" ? { answer: answer.slice(-8000) } : {}), outcome: completed ? "completed" : "checkpointed", ...(checkpoints.count(turnSession, turn.id) > 0 ? { checkpointFiles: checkpoints.count(turnSession, turn.id) } : {}), contextLeft: lastContextLeft })
       projectCreatedInTurn = undefined
+      turnBrowserBackend = undefined
       running = undefined
       nestedEffectObserver = undefined
       parentEpoch = 0
@@ -9807,6 +10024,7 @@ const runServeShell = async (): Promise<void> => {
         failure: { kind: providerFailure.failure.kind, action: providerFailure.action, provider: providerFailure.provider },
       }) })
       projectCreatedInTurn = undefined
+      turnBrowserBackend = undefined
       running = undefined
       nestedEffectObserver = undefined
       parentEpoch = 0

@@ -1,10 +1,10 @@
 {
-  "version": "4.0.147",
+  "version": "4.0.151",
   "assets": {
     "win32-x64": {
-      "url": "https://github.com/code-ksa/abdocode/releases/download/v4.0.147/abdocode-cli-win32-x64-4.0.147.zip",
-      "sha256": "ad4cc325918d2e8bd51bbf4f1caf19e983d0d8f9f23a696096b4938fa1eb07c5",
-      "size": 43129287,
+      "url": "https://github.com/code-ksa/abdocode/releases/download/v4.0.151/abdocode-cli-win32-x64-4.0.151.zip",
+      "sha256": "a2c069313d3f4fba3dcb33a359c6fc320a19a73d3b945c23692182a007431fa2",
+      "size": 43141491,
       "entry": "abdocode.exe"
     }
   }

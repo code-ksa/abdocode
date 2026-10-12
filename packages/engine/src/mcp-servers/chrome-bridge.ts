@@ -17,9 +17,9 @@
  * - الردودُ نصٌّ فقط للنموذج (عقدُ MCP عندنا)؛ اللقطةُ تُحفظ ملفّاً على قرص المستخدم ويُعاد مسارُها — لا تُرسل.
  */
 import { randomBytes } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { isAbsolute, basename, join, resolve } from "node:path"
+import { isAbsolute, basename, dirname, extname, join, relative, resolve, sep } from "node:path"
 import { browserSiteAllowed } from "../browser-site-policy"
 import { judge } from "../mind/surface"
 import { REFERENCE_ROOT, referenceDir, referenceFiles, referenceReceipt, type ReferenceCopy } from "../reference-save"
@@ -29,6 +29,98 @@ export const DEFAULT_BRIDGE_PORT = 9367
 export const CALL_TIMEOUT_MS = 20_000
 /** ن3 — ما لا يُرفع بالنيابة عن أحد مهما كان الطلب (نسخةُ الجسر من قاعدة المحرّك). */
 export const UPLOAD_SECRET_FILE = /(^|[\\/])(\.env(\..*)?|\.npmrc|\.netrc|id_(rsa|ed25519|ecdsa)(\.pub)?|.*\.(pem|key|p12|pfx|kdbx)|secrets?\.(json|ya?ml|toml)|credentials(\.json)?)$/iu
+
+/** صيغُ الصور التي تُحفظ من الصفحة — من بايتاتها لا من ترويسة الخادم ولا من امتداد الطلب. */
+export type ImageKind = "png" | "jpg" | "webp" | "gif" | "avif"
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif)$/iu
+
+/** الصيغةُ من التوقيع السحريّ: صفحةُ خطأٍ HTML أو JSON بامتداد .png لا تُكتب صورةً. */
+export const sniffImage = (bytes: Uint8Array): ImageKind | undefined => {
+  const at = (i: number) => bytes[i] ?? -1
+  if (at(0) === 0x89 && at(1) === 0x50 && at(2) === 0x4e && at(3) === 0x47) return "png"
+  if (at(0) === 0xff && at(1) === 0xd8 && at(2) === 0xff) return "jpg"
+  if (at(0) === 0x47 && at(1) === 0x49 && at(2) === 0x46 && at(3) === 0x38) return "gif"
+  const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to))
+  if (bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "webp"
+  if (bytes.length >= 12 && ascii(4, 8) === "ftyp" && /^avi[fs]$/u.test(ascii(8, 12))) return "avif"
+  return undefined
+}
+
+/**
+ * أين تُكتب صورةٌ طلبها النموذج: مسارٌ نسبيٌّ داخل جذر المشروع (أو مطلقٌ تحته)، بامتداد صورة، لا ملفَّ اعتماد ولا «..» يخرج.
+ * الامتدادُ يُصحَّح لاحقاً على صيغة البايتات (`placeImage`) — هنا يُحكم المكانُ فقط.
+ */
+export const imageTargetPath = (root: string, requested: string): Readonly<{ ok: true; abs: string; rel: string }> | Readonly<{ ok: false; why: string }> => {
+  const text = requested.trim().replace(/^["'«]+|["'»]+$/gu, "")
+  if (text.length === 0) return { ok: false, why: "الصيغة: image {path: \"public/images/hero.png\", wait?: 90, ref?} — المسارُ داخل المشروع" }
+  const base = resolve(root)
+  const abs = resolve(base, text)
+  const rel = relative(base, abs)
+  if (rel.length === 0 || rel.startsWith("..") || isAbsolute(rel)) return { ok: false, why: `رُفض: ${text} خارج المشروع (${base}) — الصورُ تُحفظ داخله فقط` }
+  if (UPLOAD_SECRET_FILE.test(abs)) return { ok: false, why: `رُفض: ${text} اسمُ ملفِّ اعتماد — اختر اسمَ صورة` }
+  if (!IMAGE_EXT.test(abs)) return { ok: false, why: `رُفض: ${text} بلا امتداد صورة (.png/.jpg/.webp/.gif/.avif)` }
+  return { ok: true, abs, rel: rel.split(sep).join("/") }
+}
+
+/**
+ * 10-12 (مقيس في دور مستخدم): النموذجُ يكتب «chrome.image public/images/hero.png wait=90» نصّاً حرّاً فيصل السطرُ كلُّه في `path`
+ * فيُرفض «بلا امتداد صورة» أربعَ مرّاتٍ والصورةُ جاهزة. يُفكّ السطر: المسارُ (الكلمةُ ذاتُ امتداد الصورة)، وwait بأيّ فاصل، ومرجعُ rN.
+ * الحقولُ الصريحة في الكائن تغلب ما في السطر.
+ */
+export const imageArgs = (args: Record<string, unknown>): { path: string; ref: string; wait: number } => {
+  const line = String(args.path ?? "").trim()
+  const words = line.split(/\s+/u).filter((w) => w.length > 0)
+  const path = words.find((w) => IMAGE_EXT.test(w.replace(/^["'«]+|["'»,]+$/gu, ""))) ?? line
+  const waitText = /\bwait\s*[:=]?\s*(\d{1,3})\b/iu.exec(line)?.[1]
+  const refText = words.find((w) => /^\[?r\d{1,6}\]?$/u.test(w))?.replace(/[[\]]/gu, "")
+  const wait = args.wait !== undefined ? Number(args.wait) : Number(waitText ?? 0)
+  return {
+    path: path.replace(/^["'«]+|["'»,]+$/gu, ""),
+    ref: typeof args.ref === "string" && args.ref.length > 0 ? args.ref : refText ?? "",
+    wait: Math.min(120, Math.max(0, Math.trunc(wait) || 0)),
+  }
+}
+
+export interface LinksPage { url?: string; title?: string; headings?: string[]; links?: { href: string; text?: string }[] }
+
+/**
+ * روابطُ صفحةٍ JSON صالحاً تحت سقفٍ — لا قصَّ نصٍّ في منتصف JSON (مقيس 10-12: «Unterminated string» على صفحة ClickUp الرئيسيّة).
+ * يُسقط نصوصَ الروابط أوّلاً ثمّ يقلّل عددَها حتى يتّسع.
+ */
+export const fitLinks = (page: LinksPage, max: number): string => {
+  let out = JSON.stringify(page)
+  if (out.length <= max) return out
+  const bare: LinksPage = { ...page, links: (page.links ?? []).map((l) => ({ href: l.href })) }
+  out = JSON.stringify(bare)
+  let count = bare.links!.length
+  while (out.length > max && count > 0) { count = Math.floor(count * 0.8); out = JSON.stringify({ ...bare, links: bare.links!.slice(0, count) }) }
+  return out
+}
+
+/** ما لا يُنسخ من التنزيلات إلى مشروعٍ أبداً: ملفّاتٌ تُشغَّل بنقرة. */
+const EXECUTABLE_EXT = /\.(exe|msi|msix|bat|cmd|com|scr|ps1|psm1|vbs|vbe|js|jse|wsf|hta|dll|jar|sh|lnk|reg)$/iu
+
+/** أين يُنسخ ملفٌّ نزّله زرٌّ في الصفحة: داخل المشروع، بامتداد، لا ملفَّ اعتماد ولا ملفّاً تنفيذيّاً. */
+export const downloadTargetPath = (root: string, requested: string): Readonly<{ ok: true; abs: string; rel: string }> | Readonly<{ ok: false; why: string }> => {
+  const text = requested.trim().replace(/^["'«]+|["'»,]+$/gu, "")
+  if (text.length === 0) return { ok: false, why: "الصيغة: download {path: \"public/images/hero-full.png\", wait?: 30} — انقر زرَّ التنزيل بـtap أوّلاً" }
+  const base = resolve(root)
+  const abs = resolve(base, text)
+  const rel = relative(base, abs)
+  if (rel.length === 0 || rel.startsWith("..") || isAbsolute(rel)) return { ok: false, why: `رُفض: ${text} خارج المشروع (${base})` }
+  if (UPLOAD_SECRET_FILE.test(abs)) return { ok: false, why: `رُفض: ${text} اسمُ ملفِّ اعتماد` }
+  if (EXECUTABLE_EXT.test(abs)) return { ok: false, why: `رُفض: ${text} ملفٌّ تنفيذيّ — لا يُنسخ تنزيلٌ يُشغَّل إلى المشروع` }
+  if (extname(abs).length < 2) return { ok: false, why: `رُفض: ${text} بلا امتداد` }
+  return { ok: true, abs, rel: rel.split(sep).join("/") }
+}
+
+/** يضبط الامتدادَ على الصيغة المقيسة: طلبُ hero.png وبايتاتٌ JPEG ⇒ hero.jpg (والإيصالُ يقول ذلك). */
+export const placeImage = (target: { abs: string; rel: string }, kind: ImageKind): { abs: string; rel: string; renamed: boolean } => {
+  const current = (IMAGE_EXT.exec(target.abs)?.[1] ?? "").toLowerCase().replace("jpeg", "jpg")
+  if (current === kind) return { ...target, renamed: false }
+  const swap = (path: string) => path.replace(IMAGE_EXT, `.${kind}`)
+  return { abs: swap(target.abs), rel: swap(target.rel), renamed: true }
+}
 
 type RpcId = string | number | null
 type RpcRequest = { jsonrpc?: string; id?: RpcId; method?: string; params?: Record<string, unknown> }
@@ -99,6 +191,11 @@ export const BRIDGE_TOOLS = Object.freeze([
   { name: "reload", description: "إعادةُ تحميل إضافة المتصفّح من ملفّاتها على القرص (بعد تحديثها) — تعود موصولةً بالرمز نفسه خلال ثوانٍ", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   // 2026-09-14 — تكافؤُ أدوات الفحص مع المتصفّح المملوك: تصميمُ الصفحة بالأرقام، عنصرٌ بمرجعه، قواعدُ CSS لمحدِّد، الأصول.
   // S9 (09-18) — spec: شجرةُ العناصر الظاهرة بصناديقها وأنماطها (ماشي المواصفة) لاستخراج مواصفة تصميمٍ آليّة؛ الهدفُ مرجعُ جذرٍ اختياريّ.
+  // 10-12 — «ولّد صورةً من Gemini المفتوح في متصفّحي»: الصورةُ المولَّدة تُحفظ ملفّاً في المشروع (لا لقطةَ شاشة ولا SVG بديل).
+  { name: "image", description: "حفظُ صورةٍ من الصفحة الفعّالة ملفّاً في المشروع: أحدثُ صورةٍ كبيرة (≥256px) لم تُحفظ بعد، أو صورةُ مرجعٍ بعينه؛ wait ينتظرها حتى تظهر (توليدُ Gemini/ChatGPT يأخذ 20–90 ث). path نسبيٌّ داخل المشروع (public/images/hero.png)", inputSchema: { type: "object", properties: { path: { type: "string", minLength: 5, maxLength: 300 }, ref: { type: "string", maxLength: 12 }, wait: { type: "integer", minimum: 0, maximum: 120 } }, required: ["path"], additionalProperties: false } },
+  // 0.8.0 (10-12) — زاحفُ الموقع يقرأ روابطَ كلِّ صفحة، وزرُّ «تنزيل» يُلتقط ملفُّه إلى المشروع.
+  { name: "links", description: "روابطُ الصفحة الفعّالة (حتى 400، http/https) وعنوانُها وعناوينُها h1–h3 — JSON؛ يستعمله crawl لزحف الموقع", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "download", description: "بعد نقر زرّ تنزيلٍ بـtap: ينتظر اكتمالَ ذلك التنزيل (wait ≤120 ث، الافتراض 30) وينسخه إلى path داخل المشروع — الأصلُ يبقى في مجلّد التنزيلات؛ لا ملفّاتٍ تنفيذيّة", inputSchema: { type: "object", properties: { path: { type: "string", minLength: 3, maxLength: 300 }, wait: { type: "integer", minimum: 0, maximum: 120 } }, required: ["path"], additionalProperties: false } },
   { name: "inspect", description: "فحصُ الصفحة الفعّالة: styles (التصميم بالأرقام) | dom <ref> | css <selector> | assets | spec [ref] (شجرةُ الصناديق والأنماط لمواصفة التصميم) — قراءةٌ بلا أثر", inputSchema: { type: "object", properties: { mode: { type: "string", enum: ["styles", "dom", "css", "assets", "spec"] }, target: { type: "string", maxLength: 120 } }, required: ["mode"], additionalProperties: false } },
 ])
 
@@ -155,6 +252,10 @@ export class ChromeBridge {
   #seq = 0
   #refs: readonly PageNode[] = []
   #generation = 1
+  /** مفاتيحُ الصور المحفوظة في هذه الجلسة — تُستثنى في الطلب التالي فلا تُعاد السابقةُ والجديدةُ تُولَّد. */
+  readonly #savedImages = new Set<string>()
+  /** آخرُ نقرةٍ أرسلها الوكيل — التنزيلُ الذي يُلتقط هو ما بدأ بعدها (لا ما نزّله المستخدمُ قبل ساعة). */
+  #lastTapAt = 0
   readonly #settingsFile: string | undefined
   readonly #stateDir: string
   readonly #shotsDir: string
@@ -350,10 +451,12 @@ export class ChromeBridge {
         if (!verdict.ok) return `العقد رفض: ${verdict.why}`
         if (this.#settingsFile !== undefined && !browserSiteAllowed(this.#settingsFile, url)) return "Navigation blocked by saved site permissions"
         // الإضافةُ تنتظر اكتمالَ التحميل حتى ٢٥ ث — المهلةُ هنا أطولُ منها كي يصل ردُّها لا خطأُ مهلة (كانت ٢٠ ث = أقصرَ من انتظار الإضافة).
-        await this.send("open", { url }, 35_000)
+        const opened = await this.send("open", { url }, 35_000) as { newTab?: boolean } | boolean | null
         this.#refs = []
         this.#generation += 1
-        return `انتقلتُ في متصفّح المستخدم${others} — الجيل ${this.#generation}، والمراجعُ القديمة بطلت. استعمل chrome.page لقراءة الصفحة.`
+        // الإضافةُ ≥0.7.2 لا تستبدل تبويبَ المستخدم: رابطٌ خارج تبويبات الوكيل يُفتح في تبويبٍ جديد — والإيصالُ يقول أين.
+        const where2 = typeof opened === "object" && opened !== null && opened.newTab === true ? "فتحتُه في تبويبٍ جديد (تبويبُ المستخدم لم يُستبدل)" : "انتقلتُ"
+        return `${where2} في متصفّح المستخدم${others} — الجيل ${this.#generation}، والمراجعُ القديمة بطلت. استعمل chrome.page لقراءة الصفحة.`
       }
       case "look": {
         const ref = typeof args.ref === "string" ? args.ref : ""
@@ -366,6 +469,7 @@ export class ChromeBridge {
         if (node === undefined) return `مرجعٌ غير معروف «${ref}» — اقرأ الصفحة بـchrome.page أوّلاً`
         const verdict = judge({ generation: this.#generation }, { kind: "click", ref, generation: this.#generation })
         if (!verdict.ok) return `العقد رفض: ${verdict.why}`
+        this.#lastTapAt = Date.now()
         const tapped = await this.send("tap", { ref })
         return `نقرتُ «${node.name || node.role}» في متصفّح المستخدم ${inputMode(tapped)}.`
       }
@@ -493,6 +597,65 @@ export class ChromeBridge {
         const file = join(this.#shotsDir, `${where || "chrome"}-${full ? "full-" : ""}${Date.now()}.png`)
         writeFileSync(file, Buffer.from(data, "base64"))
         return `حُفظت لقطةُ ${full ? "الصفحة كاملةً" : "التبويب"}${others} على قرصك: ${file} (${Math.round(data.length * 3 / 4)} بايت) — لا تُرسل إلى أحد.`
+      }
+      case "links": {
+        let r: unknown
+        try { r = await this.send("links", {}) } catch (error) {
+          if (/unknown action/iu.test(String(error instanceof Error ? error.message : error))) return "الإضافةُ أقدمُ من 0.8.0 ولا تعرف links — حدّث ملفّاتها ثمّ chrome.reload"
+          throw error
+        }
+        if (r === null || typeof r !== "object") return "تعذّرت قراءةُ روابط الصفحة — الإضافةُ لم تُعطِ شيئاً"
+        return fitLinks(r as LinksPage, 150_000)
+      }
+      case "download": {
+        const line = String(args.path ?? "").trim()
+        const requested = line.split(/\s+/u).find((w) => /\.[A-Za-z0-9]{1,8}["'»,]*$/u.test(w)) ?? line
+        const waitText = /\bwait\s*[:=]?\s*(\d{1,3})\b/iu.exec(line)?.[1]
+        const wait = Math.min(120, Math.max(0, Math.trunc(Number(args.wait ?? waitText ?? 30)) || 0))
+        const target = downloadTargetPath(this.#projectRoot(), requested)
+        if (!target.ok) return target.why
+        const since = (this.#lastTapAt > 0 ? this.#lastTapAt : Date.now()) - 5_000
+        let r: { filename?: unknown; bytes?: unknown; mime?: unknown } | null
+        try { r = await this.send("download", { since, wait }, (wait + 20) * 1000) as typeof r } catch (error) {
+          if (/unknown action/iu.test(String(error instanceof Error ? error.message : error))) return "الإضافةُ أقدمُ من 0.8.0 ولا تعرف download — حدّث ملفّاتها ثمّ chrome.reload"
+          throw error
+        }
+        if (r === null || r === undefined || typeof r.filename !== "string") return `لم يكتمل تنزيلٌ جديد خلال ${wait} ث${others} — انقر زرَّ التنزيل بـchrome.tap أوّلاً ثمّ أعد chrome.download`
+        const source = r.filename
+        if (!existsSync(source)) return `اكتمل التنزيلُ لكنّ ملفَّه غيرُ موجود على القرص (${basename(source)}) — لعلّ المستخدمَ نقله أو حذفه`
+        if (EXECUTABLE_EXT.test(source)) return `رُفض: التنزيلُ ${basename(source)} ملفٌّ تنفيذيّ — لا يُنسخ إلى المشروع`
+        const bytes = statSync(source).size
+        if (bytes > 100 * 1024 * 1024) return `رُفض: التنزيلُ ${basename(source)} أكبرُ من 100MB (${bytes} بايت)`
+        mkdirSync(dirname(target.abs), { recursive: true })
+        copyFileSync(source, target.abs)
+        return `نُسخ التنزيلُ ${basename(source)} (${bytes} بايت) إلى ${target.rel}${others} — الأصلُ باقٍ في مجلّد التنزيلات.`
+      }
+      case "image": {
+        const { path, ref, wait } = imageArgs(args)
+        if (ref.length > 0 && this.#node(ref) === undefined) return `مرجعٌ غير معروف «${ref}» — اقرأ الصفحة بـchrome.page أوّلاً`
+        const target = imageTargetPath(this.#projectRoot(), path)
+        if (!target.ok) return target.why
+        let r: { data?: unknown; key?: unknown; src?: unknown; mime?: unknown; width?: unknown; height?: unknown } | null
+        try { r = await this.send("image", { ref, wait, exclude: [...this.#savedImages], minSide: 256 }, (wait + 40) * 1000) as typeof r }
+        catch (error) {
+          if (/unknown action/iu.test(String(error instanceof Error ? error.message : error))) return "الإضافةُ أقدمُ من 0.7.1 ولا تعرف image — حدّث ملفّاتها ثمّ chrome.reload، وأعد المحاولة"
+          throw error
+        }
+        if (r === null || r === undefined || typeof r.data !== "string" || r.data.length === 0) {
+          return wait > 0
+            ? `لم تظهر صورةٌ جديدة (≥256px) في الصفحة خلال ${wait} ث${others} — اقرأها بـchrome.page: هل رفض الموقعُ الطلب أو طلب الدخول؟ لا تختلق صورة.`
+            : `لا صورةَ جديدة (≥256px) في الصفحة الآن${others} — إن كانت تُولَّد فأعد بـwait: 90`
+        }
+        const bytes = Buffer.from(r.data, "base64")
+        const kind = sniffImage(bytes)
+        if (kind === undefined) return `ما أعادته الصفحةُ ليس صورة (${String(r.mime ?? "نوعٌ مجهول").slice(0, 40)}، ${bytes.length} بايت) — لم يُكتب شيء`
+        const placed = placeImage(target, kind)
+        mkdirSync(dirname(placed.abs), { recursive: true })
+        writeFileSync(placed.abs, bytes)
+        if (typeof r.key === "string") this.#savedImages.add(r.key)
+        const size = typeof r.width === "number" && typeof r.height === "number" ? `${r.width}×${r.height}، ` : ""
+        const from = String(r.src ?? "").slice(0, 90)
+        return `حُفظت الصورة من متصفّح المستخدم${others} في ${placed.rel} (${kind}، ${size}${bytes.length} بايت)${from.length > 0 ? ` — المصدر ${from}` : ""}${placed.renamed ? ` — طلبتَ ${target.rel} والصورةُ ${kind} فصُحّح الامتداد؛ استعمل ${placed.rel}` : ""}.`
       }
       case "save": {
         const copy = await this.send("save", {}, 120_000) as ReferenceCopy | null

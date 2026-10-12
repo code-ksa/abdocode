@@ -236,7 +236,7 @@ describe("S9 — wiring pins across the layers", () => {
     expect(background).toContain(`const SPEC = ${SPEC_WALKER}\n`)
     expect(background).toContain('case "inspect": return String(args.mode) === "spec" ? inPage(tab.id, SPEC, [600, String(args.target || "")]) : inPage(tab.id, INSPECT, [String(args.mode || "styles"), String(args.target || "")])')
     expect(background.indexOf("const SPEC = ")).toBeLessThan(background.indexOf("const INSPECT = ")) // شريحةُ INSPECT في اختبار التكافؤ تبقى دالّةً واحدة
-    expect(JSON.parse(read("..", "browser-bridge", "extension", "manifest.json")).version).toBe("0.7.0")
+    expect(JSON.parse(read("..", "browser-bridge", "extension", "manifest.json")).version).toBe("0.8.0")
     const cdp = read("..", "browser", "src", "cdp.ts")
     expect(cdp).toContain("async readSpec(rootRef = \"\", limit = SPEC_WALKER_LIMIT): Promise<string> {")
     expect(cdp).toContain("return this.#eval(specWalkerExpression(limit, rootRef))")
@@ -252,7 +252,8 @@ describe("S9 — wiring pins across the layers", () => {
     expect(cli).toContain("return runDesignTool(rest, turnId, hooks)")
     expect(cli).toContain("const runDesignTool = async (rest: string, turnId: string, hooks: AskHooks): Promise<DispatchResultV> => {")
     expect(cli).toContain("dumpText = await surface.readSpec(ref)")
-    expect(cli).toContain('const r = await session.call(toolName, JSON.stringify({ mode: "spec", target: ref }))')
+    // 10-12: الشجرةُ تُقرأ كاملةً (700 ألف حرف) — سقفُ النموذج 4000 حرف كان يقصّها فيسقط extractSpec.
+    expect(cli).toContain('const r = await session.call(toolName, JSON.stringify({ mode: "spec", target: ref }), 60_000, 700_000)')
     // القراءةُ عبر الإضافة تقف على البوّابة قبل النداء؛ والكتابةُ في المشروع بمسار write
     expect(cli.indexOf('await gate(turnId, "outside-workspace", `إضافةُ المتصفّح (تبويبُك الحقيقيّ) inspect spec')).toBeLessThan(cli.indexOf('JSON.stringify({ mode: "spec", target: ref })'))
     expect(cli).toContain("const written = await runWriteToolV(\"write\", `write ${cmd.out} <<< ${html}`, turnId, hooks)")

@@ -6,7 +6,7 @@ const nl = source.includes("\r\n") ? "\r\n" : "\n"
 
 describe("tool exposure wiring", () => {
   test("families are computed from the effective goal at turn start, expanded at dispatch, and filter the model's tool list", () => {
-    expect(source).toContain('import { DESKTOP_DRIVE_BRIEF, exposedByIntent, exposureLine, familiesFor, familiesFromResult, isDesktopDriveTask, noteToolUse } from "./tool-exposure"')
+    expect(source).toContain('import { DESKTOP_DRIVE_BRIEF, exposedByIntent, exposureLine, familiesFor, familiesFromResult, isDesktopDriveTask, isUserBrowserTask, namesChrome, noteToolUse, userBrowserBrief, wantsWebImageGen } from "./tool-exposure"')
     expect(source).toContain("let turnFamilies = new Set<string>()")
     // 09-30: الهدفُ الفعليّ ومعه نصُّ السبرنت المفتوح حين يكون الدورُ استئنافاً على خطّة (openSprintSection).
     const set = source.indexOf("turnFamilies = familiesFor(sprintFocusText.length > 0 ? `${effectiveGoal}\\n${sprintFocusText}\\n${sprintBrief(PROJECT_DIR)}` : effectiveGoal, turnFamilies)")

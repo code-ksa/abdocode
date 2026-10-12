@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "Abdo Code",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "__MSG_appDesc__",
   "default_locale": "ar",
   "icons": {
@@ -17,7 +17,8 @@
     "debugger",
     "storage",
     "alarms",
-    "sidePanel"
+    "sidePanel",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>"

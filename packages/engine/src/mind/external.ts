@@ -46,7 +46,8 @@ export interface ToolProviderSession {
   readonly id: string
   handshake(timeoutMs?: number): Promise<readonly ExternalTool[]>
   tools(): readonly ExternalTool[]
-  call(name: string, args: string, timeoutMs?: number): Promise<{ ok: boolean; text: string }>
+  /** maxText: سقفُ النصّ العائد — للنموذج 4000 حرف؛ والمحرّكُ يرفعه لما يقرؤه آليّاً (روابطُ الزاحف، شجرةُ المواصفة). */
+  call(name: string, args: string, timeoutMs?: number, maxText?: number): Promise<{ ok: boolean; text: string }>
   close(): void
 }
 
