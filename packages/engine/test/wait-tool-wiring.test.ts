@@ -16,7 +16,11 @@ test("wait is catalogued, exposed with the browser family, bounded, normalised, 
   expect(cli).toContain('if (name === "wait") {')
   expect(cli).toContain('const seconds = Math.min(60, Math.max(1, Number.parseInt(m?.[2] ?? "15", 10) || 15))')
   expect(cli).toContain("const fold = (s: string) => normalizeArabic(s).toLowerCase()")
-  expect(cli).toContain('last = await runSurfaceTool("page", "", turnId)')
+  expect(cli).toContain('const now = await runSurfaceTool("page", "", turnId)')
+  // 10-14 — بلا مهلةٍ صريحة: صفحةٌ ثابتةٌ 5 ث لن تُظهر النصّ (مقيس: 15 ث كاملةً على صفحةٍ لم تتغيّر)؛ والمهلةُ الصريحة تُحترم كاملةً.
+  expect(cli).toContain("const WAIT_SETTLED_MS = 5_000")
+  expect(cli).toContain("if (now !== last) stableSince = Date.now()")
+  expect(cli).toContain("if (!explicit && Date.now() - stableSince >= WAIT_SETTLED_MS) return")
   expect(cli.indexOf('if (name === "wait") {')).toBeLessThan(cli.indexOf('if (name === "dismiss") {'))
   expect(cli).toContain("interpretGateTurn, normalizeArabic, parseGateMode")
 })

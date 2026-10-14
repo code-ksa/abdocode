@@ -199,17 +199,39 @@ const affinityHeader = (value: string | undefined): Record<string, string> => va
  */
 export const REASONING_OUTPUT_CAP = /^(?:o[1-9](?:[.\-]|$)|gpt-(?:[5-9]|[1-9][0-9])(?:[.\-]|$))/iu
 
+/**
+ * 10-14 — كلُّ معرّف نداءٍ يُجاب قبل الدور التالي، وكلُّ ردِّ أداةٍ يتبع نداءه: Anthropic وOpenAI يرفضان (400) طلباً فيه نداءٌ بلا ردّ
+ * أو ردٌّ بلا نداء. حلقةٌ توقّفت في منتصف طابور نداءاتٍ (تكرار، سقف) تترك نداءً بلا ردّ — يُجاب «لم يُنفَّذ»، والردُّ اليتيم يصير نصّاً.
+ */
+export const NOT_EXECUTED = "لم يُنفَّذ هذا النداء — توقّفت الحلقةُ قبله."
+export function answerEveryCall(messages: readonly ModelMessage[]): readonly ModelMessage[] {
+  const out: ModelMessage[] = []
+  let open: ModelToolCall[] = []
+  const close = () => { for (const call of open) out.push({ role: "tool", content: NOT_EXECUTED, toolCallId: call.id, name: call.name }); open = [] }
+  for (const message of messages) {
+    if (message.role === "tool") {
+      const at = open.findIndex((call) => call.id === message.toolCallId)
+      if (at >= 0) { open.splice(at, 1); out.push(message) }
+      else out.push({ role: "user", content: message.content })
+      continue
+    }
+    close()
+    out.push(message)
+    if (message.role === "assistant" && message.toolCalls?.length) open = [...message.toolCalls]
+  }
+  close()
+  return out
+}
+
 export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
   if (input.model.trim().length === 0) throw new Error("model is required")
   assertMessages(input.messages)
+  if (input.wire !== "native-ollama" && input.messages.some((message) => message.toolCalls?.length || message.role === "tool")) input = { ...input, messages: answerEveryCall(input.messages) }
   const affinity = sessionAffinityValue(input.sessionAffinity)
   const affinityBody = input.sessionAffinityBody === true ? affinity : undefined
   // 10-08 (مقيس على NIM): gpt-oss-20b يستدعي أدواتِه بقناته الأصليّة — بلا أدواتٍ معلَنة في الطلب أسقطها المزوّدُ فعاد المحتوى فارغاً
   // والوسائطُ في `reasoning` ({"path":"src/price.js",…}) ثلاثَ مرّاتٍ ولو بتنبيه. الشكلُ المتوافق مع OpenAI صار ينقل الأدوات الأصليّة
-  // (tools، tool_calls، رسائل tool)؛ والأنثروبيّ وحده باقٍ غيرَ مؤهَّل.
-  if (input.wire === "anthropic" && (input.tools?.length || input.messages.some((m) => m.toolCalls?.length))) {
-    throw new Error("native tool transport is not qualified for this provider")
-  }
+  // (tools، tool_calls، رسائل tool). و10-14 صار الأنثروبيّ ينقلها أيضاً (tool_use/tool_result) — انظر فرعَه أدناه.
   const stop = input.stop?.length ? input.stop : undefined
   if (input.wire === "native-ollama") {
     return Object.freeze({
@@ -242,12 +264,37 @@ export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
     })
   }
   if (input.wire === "anthropic") {
+    // 10-14 — مقيسٌ مقابل Claude Code بالنموذج نفسِه (claude-sonnet-5-5) على n8n: كان الطلبُ يخرج بلا cache_control فيُدفع السياقُ
+    // كاملاً بسعره في كلّ نداء، وبلا أدواتٍ أصليّة (رفضٌ صريح هنا) فيكتب النموذجُ «نفّذ:» نصّاً على عُرفٍ لم يُدرَّب عليه.
+    // فالأدواتُ تُرسل بشكلها (input_schema)، ونداءاتُ المساعد tool_use، والنتائجُ tool_result متتاليةً في رسالة user واحدة؛
+    // ونقاطُ الخبيئة الأربع (الحدُّ الأقصى): آخرُ أداة، والنظام، وآخرُ رسالة، وآخرُ رسالةِ user قبلها — فالبادئةُ تُقرأ بعُشر سعرها.
     const systems = input.messages.filter((message) => message.role === "system").map((message) => message.content)
-    const messages = input.messages.filter((message) => message.role !== "system").map((message) => {
-      if (message.role !== "tool") return { role: message.role, content: message.images?.length ? [...message.images.map(image => ({type:'image',source:{type:'base64',media_type:image.mime,data:image.data}})),{type:'text',text:message.content}] : message.content }
+    type Block = Record<string, unknown>
+    const turns: { role: "user" | "assistant"; content: Block[] }[] = []
+    const push = (role: "user" | "assistant", blocks: Block[]) => {
+      const last = turns.at(-1)
+      if (last?.role === role) last.content.push(...blocks)
+      else turns.push({ role, content: blocks })
+    }
+    for (const message of input.messages) {
+      if (message.role === "system") continue
+      if (message.role === "tool") { push("user", [{ type: "tool_result", tool_use_id: message.toolCallId, content: message.content }]); continue }
+      const blocks: Block[] = message.images?.length ? message.images.map((image) => ({ type: "image", source: { type: "base64", media_type: image.mime, data: image.data } })) : []
+      if (message.content.trim().length > 0) blocks.push({ type: "text", text: message.role === "assistant" ? message.content.trimEnd() : message.content })
+      if (message.role === "assistant") for (const call of message.toolCalls ?? []) blocks.push({ type: "tool_use", id: call.id, name: call.name, input: record(parseJsonArguments(call.input)) ?? {} })
+      push(message.role === "assistant" ? "assistant" : "user", blocks)
+    }
+    const ephemeral = { type: "ephemeral" }
+    const mark = (turn: { content: Block[] } | undefined) => { const block = turn?.content.at(-1); if (block !== undefined) block.cache_control = ephemeral }
+    mark(turns.at(-1))
+    mark(turns.slice(0, -1).findLast((turn) => turn.role === "user"))
+    const tools = input.tools?.map((tool, index, all) => {
+      const schema = record(tool.parameters)
       return {
-        role: "user",
-        content: [{ type: "tool_result", tool_use_id: message.toolCallId, content: message.content }],
+        name: tool.name,
+        description: tool.description,
+        input_schema: schema?.type === "object" ? schema : { type: "object", properties: {} },
+        ...(index === all.length - 1 ? { cache_control: ephemeral } : {}),
       }
     })
     return Object.freeze({
@@ -259,9 +306,11 @@ export function encodeChatRequest(input: ChatCodecInput): EncodedChatRequest {
         max_tokens: input.maxOutputTokens ?? 4096,
         stream: input.stream,
         ...(affinityBody === undefined ? {} : { metadata: { user_id: affinityBody } }),
-        ...(systems.length === 0 ? {} : { system: systems.join("\n\n") }),
-        ...(stop === undefined ? {} : { stop_sequences: stop }),
-        messages,
+        ...(systems.length === 0 ? {} : { system: [{ type: "text", text: systems.join("\n\n"), cache_control: ephemeral }] }),
+        // عُرفُ النصّ (‏</tool_result>) يقطع النداءَ الأصليّ قبل أن يكتمل — لا وقفَ مع الأدوات الأصليّة.
+        ...(stop === undefined || tools?.length ? {} : { stop_sequences: stop }),
+        ...(tools?.length ? { tools } : {}),
+        messages: turns,
       }),
     })
   }
@@ -352,8 +401,18 @@ export function decodeChatResponse(wire: ProviderWire, payload: unknown): ModelT
         input: block.input ?? {},
       }))
     }
+    // 10-14 — input_tokens عند Anthropic **لا يشمل** المقروءَ من الخبيئة ولا المكتوبَ فيها: الإدخالُ كلُّه مجموعُ الثلاثة، والمخبوءُ
+    // cache_read وحده. كان المقروءُ يسقط فيبدو كلُّ نداءٍ صغيراً ولا يُرى أنّ الخبيئة تعمل.
     const counts = record(root.usage) ?? {}
-    return turn(texts.join(""), calls, string(root.stop_reason) ?? "unknown", usage(counts.input_tokens, counts.output_tokens))
+    const read = number(counts.cache_read_input_tokens)
+    const written = number(counts.cache_creation_input_tokens)
+    const fresh = number(counts.input_tokens)
+    const total = fresh === undefined ? undefined : fresh + (read ?? 0) + (written ?? 0)
+    // أسبابُ التوقّف بمفردات البقيّة: nativeToolReply يقبل stop/tool_calls وحدهما، فـ«tool_use» كان سيُرفض «incomplete_native_response»
+    // في كلّ نداءٍ أصليّ. max_tokens يبقى باسمه (المقطوعُ يُعرف به).
+    const reason = string(root.stop_reason)
+    const finish = reason === "tool_use" ? "tool_calls" : reason === "end_turn" || reason === "stop_sequence" ? "stop" : reason ?? "unknown"
+    return turn(texts.join(""), calls, finish, usage(total, counts.output_tokens, read))
   }
   const choice = Array.isArray(root.choices) ? record(root.choices[0]) ?? {} : {}
   const message = record(choice.message) ?? {}

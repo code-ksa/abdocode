@@ -243,9 +243,11 @@ describe("a production server older than the last build", () => {
   test("audit compares the managed servers with the last successful build, and the servers record when they started", () => {
     const cli = readFileSync(join(import.meta.dir, "../src/cli.ts"), "utf8")
     expect(cli).toContain("const olderServer = serverOlderThanBuild([...turnServers.snapshot(), ...devServers.snapshot()], sprintEvidence.buildAt)")
-    expect(cli).toContain("return olderServer === undefined ? report : `${olderServer}\\n${report}`")
+    // 10-14: الخادمُ القديم يُجدَّد قبل القياس (refreshStale) وسطرُه أوّلَ التقرير؛ والتحذيرُ يبقى لما لم يُجدَّد.
+    expect(cli).toContain("return `${serverNote}${olderServer === undefined ? \"\" : `${olderServer}\\n`}${report}`")
     const managed = readFileSync(join(import.meta.dir, "../src/managed-server.ts"), "utf8")
-    expect(managed).toContain("const managed: ManagedProcess = { proc, port, display, startedAt: Date.now() }")
+    // 10-14: ويحمل أمرَ إقلاعه (relaunch) كي يُجدَّد بأمره نفسِه قبل القياس.
+    expect(managed).toContain("const managed: ManagedProcess = { proc, port, display, startedAt: Date.now(), relaunch }")
   })
 })
 

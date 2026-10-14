@@ -28,8 +28,18 @@ const OPENAI_NO_CHAT_TOOLS = /^(?:openai\/)?gpt-(?:[6-9]|[1-9]\d)(?:[.\-]|$)/iu
  */
 const NATIVE_MEASURED_CLOUD_FAMILIES = /(?:^|\/)nemotron-3-(?:super|ultra)(?:[-:]|$)/iu
 
+/**
+ * 10-14 — Claude مدرَّبٌ على tool_use الأصليّ، والنصّيُّ («نفّذ:» بعُرفٍ لم يره) كان يدور: مقابل Claude Code بالنموذج نفسِه (sonnet-5-5)
+ * على n8n ستُّ حقبِ تحقّقٍ بلا تعديل. والشكلُ الأنثروبيّ صار ينقل الأدوات (model-gateway). فعائلةُ Anthropic أصليّةٌ تحت المفتاح نفسِه.
+ */
+const NATIVE_MEASURED_PROVIDERS = new Set(["anthropic"])
+
+/** 10-14 — العائلاتُ التي يُقال لها «اجمع النداءات المستقلّة في الرد» (عقدُ native-agent-tools)؛ المقيسةُ وحدها. */
+export const nativeMultiCall = (provider: string): boolean => NATIVE_MEASURED_PROVIDERS.has(provider)
+
 export function usesNativeToolProtocol(provider: string, model: string, override: string | undefined, measuredNative = false): boolean {
   if (override === "text") return false
+  if (measuredNative && NATIVE_MEASURED_PROVIDERS.has(provider)) return true
   if (provider === "openai" && OPENAI_NO_CHAT_TOOLS.test(model)) return false
   if (provider !== "ollama") return override === "native" || NATIVE_ONLY_CLOUD_FAMILIES.test(model) || (measuredNative && NATIVE_MEASURED_CLOUD_FAMILIES.test(model))
   return override === "native" || VERIFIED_LOCAL_TOOL_MODELS.has(model) ||

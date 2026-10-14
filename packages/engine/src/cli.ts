@@ -72,7 +72,7 @@ import { CORE_SKILL_PACKAGES, coreSkillBody, coreSkillsBrief, coreSkillsCatalogu
 import { clearSecretHostBindings, secretHostVerdict } from "./secret-host-binding"
 import { isProjectSkillRef, projectSkillBody, projectSkills } from "./project-skills"
 import { CONNECTORS, connectorById, connectorCommand, connectorGrants, connectorHandles, connectorServerId } from "./connectors/registry"
-import { usesNativeToolProtocol } from "./native-model-protocol"
+import { nativeMultiCall, usesNativeToolProtocol } from "./native-model-protocol"
 import {
   DEFAULT_AGENT_MODEL,
   DEFAULT_CHAT_MODEL,
@@ -119,6 +119,7 @@ import { ownerGoneLine, parseOwnerPid, watchOwner } from "./owner-watch"
 import { dismissReceipt, parseRenderedTree, pickDismissTarget } from "./overlay-dismiss"
 import { ensureExtensionPaired, launchBrowserWindows, runningBrowsersWindows } from "./extension-pairing"
 import { bridgeFreeText, isLocalUrl } from "./browser-actions-args"
+import { ensureStateRoot, stateRootFor } from "./install-state"
 import { crawlCandidate, NO_ROBOTS, parseCrawlArgs, parseRobots, robotsAllows, sitemapMarkdown, type CrawlPage } from "./site-crawl"
 import { readBridgePairing } from "./mcp-servers/chrome-bridge"
 import { RELEASE_LESSONS_APPLIED_FILE, RELEASE_LESSONS_FILE, applyReleaseLessons, releaseLessonsLine } from "./release-lessons"
@@ -157,7 +158,7 @@ import { cssSourceViolation } from "./css-source-guard"
 import { isRootLayout, orphanedStylesheet, orphanedStylesheetLine } from "./root-layout-stylesheet"
 import { tailwindApplyViolation } from "./tailwind-apply-guard"
 import { DRIVE_UPLOAD_MAX, GoogleConnector, googleOptionsFromEnv } from "./mcp-servers/google"
-import { ManagedServers, devPortHint, devServerUnderBuildNote, listenerPidOf, listeningPorts, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
+import { ManagedServers, auditServerScript, devPortHint, devServerUnderBuildNote, listenerPidOf, listeningPorts, parseServerCommand, portListening, wrappedServerViolation } from "./managed-server"
 import { LAUNCH_CONFIG_PATH, effectivePort, mergeDevServerRows, readLaunchConfig } from "./dev-servers"
 import { brokenAliasViolation, dangerousShellViolation, fileWriteViaShellViolation, killByNameViolation, dockerPublishViolation, narrationEchoViolation, unquotedTemplateViolation, watchModeViolation, violationAcrossVariants } from "./shell-command-guard"
 import { redactSecretValues, secretInCommandViolation, secretInSourceViolation, sweepResidualSecrets } from "./secret-command-guard"
@@ -181,7 +182,7 @@ import { addedLines, renderFindings, scanAdded } from "./diff-security-scan"
 import { parsePrCreate, prBlocker, prBody } from "./pr-create"
 import { surveyPush } from "./push-survey"
 import { parseSecurityScan, renderProjectScan, scanProject } from "./project-security-scan"
-import { buildVerifierPrompt, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
+import { buildVerifierPrompt, CLOUD_VERIFIER_SCALE, parseVerdict, type SemanticVerdict } from "./semantic-verifier"
 import { readPdf } from "./pdf-read"
 import { DOCX_MAX_BYTES, docxText } from "./docx-read"
 import { analyzeCv, jobKeywords, parseCvCommand, renderCvReport, type CvAnalysis, type CvCommand } from "./cv-analysis"
@@ -264,7 +265,8 @@ installEgressGuard()
 // بالضبط. حين يكون المنفّذ هو abdocode.exe نفسه — لا bun — فنحن مصرَّفون.
 const COMPILED = !/bun(\.exe)?$/i.test(process.execPath)
 const ROOT = COMPILED ? join(process.execPath, "..") : import.meta.dir
-const STATE_ROOT = resolve(process.env.ABDO_CODE_STATE_DIR ?? ROOT)
+// 10-12 — نسخةُ المتجر (MSIX) في WindowsApps للقراءة فقط: الحالةُ في %LOCALAPPDATA%\AbdoCode\state ما لم يُعطَ مجلّد (install-state.ts).
+const STATE_ROOT = ensureStateRoot(ROOT, stateRootFor(ROOT, process.env))
 // مسارا Edge المعروفان — للمتصفّح المملوك (ui) ولطباعة العروض إلى PDF (slides) من قائمةٍ واحدة.
 const EDGE_EXECUTABLES = Object.freeze(["C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "C:/Program Files/Microsoft/Edge/Application/msedge.exe"])
 // 09-30: متى قيست صفحةٌ ومتى عُدّلت شيفرة — `sprint done` لا يقبل «الصفحة تعرض…» بلا قياسٍ بعد آخر تعديل (sprint-evidence.ts).
@@ -351,7 +353,8 @@ const discoverProviderModels = async (providerId: string): Promise<readonly stri
     if (response.status < 200 || response.status >= 300) return cached?.models ?? []
     const parsed = JSON.parse(response.body) as { data?: { id?: unknown }[] }
     const models = (parsed.data ?? [])
-      .map((row) => (typeof row.id === "string" ? row.id.trim() : ""))
+      // 10-14 — جوجل (واجهتُها المتوافقة) تسمّي النماذجَ «models/gemini-…» والدردشةُ تريد «gemini-…»: البادئةُ تُنزع فلا تتكرّر ولا تنكسر.
+      .map((row) => (typeof row.id === "string" ? row.id.trim().replace(/^models\//u, "") : ""))
       .filter((id) => /^[A-Za-z0-9._\/-]{1,128}$/u.test(id))
       .sort((a, b) => a.localeCompare(b))
     discoveredModels.set(providerId, { at: Date.now(), models: Object.freeze([...new Set(models)]) })
@@ -1193,6 +1196,10 @@ const AGENT_OUTPUT_RESERVE = 16_384
 // a complete tool call. This remains inside the separate 16384 output reserve.
 // 10-02 — 8,192 قطع كتابةَ صفحةٍ كاملة (25 ألف حرف) مرّتين متتاليتين؛ 16,384 = احتياطيُّ الخرج نفسُه، فلا تنقص ميزانيّةُ المدخل.
 const AGENT_EPOCH_OUTPUT_TOKENS = 16_384
+/** 10-14 — wait بلا مهلةٍ صريحة: صفحةٌ لم يتغيّر نصُّها هذه المدّة لن تُظهر ما يُنتظر. */
+const WAIT_SETTLED_MS = 5_000
+/** 10-14 — عائلاتٌ قيس أنّ الموجِّهَ على النموذج نفسِه لا يزيدها (ORIENT_SKIP_MEASURED في الاختبار يحمل الأرقام). */
+const ORIENT_SELF_SUFFICIENT_PROVIDERS: ReadonlySet<string> = new Set(["anthropic"])
 
 /** خطّافا البثّ والمقاطعة — تنفيذٌ واحد للـCLI والقشرتين، فلا يفترقان. */
 interface AskHooks {
@@ -1649,6 +1656,8 @@ const validateSettingsPatch = (value: Record<string, unknown>): Settings | strin
     const customEndpoints = new Set<string>()
     for (const c of value.customProviders as Record<string, unknown>[]) {
       if (typeof c?.id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(c.id)) return "customProviders: معرف غير صالح (أحرف لاتينية صغيرة وأرقام وشرطات)"
+      // 10-14 — «كتبتُ انثروبيك تحت وحطّيت المفتاح فلم يُحفظ»: اسمُ مزوّدٍ مدمج ليس مزوّداً مخصّصاً — يظلّله بنقطةٍ مكسورة.
+      if (Providers.PROVIDERS.some((p) => p.id === c.id)) return `customProviders: «${c.id}» مزوّدٌ مدمج — مفتاحُه في صفّه في الإعدادات ▸ المزوّدون، لا مزوّدٌ مخصّص`
       if (typeof c.label !== "string" || c.label.length === 0 || c.label.length > 64) return "customProviders: label غير صالح"
       if (typeof c.baseUrl !== "string" || c.baseUrl.length > 512 || /[|;\s]/u.test(c.baseUrl)) return "customProviders: baseUrl غير صالح (بلا مسافات أو | أو ;)"
       if (c.local !== undefined && typeof c.local !== "boolean") return "customProviders: local قيمة منطقية"
@@ -2179,7 +2188,7 @@ const askOnce = async (
   const sprintPlanRequired = process.env.ABDO_REQUIRE_SPRINT_PLAN === "1"
   // S1 (2026-09-17) — رسالةُ النظام تُركَّب في prompt-composer بمدخلاتٍ صريحة (قيمٌ لا دوالّ ولا بيئة)؛
   // الهجرةُ بايتاً بايت: المسمارُ الذهبيّ في test/prompt-composer.test.ts يقارن الناتجَ بما كان هنا حرفيّاً.
-  const composeInput: ComposeInput = { mode: nativeTools ? "native" : "text", planningPhase, coaching: rails.coaching, intentField: hooks.intentField === true, advertised: advertisedNames, policy, sprintPlan: { required: sprintPlanRequired, ready: sprintPlanRequired && sprintPlanReady(PROJECT_DIR, true), approved: sprintPlanRequired && planApproved(PROJECT_DIR, true) } }
+  const composeInput: ComposeInput = { mode: nativeTools ? "native" : "text", multiCall: nativeTools && nativeMultiCall(selected.provider), planningPhase, coaching: rails.coaching, intentField: hooks.intentField === true, advertised: advertisedNames, policy, sprintPlan: { required: sprintPlanRequired, ready: sprintPlanRequired && sprintPlanReady(PROJECT_DIR, true), approved: sprintPlanRequired && planApproved(PROJECT_DIR, true) } }
   const projectInstructionBlock = hooks.conversationMode==='chat' ? '' : projectInstructionsFor(hooks.projectInstructions === undefined ? loadSettings().projectInstructions : hooks.projectInstructions, PROJECT_DIR)
   const skillBlock = hooks.reviewSystem === undefined && hooks.conversationMode!=='chat' ? localSkillInstructions(SETTINGS_FILE, hooks.localSkillRequest ?? question, coreSkillFor) : ""
   // إعلانُ المهارات المفعَّلة (أسماءٌ وأوصافٌ لا أجساد) كي يحمّل النموذجُ ما يناسب بأداة skill — كما يعرف كلودُ مهاراتِه.
@@ -4157,6 +4166,10 @@ const runServeShell = async (): Promise<void> => {
           effectiveRest = effectiveRest.replace(/^--sandbox\s+/u, "")
           if (/^--bg\s+/u.test(effectiveRest)) return invalid("run --sandbox لا يجتمع مع --bg — شغّله في المقدّمة.")
         }
+        // 10-14 — مقيسٌ مع claude-sonnet-5-5 (m11، مرّتين): «run $env:PORT='3111'; npm start --bg» — العلامةُ في آخر السطر فذهبت إلى npm
+        // («unknown cli config») وبقي الخادمُ في المقدّمة حتى مهلة التشغيل. «--bg» في آخر الأمر يعني ما يعنيه في أوّله.
+        const trailingBg = !/^--bg\s+/u.test(effectiveRest) && /\s--bg\s*$/u.test(effectiveRest)
+        if (trailingBg) effectiveRest = `--bg ${effectiveRest.replace(/\s--bg\s*$/u, "").trim()}`
         const background = /^--bg\s+/u.test(effectiveRest)
         const command = background ? effectiveRest.replace(/^--bg\s+/u, "") : effectiveRest
         if (background && command.length === 0) return invalid("run --bg يحتاج أمراً")
@@ -4427,7 +4440,16 @@ const runServeShell = async (): Promise<void> => {
         if (!ok) return denied(`رُفض ${spec.name} — نمط ${currentMode} يحتاج موافقةً لم تُمنح.`, "policy_denied")
         if (spec.name === "git-stage" || spec.name === "git-unstage") {
           if (!rest) return invalid(`${spec.name} يحتاج مسار ملف واحداً`)
-          return runAdapterV("git-change", "git_change", { action: spec.name === "git-stage" ? "stage" : "unstage", path: rest }, `git_${turnId}_${nextToolSeq()}`, hooks.signal)
+          const action = spec.name === "git-stage" ? "stage" : "unstage"
+          // 10-14 — مقيسٌ مع claude-sonnet-5-5: «git-stage a b c…» فشل مساراً واحداً فأعاده النموذجُ ملفّاً ملفّاً — 12 نداءً. عدّةُ مساراتٍ
+          // تُجهَّز في نداءٍ واحد؛ ومسارٌ فيه مسافةٌ وهو موجودٌ يبقى مساراً واحداً كما كان.
+          const paths = !/\s/u.test(rest) || existsSync(resolve(PROJECT_DIR, rest)) ? [rest] : rest.split(/\s+/u).filter((p) => p.length > 0)
+          if (paths.length === 1) return runAdapterV("git-change", "git_change", { action, path: rest }, `git_${turnId}_${nextToolSeq()}`, hooks.signal)
+          const staged: DispatchResultV[] = []
+          for (const path of paths) staged.push(await runAdapterV("git-change", "git_change", { action, path }, `git_${turnId}_${nextToolSeq()}`, hooks.signal))
+          const failed = staged.find((r) => r.verdict !== undefined && !r.verdict.ok)
+          const output = staged.map((r, i) => `${paths[i]}: ${r.output.trim().split("\n", 1)[0] ?? ""}`).join("\n")
+          return failed !== undefined ? { ...failed, output } : { ...staged.at(-1)!, output }
         }
         if (spec.name === "git-commit") {
           if (!rest) return invalid("git-commit يحتاج رسالة")
@@ -5701,11 +5723,18 @@ const runServeShell = async (): Promise<void> => {
       const fold = (s: string) => normalizeArabic(s).toLowerCase()
       const started = Date.now()
       let last = ""
+      // 10-14 — مقيسٌ مع claude-sonnet-5-5 (m11): «wait لا توجد مهامّ بعد» انتظر 15 ث كاملةً وصفحتُه لم تتغيّر منذ الثانية الأولى (النصُّ
+      // الفارغ مختلف). بلا مهلةٍ صريحة: صفحةٌ ثابتةٌ WAIT_SETTLED_MS لن تُظهره — يعود الآن بسطورها. والمهلةُ الصريحة تُحترم كاملةً.
+      const explicit = m?.[2] !== undefined
+      let stableSince = started
       while (Date.now() - started < seconds * 1000) {
-        last = await runSurfaceTool("page", "", turnId)
-        if (/^(?:لا سطحَ|رُفض|✕)/u.test(last)) return last
+        const now = await runSurfaceTool("page", "", turnId)
+        if (/^(?:لا سطحَ|رُفض|✕)/u.test(now)) return now
+        if (now !== last) stableSince = Date.now()
+        last = now
         const hitLine = last.split("\n").find((l) => fold(l).includes(fold(needle)))
         if (hitLine !== undefined) return `ظهر «${needle.slice(0, 60)}» بعد ${((Date.now() - started) / 1000).toFixed(1)} ث: ${hitLine.trim().slice(0, 160)}\nأعد page لقراءة الصفحة كاملةً.`
+        if (!explicit && Date.now() - stableSince >= WAIT_SETTLED_MS) return `لم يظهر «${needle.slice(0, 60)}» — الصفحةُ ثابتةٌ منذ ${Math.round((Date.now() - stableSince) / 1000)} ث فلن يظهر بالانتظار (لمهلةٍ أطول: wait "<النصّ>" <ثوانٍ>). أوّلُ سطور الصفحة الآن:\n${last.split("\n").slice(0, 8).join("\n")}`
         await new Promise((r) => setTimeout(r, 800))
       }
       return `لم يظهر «${needle.slice(0, 60)}» خلال ${seconds} ث. أوّلُ سطور الصفحة الآن:\n${last.split("\n").slice(0, 8).join("\n")}`
@@ -5801,8 +5830,10 @@ const runServeShell = async (): Promise<void> => {
         emit({ kind: "browse", url, control: true })
         // Native ownership must be proven before attaching; a docked page alone
         // is not a successful agent browser connection.
+        // 10-14 — قشرةُ سطر الأوامر (exec) لا تطبيقَ سطح مكتبٍ يُقلع متصفّحاً أثناء الانتظار: كانت تنتظر عشرَ ثوانٍ منفذاً لا يأتي قبل كلّ
+        // فتحٍ أوّل. محاولةٌ واحدة تكفي — متصفّحٌ مملوكٌ قائمٌ (عقدُ إيجارٍ) يُوصل فوراً، والغائبُ لا يُنتظر.
         if (surface === undefined) {
-          for (let attempt = 0; attempt < 40; attempt++) {
+          for (let attempt = 0; attempt < (shellKind === "cli" ? 1 : 40); attempt++) {
             if (running?.controller.signal.aborted) return "رُفض الفتح: أُلغي الطلب"
             const ownedPort = ownedDesktopBrowserPort(SETTINGS_FILE)
             if (ownedPort !== undefined) {
@@ -5929,7 +5960,13 @@ const runServeShell = async (): Promise<void> => {
         surfaceLoadedAt = Date.now()
       } else if (name === "audit" || name === "shot" || name === "compare") {
         // 10-02 (مقيس): audit بلا خادمٍ مُدار قال «لا سطحَ موصول — استعمل ui» فلم يُسمَّ السببُ (لا خادمَ يعمل)؛ السببُ وأمرُه بالاسم.
-        if (!/https?:\/\//iu.test(rest)) return `${name} يحتاج خادمَ المشروع يعمل تحت إدارة النواة ولا خادمَ الآن — ابنِ (npm run build) ثمّ run --bg npm run start، أو run --bg npm run dev، ثمّ ${name}`
+        // 10-14: والآن تُقلعه النواةُ أوّلاً إن عرّف المشروعُ أمرَه (autoStartProjectServer)؛ الرفضُ لما لا أمرَ له.
+        const started = /https?:\/\//iu.test(rest) ? undefined : await autoStartProjectServer(turnId)
+        if (started !== undefined) {
+          const opened = await runSurfaceTool("ui", `http://127.0.0.1:${started}/`, turnId)
+          if (surface === undefined) return opened
+          surfaceLoadedAt = Date.now()
+        } else if (!/https?:\/\//iu.test(rest)) return `${name} يحتاج خادمَ المشروع يعمل تحت إدارة النواة ولا خادمَ الآن — ابنِ (npm run build) ثمّ run --bg npm run start، أو run --bg npm run dev، ثمّ ${name}`
       } else if (name === "seo") {
         // 10-01 (مقيس في أوّل تشغيلٍ حيّ): seo على موقعٍ خارجيّ بلا خادمٍ مُدار ردّ «لا سطحَ موصول» فاحتاج النموذجُ نداءَ ui ثمّ إعادة.
         // الرابطُ الصريح نفسُه يفتح المتصفّح — والتنقّلُ يمرّ بسياسة المواقع كأيّ ui.
@@ -6256,7 +6293,12 @@ const runServeShell = async (): Promise<void> => {
       if (!pluginOnNow("webAudit")) return "رُفض audit: تدقيقُ الواجهات مطفأ (plugins.webAudit) — فعّله من الإعدادات."
       // 10-01 — «سقفُ الجودة» Q1: قواعدُ scripts/ui-audit/lib.mjs على كلّ صفحات البناء بعروض الهاتف والمكتب — قياسٌ حتميّ بلا نموذج.
       // الخادمُ المُدار لهذا المشروع وحده هو الهدف (الخلفيّةُ نفسُها التي يقيسها probe)؛ لا إنتاجَ ولا أصلَ آخر.
-      const managedPort = turnServers.snapshot().find((s) => s.alive)?.port ?? devServers.snapshot().find((s) => s.alive)?.port
+      // 10-14 — خادمٌ أقدمُ من البناء يُعاد تشغيلُه قبل القياس، ولا خادمَ = تُقلعه النواةُ (بالبوّابات نفسِها وموافقةِ الأمر) بدل الرفض.
+      let serverNote = await turnServers.refreshStale(PROJECT_DIR)
+      let managedPort = turnServers.snapshot().find((s) => s.alive)?.port ?? devServers.snapshot().find((s) => s.alive)?.port
+      if (managedPort === undefined) managedPort = await autoStartProjectServer(turnId)
+      serverNote += autoStartedNote
+      autoStartedNote = ""
       if (managedPort === undefined) return "audit يحتاج خادماً مُداراً يعمل لهذا المشروع — ابنِ (npm run build) ثمّ run --bg npm run start (أو run --bg npm run dev) ثمّ audit [/مسار …]"
       const base = `http://127.0.0.1:${managedPort}`
       // 10-08: رابطٌ محلّيٌّ على منفذ الخادم المُدار مسارُه (audit-routes.ts) — كان يسقط بصمت فتُدقَّق كلُّ صفحات البناء.
@@ -6338,7 +6380,7 @@ const runServeShell = async (): Promise<void> => {
       // 10-01 — خادمُ إنتاجٍ أقدمُ من آخر بناءٍ ناجح: النتائجُ للبناء القديم — يُسمّى فوقها.
       const olderServer = serverOlderThanBuild([...turnServers.snapshot(), ...devServers.snapshot()], sprintEvidence.buildAt)
       const report = renderAudit(findings, routes.length, widths).text
-      return olderServer === undefined ? report : `${olderServer}\n${report}`
+      return `${serverNote}${olderServer === undefined ? "" : `${olderServer}\n`}${report}`
     }
 
     if (name === "look") {
@@ -6580,6 +6622,22 @@ const runServeShell = async (): Promise<void> => {
   // خوادم الدور المدارة: النواة تملك دورة حياتها — أُنشئت بعد أن علّق
   // خادمٌ يتيم (npm start ← next :3000) الهارنسَ 63 دقيقة بإمساك stdio.
   const turnServers = new ManagedServers()
+  /**
+   * 10-14 — خادمُ المشروع تُقلعه النواةُ لأدوات الصفحة (audit/shot/compare) حين لا خادمَ مُدار — ببوّابتَي المصادقة والتبعيات وموافقةِ
+   * الأمر نفسِها التي يمرّ بها run --bg. مقيسٌ مع claude-sonnet-5-5 (m11): الرفضُ «لا خادمَ» كلّف خمسةَ نداءاتٍ ومرّةً ~75 ث.
+   */
+  let autoStartedNote = ""
+  const autoStartProjectServer = async (turnId: string): Promise<number | undefined> => {
+    const script = auditServerScript(PROJECT_DIR)
+    const parsed = script === undefined ? undefined : parseServerCommand(script, PROJECT_DIR)
+    if (parsed === undefined || projectAuthAudit(PROJECT_DIR) !== undefined || dependencyAudit(PROJECT_DIR) !== undefined) return undefined
+    if (!await gate(turnId, "command", `تشغيل خادم المشروع للتدقيق: ${script}`, "run")) return undefined
+    const said = await turnServers.start(parsed, PROJECT_DIR)
+    if (!said.startsWith("⚙ الخادم يعمل تحت إدارة النواة")) return undefined
+    managedServerStartedAt = Date.now()
+    autoStartedNote = `⚙ لا خادمَ مُداراً — أقلعت النواةُ «${script}» لأدوات الصفحة (stop يوقفه).\n`
+    return turnServers.snapshot().find((s) => s.alive)?.port
+  }
   // خوادمُ التطوير من لوحة المتصفّح (S2): عمرُها التبويبُ لا الدور — فهي في
   // مالكٍ مستقلّ لا يُوقفه ختامُ الدور، ويُوقفه خروجُ المحرّك (الخمول/غياب المالك).
   const devServers = new ManagedServers()
@@ -7698,6 +7756,8 @@ const runServeShell = async (): Promise<void> => {
     if (frame.kind === "provider-probe") {
       // «اختبار الاتصال» بضغطة مشغّل دائماً؛ والتلقائيُّ بعد الحفظ (auto) بإذن plugins.providerProbe وحده.
       const probe = frame as { provider: string; model?: string; auto?: boolean }
+      // 10-14 — المسبارُ يلي حفظَ مفتاحٍ في الخزنة: العاملُ المقيم يُسقط مفاتيحَه فيقرأ الجديد (provider-serve).
+      REACH.resetTransport()
       if (probe.auto === true && !pluginOnNow("providerProbe")) continue
       void probeProvider(probe.provider, {
         provider: (id) => Providers.provider(id),
@@ -8694,8 +8754,12 @@ const runServeShell = async (): Promise<void> => {
           const ladderTop = ownerLadder().at(-1)
           const orientModel = (ladderTop === undefined ? undefined : selectionOf(ladderTop.ref, selectedModel.lane)) ?? selectedModel
           if (orientModel.ref !== selectedModel.ref) await emitEvent(turn.id, `🧭 الوكيلُ الموجِّه على أقدر درجةٍ في سلّمك: ${orientModel.ref} (بدل ${selectedModel.ref}).`)
+          // 10-14 — مقيسٌ مقابل Claude Code بالنموذج نفسِه (claude-sonnet-5-5، m11): الموجِّه على النموذج نفسِه قراءةٌ ثانية لا خطّةٌ أقدر —
+          // ORIENT_SKIP_MEASURED أدناه. فيقرأ الوكيلُ المشروعَ بنفسه كما يفعل Claude Code؛ والموجِّهُ الأقدرُ من نموذج الدور يبقى (مقيس 10-11).
+          const orientSelf = orientModel.ref === selectedModel.ref && ORIENT_SELF_SUFFICIENT_PROVIDERS.has(selectedModel.provider)
+          if (orientSelf) await emitEvent(turn.id, `🧭 بلا وكيلٍ موجِّه: نموذجُ الدور (${selectedModel.ref}) هو أقدرُ درجةٍ في سلّمك ويقرأ المشروعَ بنفسه.`)
           const orientStarted = Date.now()
-          try {
+          if (!orientSelf) try {
             const report = await runDelegatedAgent({
               agent: orientAgent, task: turn.body, depth: 1,
               ask: async (prompt, history, allowlist) => {
@@ -8856,7 +8920,7 @@ const runServeShell = async (): Promise<void> => {
       // دليلُ القرص للمحكّم: لقطةٌ الآن، وفرقُ ما تغيّر منذها عند التحكيم (ما كان متّسخاً قبل الدور ليس تسليمَه).
       const diskGit: GitRun = (args) => { const r = Bun.spawnSync(["git", "-C", PROJECT_DIR, ...args], { stdout: "pipe", stderr: "pipe" }); return { ok: r.exitCode === 0, out: r.stdout.toString() } }
       const diskBefore = verifierOn || (superActive && superAbdo.independentReview) ? diskSnapshot(PROJECT_DIR, diskGit) : undefined
-      const diskNow = () => diskEvidence(PROJECT_DIR, diskGit, diskBefore, (path, lines) => { try { return readFileSync(join(PROJECT_DIR, path), "utf8").split("\n").slice(0, lines).join("\n") } catch { return "(تعذّرت القراءة)" } })
+      const diskNow = (scale = 1) => diskEvidence(PROJECT_DIR, diskGit, diskBefore, (path, lines) => { try { return readFileSync(join(PROJECT_DIR, path), "utf8").split("\n").slice(0, lines).join("\n") } catch { return "(تعذّرت القراءة)" } })
       if (superActive) await emitEvent(turn.id, "Super Abdo: inspect → plan → execute → verify → review. Existing permissions and budgets remain in force.")
       // معدِّن الكتيّبات (فكرة ACC الممتصة): فشل متكرر لا يعرفه السجل
       // يُرشَّح كتيّباً للمشرف — ترشيح لا حفظ. plugins.miner (افتراض مفعَّل).
@@ -9443,7 +9507,13 @@ const runServeShell = async (): Promise<void> => {
             epochHistory.pop()
           }
         }
-        if (loop.stopReason === "complete" && loop.commands.length === 0 && spokenAnswer.length === 0 && codeEditedThisTurn && successfulTests) {
+        // 10-14 — «tool-failed» صار «آخرُ أداة فشلت» (text-agent-loop)، فالفراغُ بعد اختباراتٍ خضراء يصل الآن في الحقبةِ نفسِها بعد أدواتها
+        // (لا في حقبةٍ تالية بلا أدوات): رأسُ الجواب «⚙ <أداة>» بحمولاتها كاملةً يكتبه المحرّكُ (text-agent-loop) لا النموذج — يُنزع بنصّه
+        // فلا تُحسب حمولةُ write كلاماً، ويبقى الردُّ الأخيرُ وحده.
+        const commandPrefix = loop.commands.map((used) => `⚙ ${used}`).join("\n")
+        const finalReply = loop.commands.length > 0 && loop.answer.startsWith(commandPrefix) ? loop.answer.slice(commandPrefix.length) : loop.answer
+        const spokenAfterTools = finalReply.split("\n").filter((line) => !line.startsWith("— المقيس")).join("\n").trim()
+        if (loop.stopReason === "complete" && spokenAfterTools.length === 0 && codeEditedThisTurn && successfulTests) {
           dropEmptyAssistantTail()
           const touched = [...new Set(allCommands.map((c) => /^(?:write|edit|medit|patch)\s+(\S+)/u.exec(c)?.[1]).filter((t): t is string => t !== undefined))]
           const lastTest = [...allCommands].reverse().find((c) => isTestCommand(c))
@@ -9609,6 +9679,8 @@ const runServeShell = async (): Promise<void> => {
             await emitEvent(turn.id, verifyDemandLine(ownTestCommand, verifyRuns > 0))
             verifyRuns += 1
             pending = `run ${ownTestCommand}`
+            // 10-14 — بعد إعلان الاكتمال: اختباراتٌ خضراء تُبقي الإعلانَ بلا نداء نموذج (كالبناء والتدقيق)؛ والحمراءُ تعود إليه بخرجها.
+            gateOnlyContinuation = true
             continue
           }
           continuationHint = `لا يوجد إيصال اختبارات غير فارغة ناجحة. افحص إعداد الاختبارات وأصلح السبب، واكتب الاختبارات المطلوبة وشغّل ${projectTestCommand(PROJECT_DIR) ?? "أمرَ اختبار المشروع"} (أمرُ المشروع نفسُه — لا «-- --run» إلّا لـvitest) ثم واصل الهدف.`
@@ -9627,6 +9699,7 @@ const runServeShell = async (): Promise<void> => {
           if (refusedPort !== undefined && serverCommand !== undefined) {
             await startServerForTests(verifyTestCommand, refusedPort, serverCommand, epoch)
             pending = `run ${verifyTestCommand}`
+            gateOnlyContinuation = true
             continue
           }
           if (verifyRuns >= VERIFY_AFTER_EDIT_RUNS) {
@@ -9636,6 +9709,7 @@ const runServeShell = async (): Promise<void> => {
           await emitEvent(turn.id, verifyDemandLine(verifyTestCommand, verifyRuns > 0))
           verifyRuns += 1
           pending = `run ${verifyTestCommand}`
+          gateOnlyContinuation = true
           continue
         }
         // الفجوة #3 — beforeDone: أوامرُ المشروع المعتمدة تحكم الإكمالَ بعد مسِّ الشيفرة؛ فشلُها يعود إلى النموذج بخرجه، بحدّ جولتين.
@@ -9731,6 +9805,15 @@ const runServeShell = async (): Promise<void> => {
             await emitEvent(turn.id, `↻ شرط السبرنت: ${continuationHint}`)
             continue
           }
+          // 10-14 — المحكّمُ الدلاليّ والمراجعةُ المستقلّة يسألان المدخلَ نفسَه (buildVerifierPrompt) بلا أدوات، وكانا يجريان متتاليَين
+          // (12 + 15 ث في m11 مع claude-sonnet-5-5). يُطلق المحكّمُ مع المراجعة ويُنتظر في موضعه؛ ولا يُستهلك حكمُه إلا إن وصل الدورُ إليه.
+          let earlyVerdict: Promise<SemanticVerdict | undefined> | undefined
+          // 10-14 — المحكّمُ السحابيّ يرى إيصالاتٍ أوسع (semantic-verifier: CLOUD_VERIFIER_SCALE)؛ المحلّيُّ على ميزانيّته القديمة.
+          const verifierScale = Providers.provider(resolveDecisionModel(selectedModel).provider)?.local === false ? CLOUD_VERIFIER_SCALE : 1
+          const startVerifier = (): Promise<SemanticVerdict | undefined> => (async () => {
+            try { return parseVerdict(await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale), hooks, [], selectedModel, resolveDecisionModel(selectedModel))) }
+            catch { return undefined }
+          })()
           if (superActive) {
             const superEvidence: readonly SuperAbdoEvidence[] = allReceipts.map((receipt) => ({
               command: receipt.command, mutated: receipt.mutated,
@@ -9741,8 +9824,9 @@ const runServeShell = async (): Promise<void> => {
             if (verificationProblem === undefined && superAbdo.independentReview) {
               const reviewJudge = resolveDecisionModel(selectedModel)
               await emitEvent(turn.id, `Super Abdo: reviewing execution evidence in a separate context, with no tools.${reviewJudge.ref === selectedModel.ref ? "" : ` 🧠 نموذجُ القرار: ${reviewJudge.ref}`}`)
+              if (verifierOn && verifierRejections < 2) earlyVerdict = startVerifier()
               try {
-                const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {
+                const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale), {
                   ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: SUPER_ABDO_REVIEW_SYSTEM,
                 }, [], selectedModel, reviewJudge)
                 review = parseSuperAbdoReview(reply)
@@ -9807,8 +9891,11 @@ const runServeShell = async (): Promise<void> => {
             try {
               const judge = resolveDecisionModel(selectedModel)
               if (judge.ref !== selectedModel.ref) await emitEvent(turn.id, `🧠 المحكّمُ الدلاليّ بنموذج القرار ${judge.ref}`)
-              const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], selectedModel, judge)
-              verdict = parseVerdict(reply)
+              if (earlyVerdict !== undefined) verdict = await earlyVerdict
+              else {
+                const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale), hooks, [], selectedModel, judge)
+                verdict = parseVerdict(reply)
+              }
             } catch { verdict = undefined }
             // مقاطعة المشغّل أثناء التحكيم ليست «غير محكّم» — الدور يُحفظ
             // نقطةً لا اكتمالاً (المسح العدائي: المقاطَع كان يُختم مكتملاً).

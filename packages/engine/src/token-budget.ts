@@ -60,7 +60,8 @@ export function cacheDiscount(): number {
  * العامّ 0.25 حمّله ثمناً أكبرَ من حقيقته بنحو 12× (الحقيقة 0.003/0.15 = 0.02 لـflash و0.022/0.66 = 0.033 لـpro) — فبلغ سقفُ الدور
  * 2.8M «فعّالاً» في 40 دقيقة بكلفةٍ فعليّةٍ نحو $0.12، وقُطع العملُ أشواطاً يعيد كلٌّ منها التوجّه. ABDO_CLOUD_CACHE_DISCOUNT يغلبه إن ضُبط.
  */
-const PROVIDER_CACHE_DISCOUNT: Readonly<Record<string, number>> = Object.freeze({ deepseek: 0.034 })
+// 10-14 — Anthropic: قراءةُ الخبيئة 0.1× سعرِ الإدخال (صفحةُ أسعاره).
+const PROVIDER_CACHE_DISCOUNT: Readonly<Record<string, number>> = Object.freeze({ deepseek: 0.034, anthropic: 0.1 })
 export function cacheDiscountFor(provider: string | undefined): number {
   const raw = process.env.ABDO_CLOUD_CACHE_DISCOUNT
   if (raw !== undefined && raw.trim().length > 0) return cacheDiscount()

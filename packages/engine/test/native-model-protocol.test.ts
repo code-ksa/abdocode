@@ -45,3 +45,33 @@ test("plugins.nativeTools: the measured nemotron-3 family goes native; other clo
   }
   expect(usesNativeToolProtocol("openai", "gpt-6.1-sol", undefined, true)).toBe(false)
 })
+
+// 10-14 — against Claude Code with the same model (claude-sonnet-5-5) on m11: the text protocol finished 16/16 in 602 s with 62 calls and no
+// prompt cache; Claude Code 215 s, 18 calls. The Anthropic wire now carries tool_use/tool_result, so every Anthropic model goes native.
+test("plugins.nativeTools: every Anthropic model goes native; the switch off or an operator «text» keeps the text protocol", () => {
+  for (const model of ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-4-5"]) {
+    expect(usesNativeToolProtocol("anthropic", model, undefined, true)).toBe(true)
+    expect(usesNativeToolProtocol("anthropic", model, undefined, false)).toBe(false)
+    expect(usesNativeToolProtocol("anthropic", model, "text", true)).toBe(false)
+  }
+  expect(usesNativeToolProtocol("openrouter", "anthropic/claude-sonnet-5-5", undefined, true)).toBe(false)
+})
+
+// 10-14 — Claude Code made 22 tool calls in 18 model calls on m11; AbdoCode 35 in 34, because its contract said «one tool per reply».
+test("multi-call contract: only the measured family is told to batch independent calls; the others keep the old text byte for byte", async () => {
+  const { nativeMultiCall } = await import("../src/native-model-protocol")
+  const { nativeAgentSystem } = await import("../src/native-agent-tools")
+  expect(nativeMultiCall("anthropic")).toBe(true)
+  for (const provider of ["ollama", "nvidia2", "openai", "deepseek", "openrouter"]) expect(nativeMultiCall(provider)).toBe(false)
+  const multi = nativeAgentSystem(false, false, false, "", true)
+  expect(multi).toContain("كلَّ النداءات المستقلّة")
+  // 10-14 — m11: فحصُ الواجهة (fill/tap/wait/page) كان ثمانيَ نداءاتٍ متتالية؛ السلسلةُ المعروفةُ مراجعُها ردٌّ واحد
+  expect(multi).toContain("(fill ثمّ tap ثمّ wait ثمّ page) ردٌّ واحد")
+  // 10-14 — m11: المراجِعُ حجب «npm start لا يظهر في الإيصالات» (فُحص بـnode مباشرة) ⇦ حقبةُ إصلاحٍ 74 ث
+  expect(multi).toContain("أنتِج الدليلَ بأوامر العقد نفسِها")
+  expect(multi).not.toContain("أداة واحدة في الرد")
+  expect(multi).not.toContain("انتظر الإيصال بعد كل أداة")
+  const single = nativeAgentSystem(false, false, false, "")
+  expect(single).toContain("أداة واحدة في الرد")
+  expect(single).toBe(nativeAgentSystem(false, false, false, "", false))
+})

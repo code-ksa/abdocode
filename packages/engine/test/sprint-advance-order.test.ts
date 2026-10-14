@@ -14,16 +14,17 @@ test("the sprint advance edge runs before the independent review in the completi
   const review = cli.indexOf("if (superActive) {", advance)
   expect(review).toBeGreaterThan(advance)
   // 10-01 (3a712267): بينهما شرطُ «السبرنت لم يُغلق» — حافّةٌ أخرى قبل المراجعة لا بعدها؛ فالمسافةُ أطول والترتيبُ نفسُه.
-  expect(review - advance).toBeLessThan(1_900) // والمراجعةُ بعدهما
+  // 10-14: إطلاقُ المحكّم الدلاليّ مع المراجعة (earlyVerdict/startVerifier) يقع بينهما أيضاً — الترتيبُ نفسُه.
+  expect(review - advance).toBeLessThan(2_900) // والمراجعةُ بعدهما
   expect(cli.split("const advance = sprintAdvance(PROJECT_DIR, sprintOpenAtStart)").length).toBe(2) // مرّةً واحدة
 })
 
 test("judges (review, verifier, refutation) get the sprint plan state when the turn resumes a plan", () => {
   expect(cli).toContain("const judgeGoal = (): string =>")
   expect(cli).toContain("متابعةُ خطّة ABDO-SPRINTS.md")
-  expect(cli).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {")
+  expect(cli).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale), {")
   expect(cli).toContain("buildRefutePrompt(judgeGoal(), loop.answer, allReceipts, lens), {")
-  expect(cli).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], selectedModel, judge)")
+  expect(cli).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale), hooks, [], selectedModel, judge)")
   expect(cli).not.toContain("buildVerifierPrompt(effectiveGoal,")
 })
 

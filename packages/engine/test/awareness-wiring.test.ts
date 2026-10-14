@@ -185,7 +185,7 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     expect(source).toContain('const answer=await ask(secretNotice+turn.body,hooks,turnConversation,turnSelection)')
     expect(source).toContain('return {answer,completed:true}')
     expect(source).toContain("const text = await ask(prompt, { ...hooks, toolAllowlist: allowlist }, history, childModel,")
-    expect(source).toContain("askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), {")
+    expect(source).toContain("askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale), {")
     // 4.0.46 (2026-09-17): الثاني عن قصدٍ معلَن — `ask` يلفّ `askOnce` ويعيد نداءَ نفسِه مرّةً بعد تصعيد الازدحام
     // (provider_unavailable ⇦ الدرجة التالية من السلّم)؛ الكلفةُ في الدفتر نفسه، ولا مسارَ تسعيرٍ ثانٍ. كان المسمارُ أحمر منذها بلا قياس.
     // 10-09: +2 in askDecision — the decision model is the turn model (one ask), or it failed and the working model judges (one ask
@@ -214,5 +214,7 @@ describe("S13.1/S13.2 — إثباتُ الكلفة في المسار الحيّ
     // 2026-10-01: السابع عشر معلَن — أداةُ compare: نداءٌ واحد لنموذج الرؤية بنظام VISION_EYE_SYSTEM بلا أدوات (toolAllowlist: [])
     // يصف الفروقَ بين لقطتَي الأصل ونسختنا؛ الوصفُ بياناتٌ لا أوامر، وبلا نموذج رؤيةٍ مضبوط لا نداء.
     // 10-09: three judge calls go through askDecision (two attempts on the decision model, then the working model) — same count.
-    expect(source.match(/\bawait ask(?:Decision)?\(/gu)).toHaveLength(17)
+    // 10-11: الثامن عشر — إعادةُ نداء الدور بلا اللقطة حين لا يقبل النموذجُ الصور (كان الدبّوسُ متأخّراً عنه).
+    // 10-14: التاسع عشر — المحكّمُ الدلاليّ يُطلق مع المراجعة المستقلّة (startVerifier) والمسارُ المتأخّر باقٍ لمن لا مراجعةَ عنده.
+    expect(source.match(/\bawait ask(?:Decision)?\(/gu)).toHaveLength(19)
     expect(source).toContain("const reply = await ask(buildReviewPrompt(reviewGoal, diff.text, lens), { ...hooks, onDelta: undefined, toolAllowlist: [], reviewSystem: REVIEW_SYSTEM }, [], turnSelection)")

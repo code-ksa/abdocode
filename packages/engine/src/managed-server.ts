@@ -101,13 +101,22 @@ export function nodeEntryPort(projectDir: string | undefined, command: string): 
   } catch { return undefined }
 }
 
+/**
+ * 10-14 — مقيسٌ مع claude-sonnet-5-5 (m11): «run --bg $env:PORT=3111; npm start» عُدّ أمراً مركّباً (الفاصلة المنقوطة) فشُغّل خلفيّاً عاديّاً
+ * لا خادماً مُداراً — فرفض audit «لا خادمَ»، ودار النموذجُ ~75 ث بين المنافذ والعمليّات. بادئةُ منفذٍ وحدها (PowerShell أو POSIX) ليست
+ * تركيباً: تُنزع ويصير رقمُها منفذَ الخادم (المُطلِق يضع PORT في بيئة الوليد أصلاً).
+ */
+const ENV_PORT_PREFIX = /^(?:\$env:PORT\s*=\s*['"]?(\d{2,5})['"]?\s*;\s*|PORT=(\d{2,5})\s+)/iu
+
 export function parseServerCommand(cmd: string, projectDir?: string): ServerCommand | undefined {
-  const trimmed = cmd.trim()
+  let trimmed = cmd.trim()
+  const envPort = ENV_PORT_PREFIX.exec(trimmed)
+  if (envPort !== null) trimmed = trimmed.slice(envPort[0].length).trim()
   // أمرٌ مركّب (فاصلة منطقية/أنبوب) ليس تشغيل خادم صافياً — يُترك للمسار العادي.
   if (/[;|&]/.test(trimmed)) return undefined
   const shape = SERVER_SHAPES.find((s) => s.pattern.test(trimmed))
   if (shape === undefined) return undefined
-  const port = trimmed.match(/(?:^|\s)(?:-p|--port)[\s=]+(\d{2,5})\b/u)?.[1]
+  const port = trimmed.match(/(?:^|\s)(?:-p|--port)[\s=]+(\d{2,5})\b/u)?.[1] ?? envPort?.[1] ?? envPort?.[2]
   return {
     launch: trimmed.split(/\s+/),
     port: port !== undefined ? Number.parseInt(port, 10) : (hintFor(trimmed, projectDir) ?? shape.defaultPort),
@@ -133,6 +142,22 @@ interface ManagedProcess {
   listenerPid?: number
   /** ذيلُ مخرجي الخادم — يُقرأ بـ`logs <pid>` (09-28: كان الإيصالُ يسمّي pid لا تعرفه logs/stop). */
   tail?: { readonly text: () => string; readonly receipt: () => string }
+  /** 10-14 — أمرُ الإقلاع كما طُلب (قبل إزاحة المنفذ) — كي يُعاد تشغيلُه هو حين يصير أقدمَ من البناء. */
+  relaunch?: { readonly command: ServerCommand; readonly cwd: string }
+}
+
+/**
+ * 10-14 — خادمُ التدقيق حين لا خادمَ مُدار: الإنتاجُ (start) إن وُجد مخرجُ بناء، وإلا التطوير (dev)، وإلا start. مقيسٌ مع claude-sonnet-5-5
+ * (m11): أقلع النموذجُ خادمَه بـStart-Process مرّتين ثمّ رُفض audit «يحتاج خادماً مُداراً» — خمسةُ نداءاتٍ قبل أن يصل إلى run --bg.
+ */
+export function auditServerScript(dir: string): string | undefined {
+  let scripts: Record<string, unknown> | undefined
+  try { scripts = (JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { scripts?: Record<string, unknown> }).scripts } catch { return undefined }
+  const built = [".next/BUILD_ID", "dist/index.html", "build/index.html", ".output/server/index.mjs"].some((marker) => existsSync(join(dir, marker)))
+  const name = typeof scripts?.start === "string" && (built || typeof scripts?.dev !== "string") ? "start" : typeof scripts?.dev === "string" ? "dev" : undefined
+  if (name === undefined) return undefined
+  const manager = existsSync(join(dir, "pnpm-lock.yaml")) ? "pnpm" : existsSync(join(dir, "yarn.lock")) ? "yarn" : existsSync(join(dir, "bun.lock")) || existsSync(join(dir, "bun.lockb")) ? "bun" : "npm"
+  return `${manager} run ${name}`
 }
 
 /** مَن يُنصت على المنفذ فعلاً — ملكية بالقياس لا بالنسب. */
@@ -375,7 +400,24 @@ export class ManagedServers {
     return note + await this.#startOnce(command, cwd)
   }
 
+  /**
+   * 10-14 — قبل أن يقيس audit: خادمُ إنتاجٍ أقدمُ من آخر بناءٍ يُعاد تشغيلُه هنا بأمره نفسِه. كان audit يقيس البناءَ القديم (14 ث) ثمّ
+   * يحذّر في آخر تقريره، فيوقفه النموذجُ ويعيد تشغيله ويعيد التدقيق — ثلاثةُ نداءاتٍ وتدقيقٌ ثانٍ (مقيس مع claude-sonnet-5-5 على m11).
+   */
+  async refreshStale(cwd: string): Promise<string> {
+    let notes = ""
+    for (const stale of this.#running.filter((p) => serverMode(p.display) === "prod" && p.proc.exitCode === null && p.relaunch !== undefined && buildNewerThan(longPathOf(cwd), p.startedAt))) {
+      killTree(stale)
+      this.#running = this.#running.filter((p) => p !== stale)
+      for (let i = 0; i < 20 && await listening(stale.port); i += 1) await Bun.sleep(250)
+      const receipt = await this.#startOnce(stale.relaunch!.command, stale.relaunch!.cwd)
+      notes += `↻ أُعيد تشغيلُ «${stale.display}» على :${stale.port} قبل القياس لأنّ البناءَ أحدثُ من إقلاعه — ${receipt.split("\n", 1)[0]}\n`
+    }
+    return notes
+  }
+
   async #startOnce(command: ServerCommand, cwd: string): Promise<string> {
+    const relaunch = { command, cwd }
     cwd = longPathOf(cwd)
     // 09-30: عاملُ parallel يحمل إزاحةَ منفذه (ABDO_WORKER_PORT_OFFSET) — عاملان يقلعان معاً على 3000 تسابقا فأجاب أحدُهما عن الآخر.
     const workerOffset = Math.min(200, Math.max(0, Number.parseInt(process.env.ABDO_WORKER_PORT_OFFSET ?? "0", 10) || 0))
@@ -439,7 +481,7 @@ export class ManagedServers {
     }
     // مُنصتٌ سابقٌ للإطلاق على المنفذ نفسِه ليس خادمَنا مهما أجاب — يُقاس قبلُ ويُقارن بعد.
     const foreignBefore = listenerOf(port)
-    const managed: ManagedProcess = { proc, port, display, startedAt: Date.now() }
+    const managed: ManagedProcess = { proc, port, display, startedAt: Date.now(), relaunch }
     this.#running.push(managed)
     const tail = tailOf(proc.stdout as ReadableStream<Uint8Array> | null, proc.stderr as ReadableStream<Uint8Array> | null)
     managed.tail = tail

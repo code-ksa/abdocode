@@ -96,7 +96,8 @@ describe("owned provider catalogue", () => {
     expect(request.url).toBe("https://api.anthropic.com/v1/messages")
     expect(request.headers["x-api-key"]).toBe("test-only")
     expect(request.headers.authorization).toBeUndefined()
-    expect(JSON.parse(request.body)).toMatchObject({ system: expect.stringContaining("owned system") })
+    // 10-14 — النظامُ كتلةٌ بنقطة خبيئة (cache_control) لا نصٌّ خام
+    expect(JSON.parse(request.body).system).toEqual([{ type: "text", text: expect.stringContaining("owned system"), cache_control: { type: "ephemeral" } }])
     expect(decodeResponse(provider("anthropic")!, {
       content: [{ type: "text", text: "done" }],
       stop_reason: "end_turn",

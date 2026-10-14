@@ -63,7 +63,12 @@ export function diskSnapshot(root: string, git: GitRun): DiskSnapshot | undefine
  * ما تغيّر منذ اللقطة: فرقُ المتتبَّع، ورأسُ الجديد غير المتتبَّع، محجوبَي الأسرار ومقصوصَين بإعلان.
  * undefined = لا لقطة (ليس مستودعاً) — والمحكّمُ حينها بلا قسمٍ لا بقسمٍ فارغٍ يوهم «لا تغيير».
  */
-export function diskEvidence(root: string, git: GitRun, before: DiskSnapshot | undefined, readHead: (path: string, lines: number) => string): string | undefined {
+/**
+ * 10-14 — مقيسٌ مع claude-sonnet-5-5 (m11، مرّتين): مشروعٌ بعشرة ملفّاتٍ جديدة عُرض منها ستّةٌ برؤوس 40 سطراً، والإعداداتُ (json) آخرُها —
+ * فحجب المراجِعُ «package.json وvite.config.js وsrc/style.css غير معروضة» وأُنفقت حقبةُ إصلاحٍ ~73 ث تُثبت ما على القرص أصلاً. المحكّمُ
+ * السحابيّ (scale > 1) يرى حتى 18 ملفّاً جديداً برؤوس 100 سطر وفرقاً أوسع؛ المحلّيُّ على ميزانيّته.
+ */
+export function diskEvidence(root: string, git: GitRun, before: DiskSnapshot | undefined, readHead: (path: string, lines: number) => string, scale = 1): string | undefined {
   if (before === undefined) return undefined
   const paths = projectStatus(git)
   if (paths === undefined) return undefined
@@ -75,7 +80,7 @@ export function diskEvidence(root: string, git: GitRun, before: DiskSnapshot | u
   if (changed.length > listed.length) parts.push(`… و${changed.length - listed.length} مساراً آخر`)
   if (tracked.length > 0) {
     const diff = git(["diff", "--relative", "HEAD", "--no-color", "--no-ext-diff", "--no-textconv", "-U2", "--", ...tracked])
-    if (diff.ok && diff.out.trim() !== "") parts.push("", clipKeepCause(diff.out, DIFF_BUDGET))
+    if (diff.ok && diff.out.trim() !== "") parts.push("", clipKeepCause(diff.out, DIFF_BUDGET * scale))
   }
   // الشيفرةُ أوّلاً، ولا يُعرض رأسُ ملفٍّ ثنائيّ أو قفل (قاعدةُ بياناتٍ تُقرأ نصّاً ضجيجٌ لا دليل).
   const SHOWN = /\.(?:[cm]?[jt]sx?|py|go|rs|java|cs|rb|php|vue|svelte|html?|css|scss|sql|prisma|json|ya?ml|toml|md)$/iu
@@ -83,8 +88,8 @@ export function diskEvidence(root: string, git: GitRun, before: DiskSnapshot | u
   const previews = listed.filter((c) => c.untracked && !c.path.endsWith("/") && SHOWN.test(c.path) && !NOISE.test(c.path))
     .sort((a, b) => Number(/\.(?:md|json|ya?ml|toml)$/iu.test(a.path)) - Number(/\.(?:md|json|ya?ml|toml)$/iu.test(b.path)))
     .sort((a, b) => Number(TEST_FILE.test(b.path)) - Number(TEST_FILE.test(a.path)))
-  for (const c of previews.slice(0, 6)) {
-    const lines = TEST_FILE.test(c.path) ? TEST_FILE_LINES : NEW_FILE_LINES
+  for (const c of previews.slice(0, scale > 1 ? 18 : 6)) {
+    const lines = TEST_FILE.test(c.path) ? TEST_FILE_LINES : scale > 1 ? 100 : NEW_FILE_LINES
     parts.push("", `--- ${c.path} (جديد، أوّلُ ${lines} سطراً)`, readHead(c.path, lines))
   }
   return redact(parts.join("\n"))

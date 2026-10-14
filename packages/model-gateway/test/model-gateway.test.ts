@@ -11,9 +11,6 @@ describe("owned model gateway codecs", () => {
     expect(body.tools[0]).toMatchObject({ type: "function", function: { name: "read" } })
     expect(body.messages[0].tool_calls[0].function.arguments).toEqual({ path: "a" })
     expect(body.messages[1]).toEqual({ role: "tool", content: "source", tool_name: "read" })
-    expect(() => encodeChatRequest({ wire: "anthropic", model: "x", stream: false, messages: [],
-      tools: [{ name: "read", description: "read", parameters: {} }],
-    })).toThrow("not qualified")
   })
   test("10-08: the OpenAI-compatible shape carries native tools, tool_calls with JSON-string arguments, and tool results by id", () => {
     const body = JSON.parse(encodeChatRequest({ wire: "openai-compatible", model: "openai/gpt-oss-20b", stream: false,
@@ -50,8 +47,9 @@ describe("owned model gateway codecs", () => {
     const body = JSON.parse(anthropic.body)
     expect(anthropic.path).toBe("/messages")
     expect(anthropic.credential).toBe("x-api-key")
-    expect(body.system).toBe("owned")
-    expect(body.messages).toEqual([{ role: "user", content: "hello" }])
+    expect(body.system).toEqual([{ type: "text", text: "owned", cache_control: { type: "ephemeral" } }])
+    expect(body.messages).toEqual([{ role: "user", content: [{ type: "text", text: "hello", cache_control: { type: "ephemeral" } }] }])
+    expect(body.tools).toBeUndefined()
   })
 
   test("normalizes final, tool and truncated responses", () => {

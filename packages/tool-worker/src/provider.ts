@@ -3,6 +3,7 @@ const REQUEST_MAGIC = new TextEncoder().encode("ABPM1")
 // ABGS2: بايتُ «نوع البحث» (0 ويب، 1 صور) بعد safe — الإصدارُ يُرفع لا يُمدَّد بصمت، فعاملٌ قديم يرفض الإطارَ الجديد بدل أن يقرأه مقلوباً.
 const SEARCH_MAGIC = new TextEncoder().encode("ABGS2")
 const RESPONSE_MAGIC = new TextEncoder().encode("ABPR1")
+const ERROR_MAGIC = new TextEncoder().encode("ABPE1")
 const MAX_REQUEST_BYTES = 1024 * 1024
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
@@ -120,12 +121,130 @@ export function decodeModelProviderWorkerResponse(frame: Uint8Array): ModelProvi
   return Object.freeze({ status, body })
 }
 
+/** ردُّ `provider-serve`: إطارُ ABPR1 كما في المسار المفرد، أو ABPE1 بسببٍ ثابت (لا مادّةَ سرّ فيه أبداً). */
+export function decodeProviderServeReply(frame: Uint8Array): ModelProviderWorkerResponse {
+  if (frame.byteLength >= 9 && same(frame.subarray(0, 5), ERROR_MAGIC)) {
+    const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength)
+    const length = view.getUint32(5, false)
+    if (frame.byteLength !== 9 + length) throw new Error("provider_worker_response_invalid")
+    throw new Error(`provider_worker_refused: ${new TextDecoder().decode(frame.subarray(9)).slice(0, 400)}`)
+  }
+  return decodeModelProviderWorkerResponse(frame)
+}
+
+/** بصمةُ البيئة التي يقرؤها العامل (المزوّدون المعلَنون، مسارُ الخزنة…): تغيّرُها يعيد تشغيلَ العامل المقيم كي لا يعمل ببيئةٍ قديمة. */
+export const providerServeFingerprint = (env: Readonly<Record<string, string | undefined>> = process.env): string =>
+  Object.entries(env).filter(([key]) => key.startsWith("ABDO_")).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${value ?? ""}`).join("\n")
+
+/**
+ * 10-14 — عاملٌ مقيم (`provider-serve`): مقيسٌ على ويندوز أنّ كلَّ نداءٍ مفرد يدفع ~0.35 ث لـpowershell.exe (قراءةُ الخزنة) ثمّ إقلاعَ
+ * العامل — نحو 0.85 ث فوق HTTPS مباشر، والدورُ 15–60 نداءً. المفتاحُ يبقى في Rust (يُقرأ مرّةً لكلّ مقبض ويُصفَّر عند الخروج)؛ والطلبُ
+ * واحدٌ في وقتٍ واحد — المشغولُ يُترك والمسارُ المفرد يخدم النداءَ الموازي. إلغاءٌ أو مهلةٌ يقتل العاملَ ويُقلَع غيرُه عند النداء التالي.
+ */
+class ProviderServeSession {
+  readonly #child: Bun.Subprocess<"pipe", "pipe", "ignore">
+  #buffer = new Uint8Array(0)
+  #waiter: { resolve: (frame: Uint8Array) => void; reject: (error: Error) => void } | undefined
+  #closed = false
+  busy = false
+  served = 0
+
+  constructor(executable: string, readonly fingerprint: string) {
+    this.#child = Bun.spawn([executable, "provider-serve"], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: { ...process.env } })
+    void this.#pump()
+    void this.#child.exited.then(() => this.#fail(new Error("provider_worker_refused: provider-serve exited")))
+  }
+
+  get alive(): boolean { return !this.#closed }
+
+  async #pump(): Promise<void> {
+    try {
+      for await (const chunk of this.#child.stdout as ReadableStream<Uint8Array>) {
+        const next = new Uint8Array(this.#buffer.byteLength + chunk.byteLength)
+        next.set(this.#buffer); next.set(chunk, this.#buffer.byteLength)
+        this.#buffer = next
+        while (this.#buffer.byteLength >= 4) {
+          const length = new DataView(this.#buffer.buffer, this.#buffer.byteOffset, 4).getUint32(0, false)
+          if (length > MAX_RESPONSE_BYTES + 64) { this.#fail(new Error("provider_worker_response_invalid")); this.kill(); return }
+          if (this.#buffer.byteLength < 4 + length) break
+          const frame = this.#buffer.slice(4, 4 + length)
+          this.#buffer = this.#buffer.slice(4 + length)
+          const waiter = this.#waiter
+          this.#waiter = undefined
+          waiter?.resolve(frame)
+        }
+      }
+    } catch { /* the exit handler names the failure */ }
+    this.#fail(new Error("provider_worker_refused: provider-serve exited"))
+  }
+
+  #fail(error: Error): void {
+    this.#closed = true
+    const waiter = this.#waiter
+    this.#waiter = undefined
+    waiter?.reject(error)
+  }
+
+  call(input: Uint8Array, timeoutMs: number, signal?: AbortSignal): Promise<Uint8Array> {
+    if (this.#closed) return Promise.reject(new Error("provider_worker_refused: provider-serve exited"))
+    this.busy = true
+    return new Promise<Uint8Array>((resolve, reject) => {
+      const done = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); this.busy = false }
+      const timer = setTimeout(() => { done(); this.kill(); reject(new Error("provider_worker_refused: provider-serve timed out")) }, timeoutMs + 5_000)
+      const abort = () => { done(); this.kill(); reject(new Error("provider_worker_aborted")) }
+      signal?.addEventListener("abort", abort, { once: true })
+      this.#waiter = { resolve: (frame) => { done(); this.served += 1; resolve(frame) }, reject: (error) => { done(); reject(error) } }
+      const header = new Uint8Array(4)
+      new DataView(header.buffer).setUint32(0, input.byteLength, false)
+      try {
+        this.#child.stdin.write(header)
+        this.#child.stdin.write(input)
+        void this.#child.stdin.flush()
+      } catch { this.#fail(new Error("provider_worker_refused: provider-serve exited")) }
+    })
+  }
+
+  kill(): void {
+    this.#closed = true
+    try { this.#child.kill() } catch { /* already gone */ }
+  }
+}
+
 export class ModelProviderWorker {
+  #session: ProviderServeSession | undefined
+  /** عاملٌ لا يعرف `provider-serve` (ثنائيٌّ أقدم): يُعلَّم مرّةً ويبقى المسارُ المفرد. */
+  #serveUnavailable = false
+
   constructor(private readonly executable: string) {}
+
+  /** يُسقط العاملَ المقيم (ومفاتيحَه المخبوءة) — يُقلَع غيرُه عند النداء التالي. */
+  reset(): void {
+    this.#session?.kill()
+    this.#session = undefined
+  }
 
   async request(request: ModelProviderWorkerRequest, signal?: AbortSignal): Promise<ModelProviderWorkerResponse> {
     const input = encodeModelProviderWorkerRequest(request)
     if (signal?.aborted) throw new Error("provider_worker_aborted")
+    if (process.env.ABDO_PROVIDER_SERVE !== "0" && !this.#serveUnavailable) {
+      const fingerprint = providerServeFingerprint()
+      if (this.#session !== undefined && (!this.#session.alive || this.#session.fingerprint !== fingerprint)) this.reset()
+      if (this.#session === undefined) {
+        try { this.#session = new ProviderServeSession(this.executable, fingerprint) }
+        catch { this.#serveUnavailable = true }
+      }
+      const session = this.#session
+      if (session !== undefined && !session.busy) {
+        try {
+          return decodeProviderServeReply(await session.call(input, request.timeoutMs, signal))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          // عاملٌ مات قبل أن يخدم نداءً واحداً = ثنائيٌّ بلا `provider-serve`: المسارُ المفرد يخدم هذا النداء وما بعده.
+          if (session.served === 0 && /provider-serve exited/u.test(message) && !signal?.aborted) { this.#serveUnavailable = true; this.reset() }
+          else throw error
+        }
+      }
+    }
     let child: Bun.Subprocess<Uint8Array, "pipe", "pipe">
     // env تُمرَّر نصاً: بلا الخيار لا يرى الوليد تحويرات process.env التي
     // كتبها المضيف بعد الإقلاع (ABDO_CUSTOM_PROVIDERS تُضبط عند حفظ
@@ -170,7 +289,7 @@ export class ModelProviderWorker {
 
   /**
    * القائمةُ الحيّة لنماذج مزوّدٍ — `provider-models <id>` في العامل: يشتقّ `{base}/models` من نقطة الدردشة
-   * المُجمَّعة ويقرأ المفتاحَ من الخزنة بنفسه؛ لا عنوانَ ولا سرَّ يعبر من هنا (أمرُ المالك 2026-09-28: كلُّ نماذج إنفيديا).
+   * المُجمَّعة ويقرأ المفتاحَ من الخزنة بنفسه؛ لا عنوانَ ولا سرَّ يعبر من هنا.
    */
   async listModels(provider: string): Promise<ModelProviderWorkerResponse> {
     if (!/^[a-z0-9-]{1,32}$/.test(provider)) throw new Error("provider_worker_provider_invalid")

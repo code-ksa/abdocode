@@ -29,6 +29,13 @@ export interface NativeAgentReply {
    * يتحقّق منها المُحوِّل؛ والحلقةُ تجيب كلَّ معرّف نداءٍ بردّه (المزوّدُ يرفض طلباً فيه معرّفٌ بلا ردّ).
    */
   readonly batch?: readonly { readonly command: string; readonly call: NativeAgentCall }[]
+  /**
+   * 10-14 — نداءاتٌ أخرى في الردّ نفسِه غيرُ حزمة قراءة (كتابةُ ثلاثة ملفّاتٍ معاً، كما يفعل Claude): تُنفَّذ بالترتيب نفسِه، كلٌّ عبر
+   * المسار المفرد بحرّاسه، ويُجاب كلٌّ بمعرّفه، ولا يُسأل النموذجُ إلا بعد آخرها. كان الردُّ يُرفض كلُّه فيُعاد بنداءٍ ثانٍ.
+   */
+  readonly queue?: readonly { readonly command: string; readonly call: NativeAgentCall }[]
+  /** نداءٌ خرج من طابور ردٍّ سابق — ردُّ المساعد سُجّل بنداءاته كلّها مع أوّلها، فلا يُسجَّل ثانيةً. */
+  readonly queued?: true
 }
 
 export interface TextAgentLoopOptions {
@@ -994,9 +1001,12 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
   // تُسأل مرّةً واحدةً لا أكثر: نداءٌ بشكلٍ مجهولٍ لا يستحقّ دوراناً.
   let markerNudged = false
   const trail: TextAgentMessage[] = [...options.history, { role: "user", content: options.input }]
-  const recordAssistant = () => trail.push(nativeReply === undefined
-    ? { role: "assistant", content: withoutSummary(stripMeasure(current)) }
-    : { role: "assistant", content: nativeReply.text, toolCalls: nativeReply.batch !== undefined && nativeReply.batch.length > 1 ? nativeReply.batch.map((member) => member.call) : [nativeReply.call] })
+  const recordAssistant = () => {
+    if (nativeReply?.queued === true) return
+    trail.push(nativeReply === undefined
+      ? { role: "assistant", content: withoutSummary(stripMeasure(current)) }
+      : { role: "assistant", content: nativeReply.text, toolCalls: nativeReply.batch !== undefined && nativeReply.batch.length > 1 ? nativeReply.batch.map((member) => member.call) : [nativeReply.call, ...(nativeReply.queue ?? []).map((member) => member.call)] })
+  }
   // Every follow-up (including rejected proposals) belongs to the dialogue.
   // Without this, the next call sees consecutive assistant commands but loses
   // the receipts and corrections that explain why the model chose them.
@@ -1097,7 +1107,14 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
         writeEntryPending = false
         maybeCompactTrail({ read: compaction?.keepRecent ?? 0, exec: tc?.keepRecent ?? 0 })
       }
-      prompt = "واصل الهدف الأصلي من نتيجة الأداة. اختر استدعاءً واحداً منظماً إن بقي عمل."
+      // 10-14 — طابورُ الردّ: النداءُ التالي يُنفَّذ بلا سؤال النموذج (أجاب هذا بمعرّفه أعلاه).
+      const [next, ...rest] = nativeReply.queue ?? []
+      if (next !== undefined) {
+        nativeReply = { kind: "native", text: "", command: next.command, call: next.call, queued: true, ...(rest.length > 0 ? { queue: rest } : {}) }
+        return `نفّذ: ${next.command}`
+      }
+      // 10-14 — «استدعاءً واحداً» هنا كان يغلب عقدَ النداءات المتعدّدة؛ عددُ النداءات يقوله عقدُ النظام بحسب العائلة.
+      prompt = "واصل الهدف الأصلي من نتيجة الأداة. اختر الاستدعاء التالي إن بقي عمل."
     } else if (tracks || writeEntryPending) {
       // The text-mode result travels as the prompt and joins the trail after the
       // call, so it is the newest of the keepRecent results (of its kind) while still pending.
@@ -1331,7 +1348,13 @@ export async function runTextAgentLoop(options: TextAgentLoopOptions): Promise<T
     }
     if (verdict !== undefined ? verdictFailed(verdict) : toolReceiptFailed(command, output)) {
       hadToolFailure = true
-    } else stopReason = "complete"
+    } else {
+      stopReason = "complete"
+      // 10-14 — «tool-failed» معناه «فشلت آخر أداة» (delegation.ts). كان العلَمُ لاصقاً بالحقبة كلّها: wait انتهت مهلتُه ثمّ نجحت بعده
+      // probe وlook وconsole وأعلن النموذجُ الاكتمال — فعُدّ الإعلانُ «tool-failed» وكلّفت كلُّ بوّابةٍ بعده نداءَ نموذج (مقيس مع
+      // claude-sonnet-5-5 على m11). أداةُ فعلٍ ناجحةٌ بعد الفشل تطويه؛ والقراءةُ وحدها لا تطوي فشلَ أمرٍ — والبوّاباتُ الحتميّة تعيد القياس.
+      if (!isReadCommand) hadToolFailure = false
+    }
     if (advancesWorkspace(command, output, verdict, mutated)) workspaceGeneration += 1
     // Exec class = the very regex `advancesWorkspace` uses (write|edit|patch|run) — one vocabulary.
     // hadToolFailure/stopReason above are settled before any compaction can run.

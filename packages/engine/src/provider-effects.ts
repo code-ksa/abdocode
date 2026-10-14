@@ -38,6 +38,11 @@ export class RustReachEffects {
     return this.#worker.hasCredential(provider)
   }
 
+  /** 10-14 — يُسقط العاملَ المقيم ومفاتيحَه المخبوءة: مفتاحٌ حُفظ أو حُذف في الخزنة يسري في النداء التالي لا بعد 401. */
+  resetTransport(): void {
+    this.#worker.reset()
+  }
+
   /** قراءةٌ لا أثر: قائمةُ النماذج الحيّة من المزوّد (المفتاحُ يبقى في العامل). */
   listModels(provider: string): Promise<ModelProviderWorkerResponse> {
     return this.#worker.listModels(provider)

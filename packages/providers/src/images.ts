@@ -5,6 +5,6 @@ import type { Provider } from './index'
 export function hasDeclaredImageInput(provider: Provider, model: string): boolean {
   if(provider.imageModels?.includes(model))return true
   if(provider.id==='openai'&&/^(gpt-4o(?:-mini)?|gpt-4\.1(?:-mini|-nano)?)(?:$|-20)/u.test(model))return true
-  if(provider.id==='anthropic'&&/^claude-(?:3|sonnet-4|opus-4|haiku-4)/u.test(model))return true
+  if(provider.id==='anthropic'&&/^claude-(?:3|(?:sonnet|opus|haiku|fable)-[4-9])/u.test(model))return true
   return false
 }

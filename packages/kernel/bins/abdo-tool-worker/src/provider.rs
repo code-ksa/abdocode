@@ -9,6 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const REQUEST_MAGIC: &[u8; 5] = b"ABPM1";
 const SEARCH_MAGIC: &[u8; 5] = b"ABGS2";
 const RESPONSE_MAGIC: &[u8; 5] = b"ABPR1";
+/// `provider-serve` refusal frame: magic, u32 length, a static reason (never secret material).
+const ERROR_MAGIC: &[u8; 5] = b"ABPE1";
 const MAX_REQUEST_BYTES: usize = 1_048_576;
 const MAX_RESPONSE_BYTES: usize = 2_097_152;
 const MAX_TEXT_BYTES: usize = 32_768;
@@ -571,6 +573,14 @@ fn config_value(
 
 fn run_request(request: &Request, provider: &ResolvedBinding) -> Result<(u16, Vec<u8>), String> {
     let secret = read_secret(&provider.vault_key)?;
+    run_request_with(request, provider, &secret)
+}
+
+fn run_request_with(
+    request: &Request,
+    provider: &ResolvedBinding,
+    secret: &SecretBytes,
+) -> Result<(u16, Vec<u8>), String> {
     let body = TemporaryBody::create(&request.body)?;
     let seconds = request.timeout_ms.div_ceil(1_000).to_string();
     let body_arg = format!("@{}", body.0.display());
@@ -672,7 +682,7 @@ fn run_request(request: &Request, provider: &ResolvedBinding) -> Result<(u16, Ve
     Ok((http_status, output))
 }
 
-/// `provider-models <id>` — القائمةُ الحيّة من `GET {base}/models` بمفتاح الخزنة (أمرُ المالك 2026-09-28:
+/// `provider-models <id>` — القائمةُ الحيّة من `GET {base}/models` بمفتاح الخزنة (2026-09-28:
 /// «أظهر كلَّ نماذج إنفيديا لا الصغيرة فقط»). النقطةُ تُشتقّ من نقطة الدردشة المُجمَّعة أو المعلَنة نفسِها —
 /// لا عنوانَ ولا سرَّ يأتي من الطالب، والردُّ يُنقّى من السرّ كما في الدردشة.
 pub fn run_models(provider_id: &str) -> Result<Vec<u8>, String> {
@@ -959,6 +969,85 @@ fn encode_response(status: u16, body: &[u8]) -> Result<Vec<u8>, String> {
     frame.extend_from_slice(&length.to_be_bytes());
     frame.extend_from_slice(body);
     Ok(frame)
+}
+
+fn encode_error(reason: &str) -> Vec<u8> {
+    let text = reason.as_bytes();
+    let text = &text[..text.len().min(MAX_TEXT_BYTES)];
+    let mut frame = Vec::with_capacity(9 + text.len());
+    frame.extend_from_slice(ERROR_MAGIC);
+    frame.extend_from_slice(&(text.len() as u32).to_be_bytes());
+    frame.extend_from_slice(text);
+    frame
+}
+
+/// A cached credential is re-read after this long: a key removed or replaced in the vault by another
+/// process (`secret forget`, another shell) stops being used within this bound.
+const SECRET_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+
+type SecretCache = std::collections::HashMap<String, (SecretBytes, std::time::Instant)>;
+
+/// One request of `provider-serve`: the vault is read once per handle and kept in this process
+/// (zeroed on drop) for at most `SECRET_TTL`; a 401/403 evicts the cached credential and retries once
+/// with a fresh read, so a key changed in the vault is picked up without restarting the worker.
+fn serve_one(frame: &[u8], cache: &mut SecretCache) -> Result<Vec<u8>, String> {
+    let request = decode_request(frame)?;
+    let provider = binding(&request)?;
+    let mut attempt = 0;
+    loop {
+        if cache
+            .get(&provider.vault_key)
+            .is_some_and(|(_, at)| at.elapsed() > SECRET_TTL)
+        {
+            cache.remove(&provider.vault_key);
+        }
+        if !cache.contains_key(&provider.vault_key) {
+            let secret = read_secret(&provider.vault_key)?;
+            cache.insert(provider.vault_key.clone(), (secret, std::time::Instant::now()));
+        }
+        let (secret, _) = cache
+            .get(&provider.vault_key)
+            .ok_or_else(|| "provider credential unavailable".to_string())?;
+        let (status, body) = run_request_with(&request, &provider, secret)?;
+        if (status == 401 || status == 403) && attempt == 0 {
+            cache.remove(&provider.vault_key);
+            attempt += 1;
+            continue;
+        }
+        return encode_response(status, &body);
+    }
+}
+
+/// `provider-serve` — 10-14: measured on Windows, every one-shot `provider` call paid ~0.35 s for
+/// `powershell.exe` (the vault read) plus a worker spawn, about 0.85 s over a direct HTTPS call; an
+/// agent turn makes 15–60 calls. This loop keeps one worker per engine: frames are `u32 BE length`
+/// followed by the same `ABPM1` request; each reply is `u32 BE length` + an `ABPR1` response or an
+/// `ABPE1` refusal. Requests are served one at a time; EOF on stdin ends the process.
+pub fn serve() -> Result<(), String> {
+    let mut cache: SecretCache = std::collections::HashMap::new();
+    let stdin = std::io::stdin();
+    let mut input = stdin.lock();
+    let stdout = std::io::stdout();
+    loop {
+        let mut length = [0u8; 4];
+        if input.read_exact(&mut length).is_err() {
+            return Ok(());
+        }
+        let size = u32::from_be_bytes(length) as usize;
+        if size == 0 || size > MAX_REQUEST_BYTES + 4_096 {
+            return Err("provider serve frame length refused".into());
+        }
+        let mut frame = vec![0u8; size];
+        input
+            .read_exact(&mut frame)
+            .map_err(|_| "provider serve frame unreadable".to_string())?;
+        let reply = serve_one(&frame, &mut cache).unwrap_or_else(|reason| encode_error(&reason));
+        let mut out = stdout.lock();
+        out.write_all(&(reply.len() as u32).to_be_bytes())
+            .and_then(|_| out.write_all(&reply))
+            .and_then(|_| out.flush())
+            .map_err(|_| "provider serve reply unwritable".to_string())?;
+    }
 }
 
 pub fn run() -> Result<Vec<u8>, String> {

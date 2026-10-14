@@ -2,12 +2,13 @@
 import { GoogleSearch } from "./mind/google-search"
 import { RustReachEffects } from "./provider-effects"
 import { join, resolve } from "node:path"
+import { ensureStateRoot, stateRootFor } from "./install-state"
 
 const COMPILED = !/bun(\.exe)?$/i.test(process.execPath)
 const ROOT = COMPILED ? join(process.execPath, "..") : import.meta.dir
 const TOOL_WORKER = COMPILED ? join(ROOT, "bin", "abdo-tool-worker.exe") : resolve(ROOT, "..", "..", "kernel", "target", "release", "abdo-tool-worker.exe")
 const KERNEL = COMPILED ? join(ROOT, "bin", "abdo-kernel.exe") : resolve(ROOT, "..", "..", "kernel", "target", "release", "abdo-kernel.exe")
-const STATE_ROOT = resolve(process.env.ABDO_CODE_STATE_DIR ?? ROOT)
+const STATE_ROOT = ensureStateRoot(ROOT, stateRootFor(ROOT, process.env))
 const REACH = new RustReachEffects(TOOL_WORKER, KERNEL, join(STATE_ROOT, "abdocode.sqlite"), () => process.cwd())
 
 type RpcId = string | number | null

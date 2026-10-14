@@ -75,8 +75,24 @@ fn preview_env_defaults(
 
 #[cfg(test)]
 mod preview_profile_tests {
-    use super::{desktop_profile_env, is_owned_panel_window, preview_env_defaults, shipped_vault_script_path};
+    use super::{desktop_profile_env, is_owned_panel_window, preview_env_defaults, shipped_vault_script_path, store_state_dir};
     use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
+
+    #[test]
+    fn a_store_install_keeps_engine_state_in_local_app_data_unless_a_folder_was_supplied() {
+        let local = Some(OsString::from(r"C:\Users\x\AppData\Local"));
+        assert_eq!(
+            store_state_dir(true, None, local.clone()),
+            Some(PathBuf::from(r"C:\Users\x\AppData\Local").join("AbdoCode").join("state"))
+        );
+        assert_eq!(store_state_dir(true, Some(OsString::from(r"D:\explicit")), local.clone()), None);
+        assert_eq!(
+            store_state_dir(true, Some(OsString::from("  ")), local.clone()),
+            Some(PathBuf::from(r"C:\Users\x\AppData\Local").join("AbdoCode").join("state"))
+        );
+        assert_eq!(store_state_dir(false, None, local), None);
+        assert_eq!(store_state_dir(true, None, None), None);
+    }
 
     #[test]
     fn every_identity_hands_the_engine_the_desktop_profile_unless_one_was_supplied() {
@@ -221,6 +237,21 @@ fn read_json_frame(reader: &mut impl Read) -> Result<Option<String>, String> {
     serde_json::to_string(&value)
         .map(Some)
         .map_err(|e| e.to_string())
+}
+
+/// 10-12 — نسخةُ متجر مايكروسوفت (MSIX) تُثبَّت في WindowsApps للقراءة فقط، وحالةُ المحرّك تُكتب إلى جوار abdocode.exe افتراضاً
+/// فتفشل أوّلَ كتابة. في المتجر — وما لم يُعطَ مجلّدٌ صريح — تذهب إلى %LOCALAPPDATA%\AbdoCode\state، ويرثها المحرّكُ وكلُّ قارئٍ للبيئة.
+fn store_state_dir(
+    store: bool,
+    supplied: Option<std::ffi::OsString>,
+    local_app_data: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    if !store || supplied.filter(|value| !value.to_string_lossy().trim().is_empty()).is_some() {
+        return None;
+    }
+    local_app_data
+        .filter(|value| !value.to_string_lossy().trim().is_empty())
+        .map(|base| PathBuf::from(base).join("AbdoCode").join("state"))
 }
 
 /// جذر النظام: مجلّد الـexe عند التوزيع، ومجلّد المصدر أثناء التطوير.
@@ -1443,6 +1474,14 @@ fn main() {
         ])
         .manage(desktop_preferences::DesktopRuntime::default())
         .setup(|app| {
+            if let Some(dir) = store_state_dir(
+                release_check::store_managed(),
+                std::env::var_os("ABDO_CODE_STATE_DIR"),
+                std::env::var_os("LOCALAPPDATA"),
+            ) {
+                let _ = std::fs::create_dir_all(&dir);
+                std::env::set_var("ABDO_CODE_STATE_DIR", dir);
+            }
             // كلُّ الهويّات: المحرّكُ يرث ملفَّ سطح المكتب نفسَه الذي يكتب فيه العقدُ والسياسة.
             if let Ok(resolved) = profile::directory(app.handle()) {
                 if let Some(dir) = desktop_profile_env(std::env::var_os("ABDO_DESKTOP_PROFILE"), &resolved) {

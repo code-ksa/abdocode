@@ -305,7 +305,7 @@ describe("serve convergence wiring", () => {
     expect(source).not.toContain("outputEvidenceVerdict(turn.body,")
     // R1-02: المحكّم الدلاليّ يحكم على الهدف الفعليّ لا على «اكمل» العارية.
     // 09-30: الحكّامُ على judgeGoal() — الهدفُ الفعليّ نفسُه، ومعه حالُ خطّة السبرنتات حين يكون الدورُ استئنافاً عليها.
-    expect(source).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow())")
+    expect(source).toContain("buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale)")
     expect(source).toContain("      : effectiveGoal\n".replace(/\n/gu, source.includes("\r\n") ? "\r\n" : "\n"))
     expect(source).not.toContain("buildVerifierPrompt(turn.body,")
     // مدخل الحقبة الأولى يحمل سطر الاستئناف قبل نصّ الدور؛ وحدث الاستئناف يُعلَن مرةً بحالة الهدف.
@@ -811,7 +811,7 @@ describe("serve convergence wiring", () => {
     expect(source).toContain("nativeToolReply(decoded, legalToolNames, hooks.intentField === true)")
     // S1 (09-17): المفتاحُ يصل المُركِّبَ مدخلاً واحداً (`intentField`) فيحكم المسارَين الأصيلَ والنصّيَّ هناك.
     expect(source).toContain("intentField: hooks.intentField === true,")
-    expect(composerSource).toContain("nativeAgentSystem(input.planningPhase, input.sprintPlan.required, input.intentField, input.policy)")
+    expect(composerSource).toContain("nativeAgentSystem(input.planningPhase, input.sprintPlan.required, input.intentField, input.policy, input.multiCall === true)")
     expect(composerSource).toContain('(input.intentField ? intentInstruction() : "") +')
 
     // (هـ) الدرس يُقطَّر ويُحفظ حقيقةً دائمة، والحلّ معه — بمسارٍ واحد لا مسارين.

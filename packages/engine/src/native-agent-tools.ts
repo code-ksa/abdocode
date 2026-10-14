@@ -63,6 +63,8 @@ const blockCommand = (legal: string, input: string): string => {
 /** 10-09 — حزمةُ القراءة الأصليّة: أدواتٌ بلا أثرٍ يُرتَّب، وسقفُها كسقف حزمة البروتوكول النصّيّ. */
 const NATIVE_READ_BATCH: ReadonlySet<string> = new Set(["read", "list", "glob", "grep"])
 const NATIVE_READ_BATCH_MAX = 4
+/** 10-14 — سقفُ نداءات الردّ الواحد حين تُنفَّذ طابوراً (مقيس مع claude-sonnet-5-5: يكتب 2–5 ملفّاتٍ في ردٍّ واحد، وتجاوز 8 مرّةً في m11). */
+const NATIVE_QUEUE_MAX = 16
 
 /** الرفضُ يقول للنموذج ما يصلحه — الرمزُ وحده كرّر النداءَ نفسَه. */
 const SINGLE_LINE_HINT: Readonly<Record<string, string>> = Object.freeze({
@@ -109,15 +111,18 @@ export function nativeToolReply(turn: ModelTurn, names: ReadonlyMap<string, stri
   if (turn.calls.length > 1) {
     // 10-09 — حتى أربعة نداءات قراءةٍ في ردٍّ واحد (كما يفعل Codex وClaude): كلُّ نداءٍ يمرّ بالفحص نفسِه منفرداً، والحزمةُ للقراءة وحدها —
     // الكتابةُ والتشغيلُ نداءٌ واحد لأنّ ترتيبَ الآثار جزءٌ من معناها.
-    if (turn.calls.length > NATIVE_READ_BATCH_MAX) return reject(`one_native_tool_call_required — حتى ${NATIVE_READ_BATCH_MAX} نداءات قراءة (read/list/glob/grep) معاً، وغيرُها نداءٌ واحد`)
+    // 10-14 — وما ليس حزمةَ قراءة (كتابةٌ وتشغيل، أو أكثرُ من أربع قراءات) طابورٌ يُنفَّذ بترتيبه، كلُّ نداءٍ عبر المسار المفرد بحرّاسه
+    // (مقيس مع claude-sonnet-5-5: كان الردُّ كلُّه يُرفض فيُعاد بنداءٍ ثانٍ). فحصُ كلِّ نداءٍ قبل تنفيذ أوّلها: لا يُنفَّذ بعضُ ردٍّ معيب.
+    if (turn.calls.length > NATIVE_QUEUE_MAX) return reject(`one_native_tool_call_required — حتى ${NATIVE_QUEUE_MAX} نداءات في الرد الواحد`)
     const members: { command: string; call: (typeof turn.calls)[number] }[] = []
     for (const member of turn.calls) {
       const single = nativeToolReply({ ...turn, calls: [member] }, names, intentField)
       if (typeof single === "string") return single
-      if (!NATIVE_READ_BATCH.has(names.get(member.name) ?? "")) return reject("one_native_tool_call_required — الحزمةُ للقراءة وحدها (read/list/glob/grep)؛ الكتابةُ والتشغيلُ نداءٌ واحد في الرد")
       members.push({ command: single.command, call: member })
     }
-    return { kind: "native", text: turn.text, command: members[0]!.command, call: members[0]!.call, batch: members }
+    const reads = members.length <= NATIVE_READ_BATCH_MAX && members.every((member) => NATIVE_READ_BATCH.has(names.get(member.call.name) ?? ""))
+    if (reads) return { kind: "native", text: turn.text, command: members[0]!.command, call: members[0]!.call, batch: members }
+    return { kind: "native", text: turn.text, command: members[0]!.command, call: members[0]!.call, queue: members.slice(1) }
   }
   const call = turn.calls[0]!
   const legal = names.get(call.name)
@@ -127,7 +132,10 @@ export function nativeToolReply(turn: ModelTurn, names: ReadonlyMap<string, stri
   const keys = legal === undefined ? undefined : (fields[legal] ?? ["input"])
   if (legal === undefined || keys === undefined) return reject("unknown_native_tool")
   if (typeof call.input !== "object" || call.input === null || Array.isArray(call.input)) return reject("object_arguments_required")
-  const args = call.input as Record<string, unknown>
+  // 10-14 — مقيسٌ مع claude-sonnet-5-5: «page» بحقل input فارغ ("") رُفض «وسيطٌ فارغ؛ املأه» فكلّف نداءً. الحقلُ الاختياريّ الفارغ غائب.
+  const raw = call.input as Record<string, unknown>
+  const blankOptional = optionalInput.has(legal) && typeof raw.input === "string" && raw.input.trim().length === 0
+  const args = blankOptional ? Object.fromEntries(Object.entries(raw).filter(([key]) => key !== "input")) : raw
   // النيّة تُفحص **قبل** عدّ المفاتيح: غيابها يُسمّى باسمه لا يُطوى في
   // «عدد وسائط خاطئ» (رفضٌ يعرف النموذج كيف يصلحه بجولةٍ واحدة).
   if (intentField) {
@@ -161,19 +169,27 @@ export function nativeToolReply(turn: ModelTurn, names: ReadonlyMap<string, stri
  * prompt-composer بترتيبٍ ثابت وميزانيّة. `nativeAgentSystem` أدناه يسبكها بترتيبها القديم حرفيّاً
  * (مسمارُه الذهبيّ في test/prompt-composer.test.ts) — فلا نسختان من النصّ.
  */
-export const nativeAgentLayers = (planning: boolean, planRequired: boolean, intentField = false, policy = "") => Object.freeze({
+/**
+ * 10-14 — مقيسٌ مقابل Claude Code بالنموذج نفسِه (claude-sonnet-5-5، m11): Claude Code ‏22 أداةً في 18 نداءً، وعبدو كود 35 في 34 — لأنّ
+ * العقدَ يقول «أداة واحدة في الرد» و«انتظر الإيصال بعد كل أداة». النداءاتُ المستقلّة تُنفَّذ طابوراً بترتيبها (nativeToolReply)، فالعقدُ
+ * للعائلات التي تُحسنها (multiCall) يقول اجمعها؛ وغيرُها على النصّ القديم بايتاً.
+ */
+const MULTI_CALL_FORMAT = "استخدم استدعاءات الأدوات المنظمة حصراً. ضع في الرد الواحد كلَّ النداءات المستقلّة التي تعرفها الآن (حتى 16) فتُنفَّذ بترتيبها: اكتب الملفّات المترابطة معاً، واقرأ ما تحتاجه معاً، وأتبِعها بتشغيل البناء أو الاختبار إن لم يتوقّف على نتيجةٍ لم ترها، وسلسلةُ واجهةٍ مراجعُها معروفةٌ من page (fill ثمّ tap ثمّ wait ثمّ page) ردٌّ واحد لا أربعة. ما يعتمد على نتيجةٍ لم ترها بعد انتظر نتيجتَه. لا تكتب أوامر نفّذ أو أغلفة <<< داخل حقول الأداة."
+const MULTI_CALL_CONTRACT = "اقرأ الملف قبل تعديله. استخدم edit لتصحيح صغير بدلاً من إعادة إخراج الملف كله. الاقتراح ليس تنفيذاً: لا تبنِ على نتيجةٍ قبل إيصالها. أنتِج الدليلَ بأوامر العقد نفسِها كما يسمّيها الطلب وpackage.json (run --bg npm start لا node مباشرة، npm test، npm run build) — المراجِعُ يطابق الإيصالَ ببند العقد."
+
+export const nativeAgentLayers = (planning: boolean, planRequired: boolean, intentField = false, policy = "", multiCall = false) => Object.freeze({
   identity: Object.freeze([
     "أنت عبدو كود، مساعد يعمل داخل مشروع المستخدم فقط. هوية المساعد ليست هوية موقع العميل.",
   ]),
   outputFormat: Object.freeze([
-    "استخدم استدعاءات الأدوات المنظمة حصراً، أداة واحدة في الرد — أو حتى أربعة نداءات قراءة (read/list/glob/grep) معاً حين تحتاج عدّة ملفات. لا تكتب أوامر نفّذ أو أغلفة <<< داخل حقول الأداة.",
+    multiCall ? MULTI_CALL_FORMAT : "استخدم استدعاءات الأدوات المنظمة حصراً، أداة واحدة في الرد — أو حتى أربعة نداءات قراءة (read/list/glob/grep) معاً حين تحتاج عدّة ملفات. لا تكتب أوامر نفّذ أو أغلفة <<< داخل حقول الأداة.",
     intentField ? "كل استدعاء يحمل حقل intent: سطر واحد يقول ما تتوقع أن يفعله؛ الحقل إلزامي." : "",
     "تحقق من البناء والاختبارات وطلبات المستخدم فعليًا. إن بقي عمل اختر الأداة التالية بدل الملخص النهائي. أجب باللغة التي يطلبها المستخدم صراحة؛ وإلا اتبع لغة رسالته.",
   ]),
   toolContract: Object.freeze([
     "read/list/glob للمعاينة، edit لاستبدال مقطع مطابق مرة واحدة، write لملف جديد أو إعادة كتابة ضرورية. حقول المحتوى بايتات الملف فقط بلا شرح.",
     "اقرأ الملفات الكبيرة بمقطع: استدعِ read بحقل path «<ملف> <من> <إلى>» (أرقام أسطر تبدأ من 1) أو ابحث فيها بـgrep بدل قراءتها كاملة؛ لا تعِد قراءة ملف قرأته في هذه الجلسة (تُعاد إليك نتيجته المحفوظة)؛ ولا تعرض قوائم node_modules أو .next.",
-    "اقرأ الملف قبل تعديله. استخدم edit لتصحيح صغير بدلاً من إعادة إخراج الملف كله. انتظر الإيصال بعد كل أداة؛ الاقتراح ليس تنفيذاً.",
+    multiCall ? MULTI_CALL_CONTRACT : "اقرأ الملف قبل تعديله. استخدم edit لتصحيح صغير بدلاً من إعادة إخراج الملف كله. انتظر الإيصال بعد كل أداة؛ الاقتراح ليس تنفيذاً.",
     "run يستخدم Windows PowerShell 5.1 وسطر أمر واحد. لا تغير جذر المشروع ولا تنشر ولا تدفع Git ولا تتصل بخدمات منتجات أخرى.",
     "{{tool-catalogue}}",
   ]),
@@ -191,8 +207,8 @@ export const nativeAgentLayers = (planning: boolean, planRequired: boolean, inte
   ]),
 })
 
-export const nativeAgentSystem = (planning: boolean, planRequired: boolean, intentField = false, policy = ""): string => {
-  const L = nativeAgentLayers(planning, planRequired, intentField, policy)
+export const nativeAgentSystem = (planning: boolean, planRequired: boolean, intentField = false, policy = "", multiCall = false): string => {
+  const L = nativeAgentLayers(planning, planRequired, intentField, policy, multiCall)
   // الترتيبُ القديم بايتاً: هويّة، صيغةُ الخرج ×2، عقدُ الأدوات ×4، سياسة، تدريب، سياسة ×2، صيغةُ الخرج، سياسة، كتالوج.
   return [L.identity[0], L.outputFormat[0], L.outputFormat[1], L.toolContract[0], L.toolContract[1], L.toolContract[2], L.toolContract[3], L.policy[0], L.coaching[0], L.policy[1], L.policy[2], L.outputFormat[2], L.policy[3], L.toolContract[4]].filter(Boolean).join("\n")
 }

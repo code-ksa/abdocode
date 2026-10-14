@@ -80,6 +80,15 @@ fn main() -> std::process::ExitCode {
             }
         };
     }
+    if std::env::args().nth(1).as_deref() == Some("provider-serve") {
+        return match provider::serve() {
+            Ok(()) => std::process::ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("abdo-tool-worker provider-serve: {error}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
     if std::env::args().nth(1).as_deref() == Some("provider") {
         return match provider::run() {
             Ok(frame) if std::io::stdout().lock().write_all(&frame).is_ok() => {

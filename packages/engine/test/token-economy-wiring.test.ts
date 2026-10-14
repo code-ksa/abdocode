@@ -214,7 +214,7 @@ describe("turn budget wiring in the live cli path", () => {
   })
 
   test("TB-3: a turn-cap refusal of the semantic-verifier ask hands back turn_budget with its own ⏱ line instead of blaming the model", () => {
-    const verifierAsk = source.indexOf("const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], selectedModel, judge)")
+    const verifierAsk = source.indexOf("const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale), hooks, [], selectedModel, judge)")
     const trip = source.indexOf("if (turnMeter !== undefined && turnMeter.snapshot().tripped) {")
     const unjudged = source.indexOf("⚠ غير محكّم دلالياً: النموذج لم ينتج حكماً صالحاً")
     expect(verifierAsk).toBeGreaterThan(0)
@@ -348,7 +348,7 @@ describe("ideas on our system (09-29): decision model, parallel worktree workers
     // 10-09: the three judgments go through askDecision — two attempts on the decision model, then the working model judges.
     expect(source).toContain("}, [], selectedModel, reviewJudge)")
     expect(source).toContain("}, [], selectedModel)")
-    expect(source).toContain("const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow()), hooks, [], selectedModel, judge)")
+    expect(source).toContain("const reply = await askDecision(buildVerifierPrompt(judgeGoal(), loop.answer, allReceipts, diskNow(verifierScale), verifierScale), hooks, [], selectedModel, judge)")
     expect(source).toContain("try { return await askOnce(question, { ...hooks, maxRetryAttempts: DECISION_RETRY_ATTEMPTS }, history, judge) }")
     expect(source).toContain('"routerGate", "gateModel", "decisionModel", "plugins",')
   })

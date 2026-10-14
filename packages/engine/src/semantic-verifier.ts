@@ -43,15 +43,15 @@ export function clipKeepCause(text: string, max: number): string {
 
 const GOAL_BUDGET = 4000
 const ANSWER_BUDGET = 4000
-const RECEIPTS_BUDGET = 6000
-const RECEIPT_CLIP = 700
+const RECEIPTS_BUDGET_BASE = 6000
+const RECEIPT_CLIP_BASE = 700
 /**
  * 10-11 (مقيس على n8n-clone، دورٌ بـ222 أداة): release-check ‏PASS 7/7 نُفّذ في الحقبة 4 و«sprint done 16» بعده، والمحكّمُ رأى آخرَ ثمانية
  * إيصالاتٍ وحدها فحكم «PASS مذكورٌ بلا إيصال» وحجب الاكتمال — وأخطأ مثلها في S15. آخرُ إيصالٍ لكلّ بوّابةٍ يدخل دائماً (مقصوصاً، سطرُ
  * الحكم أوّلاً) قبل أن تملأ الأحدثُ ما بقي.
  */
-const GATE_BUDGET = 3200
-const GATE_CLIP = 360
+const GATE_BUDGET_BASE = 3200
+const GATE_CLIP_BASE = 360
 // 10-11 (مقيس على m11 بعاملَين بالمثبَّت 4.0.144): المحكّمُ حجب «لا إيصالَ يثبت تشغيلَ عاملَين» — إيصالُ parallel أقدمُ وأطولُ فأزاحته الأحدث.
 // تقريرُ العمّال ودمجُ كلِّ فرعٍ دليلُ «اعمل بعاملين» كما البناءُ دليلُ «ابنِ».
 const GATE_RECEIPT = /^(?:release-check|sprint\s+done\s+\d+|seo|audit|probe|verify-\S+|parallel|merge\s+\S+|run\s+(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|typecheck|lint|test(?::\S+)?|audit)|run\s+npx\s+(?:tsc|vitest|prisma\s+migrate\s+diff))(?=\s|$)/u
@@ -60,12 +60,21 @@ export function gateKey(command: string): string | undefined {
   return GATE_RECEIPT.exec(first)?.[0].replace(/\s+/gu, " ")
 }
 
+/**
+ * 10-14 — مقيسٌ مع claude-sonnet-5-5: الميزانياتُ أعلاه مقاسةٌ لنموذجٍ محلّيّ صغير، فقُصّ README (1.1 ألف حرف) في إيصاله وحجب المراجِعُ
+ * الاكتمالَ «الإيصالُ يحذف 535 حرفاً من الوسط» — حقبةُ إصلاحٍ لا لزومَ لها. المحكّمُ السحابيّ (سياقٌ واسع) يرى إيصالاتٍ أوسع بالمعامل.
+ */
+export const CLOUD_VERIFIER_SCALE = 4
+
 export function buildVerifierPrompt(
   goal: string,
   answer: string,
   receipts: readonly { readonly command: string; readonly output: string }[],
   disk?: string,
+  scale = 1,
 ): string {
+  const RECEIPTS_BUDGET = RECEIPTS_BUDGET_BASE * scale, RECEIPT_CLIP = RECEIPT_CLIP_BASE * scale
+  const GATE_BUDGET = GATE_BUDGET_BASE * scale, GATE_CLIP = GATE_CLIP_BASE * scale
   const chosen = new Map<number, string>()
   const seenGates = new Set<string>()
   let gateSpent = 0

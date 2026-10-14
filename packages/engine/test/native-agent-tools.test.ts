@@ -43,11 +43,22 @@ describe("native read batch", () => {
     expect(reply.batch!.map((m) => m.command)).toEqual(["read a.ts", "grep TODO"])
     expect(reply.command).toBe("read a.ts")
   })
-  test("the twins: a write in the batch, five reads, or one bad member refuse the whole reply by name", () => {
-    expect(nativeToolReply(multi({ name: "abdo_read", input: { path: "a.ts" } }, { name: "abdo_write", input: { path: "b.ts", content: "x" } }), readNames)).toContain("الحزمةُ للقراءة وحدها")
-    const five = multi(...["a", "b", "c", "d", "e"].map((x) => ({ name: "abdo_read", input: { path: `${x}.ts` } })))
-    expect(nativeToolReply(five, readNames)).toContain("حتى 4 نداءات قراءة")
-    expect(nativeToolReply(multi({ name: "abdo_read", input: { path: "a.ts" } }, { name: "abdo_read", input: { path: "a\nb" } }), readNames)).toMatch(/single_path_required/u)
+  // 10-14 — مع claude-sonnet-5-5: ردٌّ يكتب ملفّين ثمّ يشغّل كان يُرفض كلُّه ويُعاد بنداءٍ ثانٍ. صار طابوراً بترتيبه لا حزمة.
+  test("a write among the calls, or five reads, become a queue in the model's order — not a batch, not a refusal", () => {
+    const mixed = nativeToolReply(multi({ name: "abdo_read", input: { path: "a.ts" } }, { name: "abdo_write", input: { path: "b.ts", content: "x" } }, { name: "abdo_run", input: { command: "npm test" } }), readNames)
+    if (typeof mixed === "string") throw new Error(mixed)
+    expect(mixed.batch).toBeUndefined()
+    expect(mixed.command).toBe("read a.ts")
+    expect(mixed.queue!.map((m) => m.command)).toEqual(["write b.ts <<<\nx", "run npm test"])
+    const five = nativeToolReply(multi(...["a", "b", "c", "d", "e"].map((x) => ({ name: "abdo_read", input: { path: `${x}.ts` } }))), readNames)
+    if (typeof five === "string") throw new Error(five)
+    expect(five.batch).toBeUndefined()
+    expect(five.queue).toHaveLength(4)
+  })
+  test("the twins: one bad member refuses the whole reply before anything runs, seventeen calls are refused, none is refused", () => {
+    expect(nativeToolReply(multi({ name: "abdo_write", input: { path: "b.ts", content: "x" } }, { name: "abdo_read", input: { path: "a\nb" } }), readNames)).toMatch(/single_path_required/u)
+    const many = multi(...Array.from({ length: 17 }, (_, i) => ({ name: "abdo_read", input: { path: `${i}.ts` } })))
+    expect(nativeToolReply(many, readNames)).toContain("حتى 16 نداءات")
     expect(nativeToolReply(multi(), readNames)).toMatch(/one_native_tool_call_required/u)
   })
 })
@@ -98,7 +109,12 @@ describe("native tool surface", () => {
       expect(typeof bareCall === "string" ? bareCall : bareCall.command).toBe(name)
       const withArg = nativeToolReply({ truncated: false, finishReason: "stop", text: "", calls: [{ name: `abdo_${name}`, input: { input: name === "page" ? "styles" : "full" } }] } as never, names)
       expect(typeof withArg === "string" ? withArg : withArg.command).toBe(name === "page" ? "page styles" : "shot full")
+      // 10-14 — حقلٌ اختياريّ فارغ = غائب (كان يُرفض «وسيطٌ فارغ» فيكلّف نداءً)
+      const blank = nativeToolReply({ truncated: false, finishReason: "stop", text: "", calls: [{ name: `abdo_${name}`, input: { input: "  " } }] } as never, names)
+      expect(typeof blank === "string" ? blank : blank.command).toBe(name)
     }
+    // التوأم: الحقلُ الإلزاميّ الفارغ ما زال يُرفض
+    expect(nativeToolReply({ truncated: false, finishReason: "stop", text: "", calls: [{ name: "abdo_run", input: { command: " " } }] } as never, new Map([["abdo_run", "run"]]))).toMatch(/وسيطٌ فارغ/u)
     // والاحتواءُ لم يُفتح: الردُّ يرفض اسماً **لم يُعلَن** في خريطة الدور.
     expect(nativeToolReply(response("never_advertised", { input: "x" }), names)).toMatch(/unknown_native_tool/u)
   })

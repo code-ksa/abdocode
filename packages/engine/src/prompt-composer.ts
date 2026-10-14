@@ -72,6 +72,8 @@ export interface ComposeInput {
   /** سطرُ السياسة (`policyLine` + `browserBridgeHint`) مشتقٌّ في `cli.ts` من النمط النافذ. */
   readonly policy: string
   readonly sprintPlan: SprintPlanState
+  /** 10-14 — عقدُ النداءات المتعدّدة في الرد (native-model-protocol: `nativeMultiCall`)؛ غيابُه = النصُّ القديم بايتاً. */
+  readonly multiCall?: boolean
   /** غيابُها = لا طبقةَ بيئة (صفرُ بايت) — لا سطرٌ مخمَّن. */
   readonly environment?: EnvironmentInput
   /** سطرُ الإطار الدلاليّ (`describeFrame`) حين يُقاس. */
@@ -89,7 +91,7 @@ export interface ComposeInput {
  * نفسه. لا تُعدَّل كلمةٌ هنا: هذا هو المرجعُ الذي يُقاس عليه كلُّ تحسينٍ لاحق.
  */
 export const legacyBaseSystem = (input: ComposeInput): string => {
-  if (input.mode === "native") return nativeAgentSystem(input.planningPhase, input.sprintPlan.required, input.intentField, input.policy)
+  if (input.mode === "native") return nativeAgentSystem(input.planningPhase, input.sprintPlan.required, input.intentField, input.policy, input.multiCall === true)
   const planningPhase = input.planningPhase
   const coaching = input.coaching
   const plan = input.sprintPlan
@@ -247,7 +249,7 @@ const textBodies = (input: ComposeInput): Bodies => {
 }
 
 const nativeBodies = (input: ComposeInput): Bodies => {
-  const N = nativeAgentLayers(input.planningPhase, input.sprintPlan.required, input.intentField, input.policy)
+  const N = nativeAgentLayers(input.planningPhase, input.sprintPlan.required, input.intentField, input.policy, input.multiCall === true)
   return {
     identity: joined(N.identity),
     environment: environmentLine(input.environment),
